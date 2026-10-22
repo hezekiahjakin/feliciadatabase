@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // /users/{userId}:
+    //   - email: string (optional)
+    //   - phoneNumber: string (optional)
+    //   - displayName: string (optional)
+    //   - createdAt: timestamp
+    //   - updatedAt: timestamp
+    //
+    // /users/{userId}/loadouts/{loadoutId}:
+    //   - name: string (required, 1-100 chars)
+    //   - guardianClass: string (required, 'Warlock'|'Titan'|'Hunter')
+    //   - subclass: string (required)
+    //   - exoticArmor: string (required)
+    //   - stats: map with { health, melee, grenade, super, classStat } numbers (0-100)
+    //   - weapons: map with { kinetic, energy, heavy } objects
+    //   - keyAspects: string (optional)
+    //   - notes: string (optional)
+    //   - createdAt: timestamp
+    //   - updatedAt: timestamp
+    //   - userId: string (matches auth.uid)
+    //
+    // /users/{userId}/wiki_notes/{noteId}:
+    //   - title: string (required)
+    //   - content: string (required)
+    //   - category: string
+    //   - tags: list of strings
+    //
+    // ===============================================================
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidLoadout(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.guardianClass is string
+        && data.subclass is string
+        && data.exoticArmor is string
+        && (data.stats is map || !('stats' in data))
+        && (data.weapons is map || !('weapons' in data));
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // User's private loadout vault
+      match /loadouts/{loadoutId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidLoadout(request.resource.data);
+        allow update: if isOwner(userId) && isValidLoadout(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // User's custom imported wiki notes
+      match /wiki_notes/{noteId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

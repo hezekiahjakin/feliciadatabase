@@ -1,0 +1,18 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "F.E.L.I.C.I.A. Destiny 2 Assistant",
+        "authorizedRedirectUris": [
+          "https://ping-vault-matrix.firebaseapp.com/__/auth/handler",
+          "http://localhost"
+        ]
+      }
+    }
+  }
+}

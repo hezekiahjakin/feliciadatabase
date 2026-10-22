@@ -1,0 +1,11 @@
+{
+  "gemini_api_key": "",
+  "firebase_url": "https://ping-vault-matrix-default-rtdb.firebaseio.com",
+  "firebase_auth_token": "",
+  "model_preference": "auto",
+  "firebase_project_id": "ping-vault-matrix",
+  "firebase_web_api_key": "AIzaSyD-XZwCw2uncP0xmcUoVXjSQ_scsFYor8M",
+  "firebase_web_app_id": "1:306532505507:web:8400fcebe0746c51ef6c16",
+  "firebase_messaging_sender_id": "306532505507",
+  "firebase_measurement_id": "G-V17Y87T532"
+}

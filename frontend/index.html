@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>F.E.L.I.C.I.A. // Tactical Fireteam Construct</title>
+  <meta name="description" content="Fireteam Evaluation & Logistics Intelligence Construct for Interactive Analysis - Destiny 2 AI Assistant">
+  <meta name="theme-color" content="#0B0E14">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-vanguard">
+
+  <!-- Top Tactical Header -->
+  <header class="hud-header">
+    <div class="hud-brand">
+      <div class="brand-crest">
+        <span class="vanguard-logo">❖</span>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">F.E.L.I.C.I.A. <span class="badge-v1">v1.0</span></h1>
+        <p class="brand-sub">FIRETEAM EVALUATION &amp; LOGISTICS INTELLIGENCE CONSTRUCT</p>
+      </div>
+    </div>
+
+    <!-- Active Status Bar -->
+    <div class="hud-status-bar">
+      <div class="status-indicator online" id="statusPill" title="Construct Status">
+        <span class="pulse-dot"></span>
+        <span class="status-label">CALIBRATED // ACTIVE</span>
+      </div>
+
+      <div class="firebase-status-badge" id="firebaseBadge" title="Firebase Project: ping-vault-matrix">
+        <span class="fb-icon">🔥</span>
+        <span class="fb-text" id="firebaseStatusText">ping-vault-matrix</span>
+      </div>
+
+      <div class="firebase-status-badge auth-badge" id="authBadge" title="Firebase Authentication & Profile">
+        <span class="auth-icon" id="authIcon">🔑</span>
+        <span class="auth-text" id="authStatusText">Sign In</span>
+      </div>
+
+      <button class="btn-tactical btn-connect" id="btnConnectDevice" title="Connect Phone or iPad">
+        <span class="icon">📱</span>
+        <span class="text">Connect Mobile</span>
+      </button>
+
+      <button class="btn-sound-toggle" id="btnSoundToggle" title="Toggle Ghost Chirps & SFX">
+        <span class="sfx-icon" id="sfxIcon">🔊</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="hud-main">
+
+    <!-- Left / Top Navigation Rail -->
+    <nav class="hud-nav" id="hudNav">
+      <button class="nav-tab active" data-tab="tab-comms">
+        <span class="nav-icon">📡</span>
+        <span class="nav-title">Comms // AI</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-wiki">
+        <span class="nav-icon">📚</span>
+        <span class="nav-title">Wiki &amp; Intel</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-vault">
+        <span class="nav-icon">🛡️</span>
+        <span class="nav-title">Fireteam Vault</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-title">Logistics // Config</span>
+      </button>
+    </nav>
+
+    <!-- TAB 1: COMMS & AI INTERACTION -->
+    <section class="tab-pane active" id="tab-comms">
+      <div class="comms-layout">
+        
+        <!-- Tactical Construct Visualizer & HUD Card -->
+        <div class="construct-panel">
+          
+          <div class="construct-canvas-wrapper" id="constructWrapper">
+            <canvas id="ghostCanvas" width="340" height="340"></canvas>
+            <div class="construct-overlay">
+              <div class="construct-tag">CONSTRUCT DESIGN: <span id="designNameBadge">VANGUARD GHOST</span></div>
+              <div class="construct-mood" id="constructMood">STATUS: STANDBY // SCANNING</div>
+            </div>
+            <!-- Subclass Filter Bar -->
+            <div class="shader-bar subclass-bar">
+              <button class="shader-chip subclass-chip" data-subclass="stasis" data-shader="stasis" title="Stasis (Dark Blue)">✦ Stasis</button>
+              <button class="shader-chip subclass-chip" data-subclass="void" data-shader="void" title="Void (Purple)">✦ Void</button>
+              <button class="shader-chip subclass-chip" data-subclass="arc" data-shader="arc" title="Arc (Cyan)">✦ Arc</button>
+              <button class="shader-chip subclass-chip active" data-subclass="solar" data-shader="solar" title="Solar (Amber)">✦ Solar</button>
+              <button class="shader-chip subclass-chip" data-subclass="strand" data-shader="strand" title="Strand (Green)">✦ Strand</button>
+              <button class="shader-chip subclass-chip prismatic-chip" data-subclass="prismatic" data-shader="prismatic" title="Prismatic (Multi-color)">✧ Prismatic</button>
+            </div>
+          </div>
+
+          <!-- Tactical Filters / Loadout Context -->
+          <div class="tactical-config-card">
+            <div class="config-header">
+              <span class="config-title">TACTICAL CONTEXT</span>
+              <span class="accent-line"></span>
+            </div>
+            
+            <div class="context-grid">
+              <div class="form-group">
+                <label>GUARDIAN CLASS</label>
+                <div class="class-selector">
+                  <button class="btn-class active" data-class="Warlock">
+                    <span class="class-glyph">▲</span> Warlock
+                  </button>
+                  <button class="btn-class" data-class="Titan">
+                    <span class="class-glyph">■</span> Titan
+                  </button>
+                  <button class="btn-class" data-class="Hunter">
+                    <span class="class-glyph">◆</span> Hunter
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>OPERATIONAL ACTIVITY</label>
+                <select id="selectActivity" class="input-tactical select-tactical">
+                  <option value="Grandmaster+" selected>Grandmaster+</option>
+                  <option value="Dungeon / Raid">Dungeon / Raid</option>
+                  <option value="PVP">PVP</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Dynamic Tactical Inquiries Dropdown -->
+            <div class="form-group" style="margin-top: 2px;">
+              <label>TACTICAL INQUIRY FOCUS</label>
+              <div class="inquiry-row" style="display: flex; gap: 8px;">
+                <select id="selectTacticalInquiry" class="input-tactical select-tactical" style="flex: 1;">
+                  <option value="Ability Focused">Ability Focused</option>
+                  <option value="Survivability">Survivability</option>
+                  <option value="Healing Loop">Healing Loop</option>
+                </select>
+                <button type="button" class="btn-tactical btn-primary btn-ask-inquiry" id="btnAskInquiry" title="Ask F.E.L.I.C.I.A. for this specific build evaluation">
+                  <span>Query Construct</span> ➔
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Chat Stream & Comms Terminal -->
+        <div class="chat-terminal">
+          <div class="terminal-header">
+            <div class="terminal-title">
+              <span class="terminal-prompt">VANGUARD-NET //</span>
+              <span class="channel-name">ENCRYPTED FIRETEAM COMMS // TACTICAL LIAISON</span>
+            </div>
+            <div class="terminal-actions">
+              <button class="btn-text-action" id="btnClearHistory" title="Clear chat history">Clear Screen</button>
+            </div>
+          </div>
+
+          <!-- Messages Stream -->
+          <div class="messages-container" id="messagesContainer">
+            <!-- Initial Greeting -->
+            <div class="message-row felicia">
+              <div class="msg-avatar">
+                <div class="ghost-mini-core"></div>
+              </div>
+              <div class="msg-bubble">
+                <div class="msg-header">
+                  <span class="msg-sender">F.E.L.I.C.I.A.</span>
+                  <span class="msg-tag">SCOTTISH CONSTRUCT</span>
+                  <button class="btn-voice-play" title="Listen to Scottish Voice">🗣️ Listen</button>
+                </div>
+                <div class="msg-content">
+                  All right, Guardian. F.E.L.I.C.I.A. online and calibrated. Diagnostics are green across the board and systems are running clean.<br><br>
+                  Whether you need advice on fine-tuning a Grandmaster build, tracking down exotic catalysts ('catties'), or reviewing your fireteam's damage rotations, I am here to sort it out. No nonsense—tell me what we are tackling today!
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Typing / Thinking Indicator -->
+          <div class="thinking-row hidden" id="thinkingIndicator">
+            <div class="ghost-mini-core pulse"></div>
+            <div class="thinking-text">F.E.L.I.C.I.A. is analyzing tactical manifests &amp; calculating telemetry...</div>
+          </div>
+
+          <!-- Input Bar -->
+          <form class="chat-input-bar" id="chatForm">
+            <button type="button" class="btn-mic" id="btnVoiceInput" title="Speak to F.E.L.I.C.I.A. (Microphone)">
+              <span class="mic-icon">🎙️</span>
+            </button>
+            <input type="text" id="chatInput" class="input-chat" placeholder="Ask F.E.L.I.C.I.A. about builds, catalysts, raid tactics, or weapons..." autocomplete="off">
+            <button type="submit" class="btn-send" id="btnSend">
+              <span class="send-text">TRANSMIT</span>
+              <span class="send-arrow">➔</span>
+            </button>
+          </form>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: WIKI & INTEL REPOSITORY -->
+    <section class="tab-pane" id="tab-wiki">
+      <div class="wiki-layout">
+        
+        <div class="wiki-header-card">
+          <div class="wiki-title-group">
+            <h2 class="section-title">DESTINY 2 ARCHIVAL REPOSITORY &amp; WIKI IMPORT</h2>
+            <p class="section-sub">Import gun stats, armor set bonuses, catalyst requirements, or custom notes. F.E.L.I.C.I.A. automatically incorporates these into her live tactical calculations!</p>
+          </div>
+          <div class="wiki-actions">
+            <button class="btn-tactical btn-primary" id="btnOpenAddWiki">
+              <span class="icon">➕</span> Add Intel Entry
+            </button>
+            <label class="btn-tactical btn-secondary upload-btn-label">
+              <span class="icon">📤</span> Import Wiki File
+              <input type="file" id="wikiFileInput" accept=".txt,.md,.json,.csv" style="display:none;">
+            </label>
+          </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="wiki-controls">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="wikiSearchInput" class="input-tactical" placeholder="Search weapons, catalysts, armor sets, or mechanics...">
+          </div>
+          <div class="category-filters" id="categoryFilters">
+            <button class="cat-pill active" data-cat="all">All Intel</button>
+            <button class="cat-pill" data-cat="Catalysts">Catalysts</button>
+            <button class="cat-pill" data-cat="Builds">Builds</button>
+            <button class="cat-pill" data-cat="Mechanics">Mechanics</button>
+            <button class="cat-pill" data-cat="Custom">Imported Custom</button>
+          </div>
+        </div>
+
+        <!-- Wiki Cards Grid -->
+        <div class="wiki-grid" id="wikiGrid">
+          <!-- Dynamically populated -->
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 3: FIRETEAM VAULT (SAVED BUILDS) -->
+    <section class="tab-pane" id="tab-vault">
+      <div class="vault-layout">
+        <div class="vault-header-card">
+          <div>
+            <h2 class="section-title">FIRETEAM LOADOUT VAULT</h2>
+            <p class="section-sub">Save tactical builds crafted with F.E.L.I.C.I.A. for quick retrieval across your phone, tablet, and PC.</p>
+          </div>
+          <button class="btn-tactical btn-primary" id="btnOpenAddBuild">
+            <span class="icon">🛡️</span> Save New Loadout
+          </button>
+        </div>
+
+        <div class="vault-grid" id="vaultGrid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: LOGISTICS & SETTINGS -->
+    <section class="tab-pane" id="tab-settings">
+      <div class="settings-layout">
+        
+        <!-- Construct Design Selector -->
+        <div class="settings-card">
+          <h3 class="card-title">✦ CONSTRUCT AVATAR &amp; VISUAL DESIGN</h3>
+          <p class="card-desc">Choose F.E.L.I.C.I.A.'s visual appearance. For V1, the Vanguard Tactical Ghost is active by default.</p>
+          
+          <div class="design-picker">
+            <div class="design-card active" data-design="ghost">
+              <div class="design-preview ghost-preview">
+                <div class="preview-core"></div>
+                <div class="preview-shell top"></div>
+                <div class="preview-shell right"></div>
+                <div class="preview-shell bottom"></div>
+                <div class="preview-shell left"></div>
+              </div>
+              <div class="design-meta">
+                <span class="design-badge">V1 ACTIVE</span>
+                <h4>Vanguard Tactical Ghost Shell</h4>
+                <p>Iconic floating Ghost with 3D diamond facets, glowing ocular core, eye cursor tracking, and thinking animations.</p>
+              </div>
+            </div>
+
+            <div class="design-card" data-design="exo">
+              <div class="design-preview exo-preview">
+                <div class="exo-face-mesh">
+                  <div class="exo-visor"></div>
+                  <div class="exo-line l1"></div>
+                  <div class="exo-line l2"></div>
+                </div>
+              </div>
+              <div class="design-meta">
+                <span class="design-badge alt">TACTICAL MATRIX</span>
+                <h4>Exo Tactical Construct</h4>
+                <p>Holographic cybernetic Exo visor with audio waveform frequency scans and tactical targeting reticles.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice & Scottish Dialect Settings -->
+        <div class="settings-card">
+          <h3 class="card-title">✦ AUDIO &amp; SCOTTISH VOICE ENGINE</h3>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>SPEECH SYNTHESIS VOICE (SCOTTISH / UK PREFERRED)</label>
+              <select id="voiceSelect" class="input-tactical select-tactical">
+                <option value="auto">Auto-detect Scottish / UK Voice</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>AUTO-SPEAK RESPONSES</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="checkAutoSpeak">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>VOICE RATE: <span id="rateVal">1.0</span>x</label>
+              <input type="range" id="voiceRate" min="0.7" max="1.3" step="0.05" value="1.0" class="range-slider">
+            </div>
+            <div class="form-group flex-1">
+              <label>VOICE PITCH: <span id="pitchVal">1.05</span></label>
+              <input type="range" id="voicePitch" min="0.8" max="1.3" step="0.05" value="1.05" class="range-slider">
+            </div>
+          </div>
+        </div>
+
+        <!-- Firebase Project: ping-vault-matrix (Auth & Cloud Firestore) -->
+        <div class="settings-card">
+          <div class="flex-between">
+            <h3 class="card-title">✦ FIREBASE BACKEND // PING-VAULT-MATRIX</h3>
+            <span class="badge-cat" id="badgeProjectActive">ACTIVE: ping-vault-matrix</span>
+          </div>
+          <p class="card-desc"><strong>Host Setup:</strong> Enter your Firebase Web App credentials once here. F.E.L.I.C.I.A. will automatically distribute this project config to all fireteam members on your network (phones, iPads, and PCs)—members simply sign in with their own account and never have to touch an API key!</p>
+          
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>FIREBASE WEB API KEY (FROM FIREBASE CONSOLE OR CLI)</label>
+              <input type="text" id="inputFirebaseApiKey" class="input-tactical" placeholder="AIzaSy...">
+            </div>
+            <div class="form-group flex-1">
+              <label>FIREBASE WEB APP ID</label>
+              <input type="text" id="inputFirebaseAppId" class="input-tactical" placeholder="1:123456789:web:abcdef...">
+            </div>
+          </div>
+
+          <div class="btn-group-settings">
+            <button class="btn-tactical btn-primary" id="btnSaveFirebaseWebConfig">Save Web App Config</button>
+            <button class="btn-tactical btn-secondary" id="btnOpenAuthModal">Manage Authentication (Sign In)</button>
+          </div>
+
+          <div class="firebase-info-box" id="firebaseCliHelperBox">
+            <div class="info-title">🛠️ Firebase Agent Skills CLI Setup</div>
+            <div class="info-body">
+              To register a web app and deploy security rules via the Firebase CLI directly on this machine:
+              <pre style="margin-top:6px; background:#0B0E14; padding:8px; border-radius:4px; font-family:monospace; font-size:11px; overflow-x:auto;">
+# 1. Login to Firebase
+npx -y firebase-tools@latest login
+
+# 2. Register Web App in ping-vault-matrix
+npx -y firebase-tools@latest apps:create web felicia-web --project ping-vault-matrix
+
+# 3. Retrieve Web SDK Config
+npx -y firebase-tools@latest apps:sdkconfig WEB --project ping-vault-matrix
+
+# 4. Deploy Firestore Rules & Auth
+npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-vault-matrix</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gemini API Engine -->
+        <div class="settings-card">
+          <h3 class="card-title">✦ GEMINI AI CORE ENGINE</h3>
+          <p class="card-desc">F.E.L.I.C.I.A. utilizes Gemini models with an automatic resilience cascade: Primary <code>gemini-3.8-flash</code> &rarr; <code>gemini-3.5-flash</code> for zero-latency, high-availability answers.</p>
+          
+          <div class="form-group">
+            <label>GEMINI API KEY</label>
+            <input type="password" id="inputGeminiKey" class="input-tactical" placeholder="Enter Gemini API Key">
+            <span class="field-hint">Active key is securely installed on your backend.</span>
+          </div>
+
+          <button class="btn-tactical btn-primary" id="btnSaveGeminiKey">Update API Key</button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD CUSTOM WIKI INTEL -->
+  <dialog class="hud-modal" id="modalAddWiki">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">ADD DESTINY 2 INTEL / WIKI ARTICLE</h3>
+        <button class="btn-modal-close" id="btnCloseAddWiki">&times;</button>
+      </div>
+      <form id="formAddWiki" class="modal-body">
+        <div class="form-group">
+          <label>INTEL TITLE (e.g. 'Outbreak Perfected God Roll', 'Vow of Disciple Symbols')</label>
+          <input type="text" id="newWikiTitle" class="input-tactical" required placeholder="Title">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>CATEGORY</label>
+            <select id="newWikiCategory" class="input-tactical select-tactical">
+              <option value="Catalysts">Catalysts</option>
+              <option value="Builds">Builds</option>
+              <option value="Weapons">Weapons</option>
+              <option value="Armor">Armor</option>
+              <option value="Mechanics">Mechanics &amp; Raids</option>
+              <option value="Custom" selected>Custom Intel</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>TAGS (comma-separated)</label>
+            <input type="text" id="newWikiTags" class="input-tactical" placeholder="PvE, Exotic, Kinetic, Solar">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>SHORT SUMMARY</label>
+          <input type="text" id="newWikiSummary" class="input-tactical" placeholder="Quick one-line summary">
+        </div>
+        <div class="form-group">
+          <label>INTEL / WIKI CONTENT (Paste guide, perks, drop location, or stats)</label>
+          <textarea id="newWikiContent" class="input-tactical textarea-tactical" rows="6" required placeholder="Paste wiki markdown, drop instructions, DPS numbers, or weapon details..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-tactical btn-secondary" id="btnCancelAddWiki">Cancel</button>
+          <button type="submit" class="btn-tactical btn-primary">Archive Intel</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: SAVE LOADOUT / BUILD -->
+  <dialog class="hud-modal modal-wide" id="modalAddBuild">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 class="modal-title">SAVE FIRETEAM LOADOUT // BUILD CRAFTER</h3>
+          <span class="modal-sub">Cloud Firestore synced to <strong>ping-vault-matrix</strong></span>
+        </div>
+        <button class="btn-modal-close" id="btnCloseAddBuild">&times;</button>
+      </div>
+      <form id="formAddBuild" class="modal-body">
+        
+        <!-- Core Build Identity -->
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>LOADOUT NAME</label>
+            <input type="text" id="buildTitle" class="input-tactical" required placeholder="e.g. 'GM Nightfall Solar Sunbracers Warlock'">
+          </div>
+          <div class="form-group flex-1">
+            <label>GUARDIAN CLASS</label>
+            <select id="buildClass" class="input-tactical select-tactical">
+              <option value="Warlock">Warlock</option>
+              <option value="Titan">Titan</option>
+              <option value="Hunter">Hunter</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>SUBCLASS &amp; ELEMENT</label>
+            <input type="text" id="buildSubclass" class="input-tactical" required placeholder="e.g. Solar 3.0, Prismatic, Void 3.0">
+          </div>
+          <div class="form-group flex-1">
+            <label>EXOTIC ARMOR PIECE</label>
+            <input type="text" id="buildExoticArmor" class="input-tactical" required placeholder="e.g. Sunbracers, Synthoceps, Gyrfalcon's Hauberk">
+          </div>
+        </div>
+
+        <!-- 5 CORE STAT CATEGORIES (Health, Melee, Grenade, Super, Class) -->
+        <div class="stat-sliders-section">
+          <div class="section-badge-bar">
+            <span class="bar-tag">STAT ALLOCATION</span>
+            <span class="bar-desc">Target Tier ratings (0–100 / Tier 1–10)</span>
+          </div>
+          
+          <div class="stat-sliders-grid">
+            <!-- Health (Resilience) -->
+            <div class="stat-slider-card stat-health">
+              <div class="stat-card-header">
+                <span class="stat-name">❤️ HEALTH (RESILIENCE)</span>
+                <span class="stat-tier" id="tierHealthBadge">Tier 10 (100)</span>
+              </div>
+              <input type="range" id="statHealth" min="0" max="100" step="5" value="100" class="stat-range range-health">
+              <div class="stat-meta-note">Tier 10 grants maximum 30% PVE damage reduction.</div>
+            </div>
+
+            <!-- Melee (Strength) -->
+            <div class="stat-slider-card stat-melee">
+              <div class="stat-card-header">
+                <span class="stat-name">⚡ MELEE (STRENGTH)</span>
+                <span class="stat-tier" id="tierMeleeBadge">Tier 6 (60)</span>
+              </div>
+              <input type="range" id="statMelee" min="0" max="100" step="5" value="60" class="stat-range range-melee">
+              <div class="stat-meta-note">Powers up powered melee cooldowns.</div>
+            </div>
+
+            <!-- Grenade (Discipline) -->
+            <div class="stat-slider-card stat-grenade">
+              <div class="stat-card-header">
+                <span class="stat-name">💣 GRENADE (DISCIPLINE)</span>
+                <span class="stat-tier" id="tierGrenadeBadge">Tier 10 (100)</span>
+              </div>
+              <input type="range" id="statGrenade" min="0" max="100" step="5" value="100" class="stat-range range-grenade">
+              <div class="stat-meta-note">Max uptime for vortex, solar, or storm grenades.</div>
+            </div>
+
+            <!-- Super (Intellect) -->
+            <div class="stat-slider-card stat-super">
+              <div class="stat-card-header">
+                <span class="stat-name">✨ SUPER (INTELLECT)</span>
+                <span class="stat-tier" id="tierSuperBadge">Tier 4 (40)</span>
+              </div>
+              <input type="range" id="statSuper" min="0" max="100" step="5" value="40" class="stat-range range-super">
+              <div class="stat-meta-note">Super passive cooldown tier.</div>
+            </div>
+
+            <!-- Class Ability (Recovery) -->
+            <div class="stat-slider-card stat-class">
+              <div class="stat-card-header">
+                <span class="stat-name">🛡️ CLASS (RECOVERY)</span>
+                <span class="stat-tier" id="tierClassBadge">Tier 8 (80)</span>
+              </div>
+              <input type="range" id="statClass" min="0" max="100" step="5" value="80" class="stat-range range-class">
+              <div class="stat-meta-note">Class ability recharge (Rift / Barricade / Dodge) &amp; health regen speed.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WEAPONS ARSENAL (Kinetic, Energy, Heavy) -->
+        <div class="weapons-section">
+          <div class="section-badge-bar">
+            <span class="bar-tag">WEAPONS ARSENAL</span>
+            <span class="bar-desc">Kinetic, Energy, and Heavy weapon slots</span>
+          </div>
+
+          <div class="weapons-grid">
+            <!-- Kinetic Slot -->
+            <div class="weapon-slot-card">
+              <div class="weapon-slot-title">⚪ KINETIC / STRAND / STASIS SLOT</div>
+              <div class="form-group">
+                <label>WEAPON NAME</label>
+                <input type="text" id="buildKinetic" class="input-tactical" placeholder="e.g. Witherhoard, The Call, Outbreak">
+              </div>
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label>FRAME / ARCHETYPE</label>
+                  <input type="text" id="buildKineticFrame" class="input-tactical" placeholder="e.g. Special GL, Rocket Sidearm">
+                </div>
+                <div class="form-group flex-1">
+                  <label>PERKS / GOD ROLL</label>
+                  <input type="text" id="buildKineticPerks" class="input-tactical" placeholder="e.g. Auto-Loading, Demolitionist">
+                </div>
+              </div>
+            </div>
+
+            <!-- Energy Slot -->
+            <div class="weapon-slot-card">
+              <div class="weapon-slot-title">🟠 ENERGY (SOLAR / ARC / VOID) SLOT</div>
+              <div class="form-group">
+                <label>WEAPON NAME</label>
+                <input type="text" id="buildEnergy" class="input-tactical" placeholder="e.g. Sunshot, Choir of One, Zaouli's">
+              </div>
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label>FRAME / ARCHETYPE</label>
+                  <input type="text" id="buildEnergyFrame" class="input-tactical" placeholder="e.g. 150 RPM Solar Hand Cannon">
+                </div>
+                <div class="form-group flex-1">
+                  <label>PERKS / GOD ROLL</label>
+                  <input type="text" id="buildEnergyPerks" class="input-tactical" placeholder="e.g. Incandescent + Explosive">
+                </div>
+              </div>
+            </div>
+
+            <!-- Heavy Slot -->
+            <div class="weapon-slot-card">
+              <div class="weapon-slot-title">🟣 HEAVY POWER WEAPON SLOT</div>
+              <div class="form-group">
+                <label>WEAPON NAME</label>
+                <input type="text" id="buildHeavy" class="input-tactical" placeholder="e.g. Apex Predator, Edge Transit">
+              </div>
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label>FRAME / ARCHETYPE</label>
+                  <input type="text" id="buildHeavyFrame" class="input-tactical" placeholder="e.g. Adaptive Rocket Launcher">
+                </div>
+                <div class="form-group flex-1">
+                  <label>PERKS / GOD ROLL</label>
+                  <input type="text" id="buildHeavyPerks" class="input-tactical" placeholder="e.g. Bait &amp; Switch + Reconstruction">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>KEY ASPECTS, FRAGMENTS &amp; ARMOR MODS</label>
+          <input type="text" id="buildAspects" class="input-tactical" placeholder="e.g. Touch of Flame, Ember of Empyrean, Solar Siphon, Heavy Ammo Finder">
+        </div>
+
+        <div class="form-group">
+          <label>COMBAT LOOP &amp; STRATEGY NOTES</label>
+          <textarea id="buildNotes" class="input-tactical textarea-tactical" rows="3" placeholder="How to cycle abilities, trigger perks, survive in endgame, and maximize damage..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-tactical btn-secondary" id="btnCancelAddBuild">Cancel</button>
+          <button type="submit" class="btn-tactical btn-primary" id="btnSubmitBuild">Save to Vault &amp; Sync</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: FIREBASE AUTHENTICATION (Google, Email/Password, Phone) -->
+  <dialog class="hud-modal modal-auth" id="modalAuth">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 class="modal-title">FIREBASE AUTHENTICATION</h3>
+          <span class="modal-sub">Backend Project: <strong>ping-vault-matrix</strong> // Cloud Firestore</span>
+        </div>
+        <button class="btn-modal-close" id="btnCloseAuth">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        
+        <!-- Signed-in Profile View (Shown ONLY when user is authenticated) -->
+        <div class="auth-profile-card hidden" id="authProfileCard">
+          <div class="profile-header">
+            <div class="profile-avatar" id="profileAvatar">👤</div>
+            <div class="profile-details">
+              <div class="profile-name-row">
+                <span class="profile-name" id="profileName">Guardian</span>
+                <button type="button" class="btn-edit-callsign" id="btnEditCallsign" title="Change your Guardian call-sign">✏️ Change Name</button>
+              </div>
+
+              <!-- Inline Call-sign Editor (Toggled on button click) -->
+              <div class="profile-edit-box hidden" id="profileEditBox">
+                <input type="text" id="inputNewCallsign" class="input-tactical" placeholder="Enter new Guardian call-sign" maxlength="30">
+                <div class="profile-edit-actions">
+                  <button type="button" class="btn-tactical btn-primary btn-sm" id="btnSaveCallsign">Save Call-sign</button>
+                  <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnCancelCallsign">Cancel</button>
+                </div>
+              </div>
+
+              <div class="profile-contact" id="profileContact">user@destiny.vanguard</div>
+              <div class="profile-uid">UID: <span id="profileUid">...</span></div>
+            </div>
+            <span class="badge-cat" style="align-self: flex-start;">AUTHENTICATED</span>
+          </div>
+
+          <div class="profile-stats-sync">
+            <div class="sync-row">
+              <span class="sync-label">🔥 Cloud Firestore:</span>
+              <span class="sync-val">Ready (users/{uid}/loadouts)</span>
+            </div>
+            <div class="sync-row">
+              <span class="sync-label">🛡️ Cross-Device Sync:</span>
+              <span class="sync-val">Active across all your devices</span>
+            </div>
+          </div>
+
+          <button type="button" class="btn-tactical btn-secondary btn-full" id="btnSignOut">Sign Out of Firebase</button>
+        </div>
+
+        <!-- Auth Tabs (Shown when user is not logged in) -->
+        <div class="auth-forms-container" id="authFormsContainer">
+          
+          <div class="auth-tabs">
+            <button class="auth-tab-btn active" data-authtab="tab-auth-google">
+              <span class="tab-icon">🚀</span> Google
+            </button>
+            <button class="auth-tab-btn" data-authtab="tab-auth-email">
+              <span class="tab-icon">✉️</span> Email &amp; Password
+            </button>
+            <button class="auth-tab-btn" data-authtab="tab-auth-phone">
+              <span class="tab-icon">📱</span> Phone (SMS)
+            </button>
+          </div>
+
+          <!-- TAB 1: GOOGLE SIGN-IN -->
+          <div class="auth-tab-pane active" id="tab-auth-google">
+            <div class="auth-tab-content">
+              <p class="auth-desc">Authenticate with your Google account. Your Guardian loadouts and custom wiki intelligence will instantly sync across your phone, tablet, and PC.</p>
+              
+              <button type="button" class="btn-provider-google" id="btnGoogleSignIn">
+                <svg class="google-svg" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+
+              <div class="auth-security-notice">
+                <span>🔒 Secure OAuth 2.0 popup powered by Firebase Auth SDK v10.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: EMAIL & PASSWORD -->
+          <div class="auth-tab-pane" id="tab-auth-email">
+            <form id="formEmailAuth" class="auth-tab-content">
+              <div class="auth-mode-bar">
+                <span class="auth-mode-title" id="emailModeTitle">Sign In to Fireteam Vault</span>
+                <button type="button" class="btn-text-action" id="btnToggleEmailMode">Need an account? Register</button>
+              </div>
+
+              <div class="form-group">
+                <label>EMAIL ADDRESS</label>
+                <input type="email" id="emailInput" class="input-tactical" required placeholder="guardian@destiny.vanguard">
+              </div>
+
+              <div class="form-group">
+                <label>PASSWORD</label>
+                <input type="password" id="passwordInput" class="input-tactical" required placeholder="••••••••">
+              </div>
+
+              <div class="form-group hidden" id="groupPasswordConfirm">
+                <label>CONFIRM PASSWORD</label>
+                <input type="password" id="passwordConfirmInput" class="input-tactical" placeholder="••••••••">
+              </div>
+
+              <div class="auth-error-msg hidden" id="emailAuthError"></div>
+
+              <button type="submit" class="btn-tactical btn-primary btn-full" id="btnSubmitEmailAuth">Sign In with Email</button>
+            </form>
+          </div>
+
+          <!-- TAB 3: PHONE NUMBER AUTHENTICATION (SMS) -->
+          <div class="auth-tab-pane" id="tab-auth-phone">
+            <div class="auth-tab-content">
+              <p class="auth-desc">Enter your mobile phone number with country code (e.g. <code>+1 555-555-5555</code>) to receive a one-time SMS verification code.</p>
+
+              <!-- Step 1: Send SMS -->
+              <div id="phoneStep1">
+                <div class="form-group">
+                  <label>PHONE NUMBER (E.164 FORMAT WITH COUNTRY CODE)</label>
+                  <input type="tel" id="phoneNumberInput" class="input-tactical" placeholder="+1 555-019-2834">
+                </div>
+
+                <!-- Recaptcha Container for Firebase Phone Auth -->
+                <div id="recaptcha-container" class="recaptcha-box"></div>
+
+                <div class="auth-error-msg hidden" id="phoneAuthError"></div>
+
+                <button type="button" class="btn-tactical btn-primary btn-full" id="btnSendPhoneCode">Send SMS Verification Code</button>
+              </div>
+
+              <!-- Step 2: Confirm SMS Code -->
+              <div id="phoneStep2" class="hidden">
+                <div class="form-group">
+                  <label>6-DIGIT SMS VERIFICATION CODE</label>
+                  <input type="text" id="phoneVerificationCode" class="input-tactical" placeholder="123456" maxlength="6">
+                </div>
+
+                <div class="auth-error-msg hidden" id="phoneCodeError"></div>
+
+                <div class="form-row">
+                  <button type="button" class="btn-tactical btn-secondary flex-1" id="btnBackToPhoneStep1">Change Number</button>
+                  <button type="button" class="btn-tactical btn-primary flex-2" id="btnVerifyPhoneCode">Verify &amp; Sign In</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-tactical btn-secondary" id="btnDismissAuth">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: MOBILE CONNECT (QR CODE & URL) -->
+  <dialog class="hud-modal" id="modalMobileConnect">
+    <div class="modal-content modal-compact">
+      <div class="modal-header">
+        <h3 class="modal-title">CONNECT PHONE OR IPAD</h3>
+        <button class="btn-modal-close" id="btnCloseConnect">&times;</button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="qr-instructions">Scan this QR code with your iPhone or iPad camera to launch F.E.L.I.C.I.A. instantly:</p>
+        
+        <div class="qr-container">
+          <img id="qrImage" src="" alt="Mobile QR Code" class="qr-code-img">
+        </div>
+
+        <div class="mobile-url-box">
+          <span class="url-label">Direct Network Address (Same Wi-Fi):</span>
+          <div class="url-flex">
+            <input type="text" id="mobileUrlInput" readonly class="input-tactical url-input" value="http://192.168.50.6:8000">
+            <button class="btn-tactical btn-secondary btn-copy" id="btnCopyUrl">Copy</button>
+          </div>
+        </div>
+
+        <div class="mobile-url-box clan-tunnel-box" id="clanTunnelBox" style="margin-top: 14px; border-top: 1px dashed rgba(245, 166, 35, 0.35); padding-top: 12px;">
+          <span class="url-label" style="color: #38BDF8; font-weight: 700;">🌐 CLAN WORLDWIDE LINK (ANY WI-FI):</span>
+          <div class="url-flex">
+            <input type="text" id="clanUrlInput" readonly class="input-tactical url-input" style="color: #38BDF8; border-color: rgba(56, 189, 248, 0.5);" value="https://feliciadatabase.loca.lt">
+            <button class="btn-tactical btn-secondary btn-copy" id="btnCopyClanUrl">Copy Link</button>
+          </div>
+          <p style="font-size: 0.75rem; color: #94A3B8; margin-top: 5px; text-align: left;">✦ Drop this HTTPS link in your Clan Discord — works across any Wi-Fi or cellular network!</p>
+        </div>
+        
+        <div class="mobile-tips">
+          <span class="tip-star">✦</span> Make sure your mobile device is on the same Wi-Fi network.<br>
+          <span class="tip-star">✦</span> <strong>iPad / iPhone Tip:</strong> Tap the Share button &gt; <em>"Add to Home Screen"</em> for full-screen Vanguard tactical HUD mode!
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: VIEW FULL WIKI ARTICLE -->
+  <dialog class="hud-modal" id="modalViewWiki">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="viewWikiTitle">ARCHIVED INTEL</h3>
+        <button class="btn-modal-close" id="btnCloseViewWiki">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="article-meta">
+          <span class="badge-cat" id="viewWikiCategory">CATALYSTS</span>
+          <div class="article-tags" id="viewWikiTags"></div>
+        </div>
+        <div class="article-content" id="viewWikiContent"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-tactical btn-secondary" id="btnAskFeliciaAboutWiki">🗣️ Ask F.E.L.I.C.I.A. About This</button>
+        <button class="btn-tactical btn-primary" id="btnDismissViewWiki">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

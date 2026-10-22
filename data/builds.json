@@ -1,0 +1,176 @@
+[
+  {
+    "id": "build-starter-warlock",
+    "title": "GM Nightfall Solar Sunbracers Warlock",
+    "guardian_class": "Warlock",
+    "subclass": "Solar 3.0",
+    "exotic_armor": "Sunbracers",
+    "stats": {
+      "health": 100,
+      "melee": 70,
+      "grenade": 100,
+      "super": 40,
+      "classStat": 80
+    },
+    "weapons": {
+      "kinetic": {
+        "name": "Witherhoard",
+        "archetype": "Exotic Special GL",
+        "perks": "Auto-Loading Holster + Catalyst",
+        "notes": "Pool damage & kinetic surge"
+      },
+      "energy": {
+        "name": "Zaouli's Bane",
+        "archetype": "140 RPM Hand Cannon",
+        "perks": "Enhanced Explosive + Incandescent",
+        "notes": "Ignition spreading"
+      },
+      "heavy": {
+        "name": "Apex Predator",
+        "archetype": "Adaptive Rocket Launcher",
+        "perks": "Enhanced Reconstruction + Bait and Switch",
+        "notes": "Boss burst rotation"
+      }
+    },
+    "kinetic_weapon": "Witherhoard",
+    "energy_weapon": "Zaouli's Bane",
+    "heavy_weapon": "Apex Predator",
+    "key_aspects_fragments": "Touch of Flame, Heat Rises, Ember of Empyrean, Ember of Torches, Solar Siphon",
+    "notes": "Powered melee kill grants unlimited solar grenades. Continuous solar kills extend Restoration and Radiant timers indefinitely."
+  },
+  {
+    "id": "build-starter-titan",
+    "title": "Prismatic Consecration Slam Titan",
+    "guardian_class": "Titan",
+    "subclass": "Prismatic",
+    "exotic_armor": "Synthoceps",
+    "stats": {
+      "health": 100,
+      "melee": 100,
+      "grenade": 50,
+      "super": 40,
+      "classStat": 60
+    },
+    "weapons": {
+      "kinetic": {
+        "name": "The Call",
+        "archetype": "Rocket-Assisted Sidearm",
+        "perks": "Demolitionist + Lead from Gold",
+        "notes": "High special ammo burst"
+      },
+      "energy": {
+        "name": "Choir of One",
+        "archetype": "Exotic Special Auto Rifle",
+        "perks": "Destabilizing Rounds + Subsistence",
+        "notes": "Anti-Barrier champion shredder"
+      },
+      "heavy": {
+        "name": "Edge Transit",
+        "archetype": "Heavy Grenade Launcher",
+        "perks": "Envious Assassin + Bait and Switch",
+        "notes": "Top endgame DPS drum dump"
+      }
+    },
+    "kinetic_weapon": "The Call",
+    "energy_weapon": "Choir of One",
+    "heavy_weapon": "Edge Transit",
+    "key_aspects_fragments": "Consecration, Knockout, Facet of Ruin, Facet of Courage, Heavy Handed",
+    "notes": "Slide-melee sends devastating triple solar waves resulting in room-clearing ignitions while Synthoceps maximizes slam damage."
+  },
+  {
+    "id": "build-starter-hunter",
+    "title": "Endgame Void Invisibility Hunter",
+    "guardian_class": "Hunter",
+    "subclass": "Void 3.0",
+    "exotic_armor": "Gyrfalcon's Hauberk",
+    "stats": {
+      "health": 100,
+      "melee": 40,
+      "grenade": 90,
+      "super": 50,
+      "classStat": 100
+    },
+    "weapons": {
+      "kinetic": {
+        "name": "Outbreak Perfected",
+        "archetype": "450 RPM Pulse Rifle",
+        "perks": "Rewind Rounds + Nanite Swarm",
+        "notes": "Anti-barrier & sustained primary DPS"
+      },
+      "energy": {
+        "name": "Ros Arago IV",
+        "archetype": "600 RPM Void Auto Rifle",
+        "perks": "Repulsor Brace + Onslaught",
+        "notes": "Volatile explosions + overshield"
+      },
+      "heavy": {
+        "name": "Commemoration",
+        "archetype": "Adaptive Machine Gun",
+        "perks": "Reconstruction + Killing Tally",
+        "notes": "Endless void crowd control"
+      }
+    },
+    "kinetic_weapon": "Outbreak Perfected",
+    "energy_weapon": "Ros Arago IV",
+    "heavy_weapon": "Commemoration",
+    "key_aspects_fragments": "Stylish Executioner, Vanishing Step, Echo of Starvation, Echo of Persistence",
+    "notes": "Permanent invisibility loop. Defeating volatile targets grants invisibility and full health via Devour; breaking invisibility grants Volatile Rounds."
+  },
+  {
+    "id": "clan-verified-solar-hunter-boss-dps",
+    "title": "Solar Hunter Blade Barrage Boss DPS (Shards of Galanor)",
+    "guardian_class": "Hunter",
+    "subclass": "Solar 3.0",
+    "exotic_armor": "Shards of Galanor",
+    "kinetic_weapon": "User's choice (Sniper or Kinetic Tremors scout recommended)",
+    "energy_weapon": "User's choice (Solar primary/fusion recommended)",
+    "heavy_weapon": "One Thousand Voices (Recommended if unlocked; Apex Predator or Dragon's Breath are alternatives, just not as good)",
+    "key_aspects_fragments": "Knock 'Em Down, Crackshot | Ember of Benevolence, Ember of Empyrean, Ember of Singeing, Ember of Ashes",
+    "notes": "Activity: Dungeon / Raid // Focus: Boss DPS\nArtifact: Tablet of Ruin (Limit Break, Elemental Supercharger, Particle Reconstruction (for One Thousand Voices to apply weakening))\nArmor Set: Lustrous Casque Set (Tower Kiosk / Solstice Armor Engrams) (4-Piece Set Bonus: Heals on Solar weapon final blows.)\nMods: Helmet: 2x Dynamo, 1x Harmonic Siphon; Arms: Dexterity Mod (matching weapon choice), 1x Harmonic Loader; Legs: 2x Solar Weapon Surge, 1x Holster Mod (user's choice); Class: Powerful Attraction, Distribution, Reaper\nStats: 150+ Weapon & Super stat (200 is best), at least 100 Class stat, 0 Health, low Melee and Grenade (not a key part of the build).\nGhost Mod: Powerhouse (Recommended to get close to target stat splits)",
+    "stats": {
+      "health": 30,
+      "melee": 40,
+      "grenade": 40,
+      "super": 150,
+      "classStat": 100
+    }
+  },
+  {
+    "id": "clan-verified-arc-warlock-boss-dps-adclear",
+    "title": "Arc Warlock Chaos Reach Infinite Super & Ad Clear (Geomag Stabilizers)",
+    "guardian_class": "Warlock",
+    "subclass": "Arc 3.0",
+    "exotic_armor": "Geomag Stabilizers",
+    "kinetic_weapon": "User's choice (Primary weapon of choice)",
+    "energy_weapon": "Arc weapon with Jolting Feedback & Voltshot (e.g. Chrysura Melo from 'The Shattered Throne' dungeon - easiest dungeon in the game)",
+    "heavy_weapon": "One Thousand Voices or Thunderlord (Thunderlord is very easy to get and still very, very good)",
+    "key_aspects_fragments": "Arc Soul, Electrostatic Mind | Spark of Resistance, Spark of Frequency, Spark of Discharge, Spark of Shock",
+    "notes": "Activity: Dungeon / Raid // Focus: Boss DPS, Soft Ad Clear\nArtifact: Tablet of Ruin (especially if using 1K or fusion alongside) (Dielectric, Flashover, Photonic Flare, Limit Break, Defibrillating Blast)\nArmor Set: Luminopotent Set (Fireteam Ops or focus from Zavala) (4-Piece Set Bonus: 'Shock and Clear' — Final blows with Jolt or against Jolted combatants create Ionic Traces which fund your Super.)\nMods: Helmet: 1x Harmonic Siphon, 2x Font of Wisdom (Super Fonts); Arms: 2x Font of Discipline (Grenade Fonts), 1x Bolstering Detonation; Legs: 1x Arc Weapon Surge, 1x Better Already, 1x Recuperation; Class: 1x Reaper, 1x Powerful Attraction, 1x Time Dilation\nStats: 150+ Grenade and Super stats, 50+ Class and Weapons, 0 Health and Melee are not really used (unless you find yourself doing more melee than grenades).\nGhost Mod: Grenadier, Powerhouse, or Demolitionist (Recommended for these stats)",
+    "stats": {
+      "health": 30,
+      "melee": 40,
+      "grenade": 150,
+      "super": 150,
+      "classStat": 100
+    }
+  },
+  {
+    "id": "clan-verified-stasis-titan-survivability",
+    "title": "Stasis Titan Unkillable Glacial Guard & Frost Armor (Icefall Mantle)",
+    "guardian_class": "Titan",
+    "subclass": "Stasis 3.0",
+    "exotic_armor": "Icefall Mantle",
+    "kinetic_weapon": "Fighting Lion (Top Tier alternative which goes in the Primary/Kinetic slot)",
+    "energy_weapon": "Icebreaker (Recommended if unlocked, found in 'Vesper's Host' Dungeon)",
+    "heavy_weapon": "User's choice depending on whether using Icebreaker or Fighting Lion",
+    "key_aspects_fragments": "Howl of the Storm, Tectonic Harvest | Whisper of Hunger, Whisper of Shards, Whisper of Conduction, Whisper of Rime",
+    "notes": "Activity: Grandmaster+ // Focus: Survivability, Survavability\nArtifact: Slayer Baron Apothecary Satchel (Crystalline Converter, Wind Chill, Frost Renewal, Curative Orbs, Hail the Storm, The Thick of It, Brain Freeze)\nArmor Set: Seventh Seraph Set (Cosmodrome Public Events / Master Lost Sectors for easy T5) OR Exodus Down Set (Nessus Public Events / Master Lost Sectors for easy T5) (High Tier-5 armor set providing maximum stat allocation and resilience thresholds.)\nMods: Helmet: 2x Hands-On, 1x Harmonic Siphon; Arms: 1x Impact Induction, 1x Grenade Kickstart, 1x Heavy Handed; Legs: 2x Invigoration, 1x Solar Weapon Surge (or Kinetic Surge if using Fighting Lion); Class: 1x Reaper, 1x Powerful Attraction, 1x Time Dilation\nStats: 100+ Weapon, Super, and Melee stat. Health, Grenade, and Class are user's choice (those stats don't really matter for this loop).\nGhost Mod: Skirmisher, Powerhouse, or Paragon (Recommended for achieving these stats)",
+    "stats": {
+      "health": 100,
+      "melee": 100,
+      "grenade": 40,
+      "super": 150,
+      "classStat": 100
+    }
+  }
+]
