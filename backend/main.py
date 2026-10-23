@@ -227,10 +227,16 @@ def find_verified_build(subclass: str, guardian_class: str, activity: str, inqui
             continue
         if b.get("guardian_class", "").lower() != c_clean:
             continue
-        b_act = b.get("activity", "").lower()
-        if b_act != a_clean and not (b_act in a_clean or a_clean in b_act):
-            continue
-        b_inqs = [x.lower() for x in b.get("tactical_inquiry", [])]
+        b_act = b.get("activity", "")
+        if isinstance(b_act, list):
+            b_acts = [str(x).lower() for x in b_act]
+            if not any(a_clean in x or x in a_clean for x in b_acts):
+                continue
+        else:
+            b_act_str = str(b_act).lower()
+            if b_act_str != a_clean and not (b_act_str in a_clean or a_clean in b_act_str):
+                continue
+        b_inqs = [str(x).lower() for x in b.get("tactical_inquiry", [])]
         if any(x in i_clean or i_clean in x for x in b_inqs):
             return b
     return None

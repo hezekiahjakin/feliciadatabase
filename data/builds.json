@@ -145,7 +145,7 @@
     "energy_weapon": "Arc weapon with Jolting Feedback & Voltshot (e.g. Chrysura Melo from 'The Shattered Throne' dungeon - easiest dungeon in the game)",
     "heavy_weapon": "One Thousand Voices or Thunderlord (Thunderlord is very easy to get and still very, very good)",
     "key_aspects_fragments": "Arc Soul, Electrostatic Mind | Spark of Resistance, Spark of Frequency, Spark of Discharge, Spark of Shock",
-    "notes": "Activity: Dungeon / Raid // Focus: Boss DPS, Soft Ad Clear\nArtifact: Tablet of Ruin (especially if using 1K or fusion alongside) (Dielectric, Flashover, Photonic Flare, Limit Break, Defibrillating Blast)\nArmor Set: Luminopotent Set (Fireteam Ops or focus from Zavala) (4-Piece Set Bonus: 'Shock and Clear' — Final blows with Jolt or against Jolted combatants create Ionic Traces which fund your Super.)\nMods: Helmet: 1x Harmonic Siphon, 2x Font of Wisdom (Super Fonts); Arms: 2x Font of Discipline (Grenade Fonts), 1x Bolstering Detonation; Legs: 1x Arc Weapon Surge, 1x Better Already, 1x Recuperation; Class: 1x Reaper, 1x Powerful Attraction, 1x Time Dilation\nStats: 150+ Grenade and Super stats, 50+ Class and Weapons, 0 Health and Melee are not really used (unless you find yourself doing more melee than grenades).\nGhost Mod: Grenadier, Powerhouse, or Demolitionist (Recommended for these stats)",
+    "notes": "Activity: Dungeon / Raid // Focus: Boss DPS, Soft Ad Clear\nArtifact: Tablet of Ruin (especially if using 1K or fusion alongside) (Dielectric, Flashover, Photonic Flare, Limit Break, Defibrillating Blast)\nArmor Set: Luminopotent Set (Fireteam Ops or focus from Zavala) (4-Piece Set Bonus: 'Shock and Clear' \u2014 Final blows with Jolt or against Jolted combatants create Ionic Traces which fund your Super.)\nMods: Helmet: 1x Harmonic Siphon, 2x Font of Wisdom (Super Fonts); Arms: 2x Font of Discipline (Grenade Fonts), 1x Bolstering Detonation; Legs: 1x Arc Weapon Surge, 1x Better Already, 1x Recuperation; Class: 1x Reaper, 1x Powerful Attraction, 1x Time Dilation\nStats: 150+ Grenade and Super stats, 50+ Class and Weapons, 0 Health and Melee are not really used (unless you find yourself doing more melee than grenades).\nGhost Mod: Grenadier, Powerhouse, or Demolitionist (Recommended for these stats)",
     "stats": {
       "health": 30,
       "melee": 40,
@@ -172,5 +172,159 @@
       "super": 150,
       "classStat": 100
     }
+  },
+  {
+    "id": "clan-verified-stasis-hunter-soft-ad-clear",
+    "title": "Stasis Hunter Infinite Withering Blade & Crystal Storm (Mask of Fealty)",
+    "guardian_class": "Hunter",
+    "subclass": "Stasis",
+    "activity": "Dungeon / Raid",
+    "tactical_inquiry": "Soft Ad Clear",
+    "description": "Clan-verified Stasis Hunter battle-tested loadout centered around Mask of Fealty.",
+    "super": "Silence and Squall",
+    "aspects": [
+      "Shatterdive",
+      "Grim Harvest"
+    ],
+    "fragments": [
+      "Whisper of Shards",
+      "Whisper of Chains",
+      "Whisper of Rime",
+      "Whisper of Conduction",
+      "Whisper of Rending"
+    ],
+    "exotic_armor": "Mask of Fealty (Helmet)",
+    "weapons": {
+      "energy": "Icebreaker (Recommended if unlocked for Energy slot)",
+      "kinetic": "Fighting Lion (Recommended for Primary/Kinetic slot)",
+      "heavy": "User's choice depending on loadout preference"
+    },
+    "mods": {
+      "helmet": [
+        "2x Solar Siphon (or Kinetic if using Fighting Lion)",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "2x Heavy Handed",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "1x Solar Weapon Surge",
+        "1x Stasis Weapon Surge (based on user guns)",
+        "1x Invigoration"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "is_clan_verified": true
+  },
+  {
+    "id": "clan-verified-void-hunter-survivability-adclear",
+    "title": "Void Hunter Smoke Bomb Loop & Weakening Invisibility (Khepri's Sting)",
+    "guardian_class": "Hunter",
+    "subclass": "Void",
+    "activity": "Dungeon / Raid",
+    "tactical_inquiry": "Static Survivability, Soft Ad Clear",
+    "description": "Clan-verified Void Hunter battle-tested loadout centered around Khepri's Sting.",
+    "super": "Moebius Quiver",
+    "aspects": [
+      "On the Prowl",
+      "Stylish Executioner"
+    ],
+    "fragments": [
+      "Echo of Persistence",
+      "Echo of Starvation",
+      "Echo of Exchange",
+      "Echo of Instability",
+      "Echo of Provision"
+    ],
+    "exotic_armor": "Khepri's Sting (Gauntlets)",
+    "weapons": {
+      "energy": "Turncoat (Void Hand Cannon - Recommended)",
+      "heavy": "Apex Predator (Rocket Launcher - Recommended)",
+      "kinetic": "User's choice (Any Primary weapon)"
+    },
+    "mods": {
+      "helmet": [
+        "1x Dynamo",
+        "2x Harmonic Siphon"
+      ],
+      "gloves": [
+        "1x Heavy Handed",
+        "1x Focusing Strike",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "2x Void Weapon Surge",
+        "1x Harmonic Scavenger"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "is_clan_verified": true
+  },
+  {
+    "id": "clan-verified-prismatic-hunter-universal-survivability",
+    "title": "Prismatic Hunter Universal Overshield & Damage Loop (Fortune's Favor)",
+    "guardian_class": "Hunter",
+    "subclass": "Prismatic",
+    "activity": "Dungeon / Raid, Grandmaster+",
+    "tactical_inquiry": "Boss DPS, Soft Ad Clear, Survivability, Static Survivability",
+    "description": "Clan-verified Prismatic Hunter battle-tested loadout centered around Fortune's Favor.",
+    "super": "Golden Gun, Deadfall, or Silence and Squall (User's choice)",
+    "aspects": [
+      "Stylish Executioner",
+      "Threaded Specter"
+    ],
+    "fragments": [
+      "Facet of Purpose",
+      "Facet of Hope",
+      "Facet of Dawn",
+      "Facet of Protection",
+      "Facet of Blessing"
+    ],
+    "exotic_armor": "Fortune's Favor (Chest Armor)",
+    "weapons": {
+      "heavy": "Truth (Rocket Launcher - Recommended)",
+      "energy": "Age-Old Bond OR Gnawing Hunger (with Destabilizing Rounds + Repulsor Brace)",
+      "kinetic": "Festival Flight (with Attrition Orbs + Slice for Primary slot)"
+    },
+    "mods": {
+      "helmet": [
+        "1x Heavy Ammo Finder",
+        "1x Dynamo",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "1x Void Loader",
+        "1x Focusing Strike",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "2x Void Weapon Surge",
+        "1x Kinetic Holster"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "is_clan_verified": true
   }
 ]

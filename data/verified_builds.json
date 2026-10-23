@@ -4,10 +4,15 @@
     "subclass": "Solar",
     "guardian_class": "Hunter",
     "activity": "Dungeon / Raid",
-    "tactical_inquiry": ["Boss DPS"],
+    "tactical_inquiry": [
+      "Boss DPS"
+    ],
     "title": "Solar Hunter Blade Barrage Boss DPS (Shards of Galanor)",
     "super": "Blade Barrage",
-    "aspects": ["Knock 'Em Down", "Crackshot"],
+    "aspects": [
+      "Knock 'Em Down",
+      "Crackshot"
+    ],
     "fragments": [
       "Ember of Benevolence",
       "Ember of Empyrean",
@@ -39,14 +44,29 @@
       "name": "Shards of Galanor",
       "slot": "Gauntlets",
       "description": "Throwing Knife final blows decrease the cooldown of your Super. Hitting a single target with most Blade Barrage knives in a volley causes them to release a violent Solar explosion, releasing scorching Solar shrapnel. Hits and final blows with Blade Barrage return Super energy after the Super ends.",
-      "community_insight": "• Throwing Knife Kills grant 2.5–5% Super Energy depending on enemy rank.\n• Passively increases Blade Barrage impact and explosive damage by 25%.\n• Landing 5 Blade Barrage knives triggers a Solar Detonation (up to 2 per cast).\n• Each Detonation deals significant damage across a 10m radius with no falloff and releases 4 Scorching Shrapnel applying 20 Scorch each (unaffected by Ember of Ashes).\n• Detonations & shrapnel deal ~35% reduced damage to Boss-Tier combatants and are not buffed by Super Stat.\n• Blade Barrage hits and kills refund up to a maximum of 50% Super energy.\n• Overall increase to Blade Barrage damage against Boss combatants is roughly ~140%!"
+      "community_insight": "\u2022 Throwing Knife Kills grant 2.5\u20135% Super Energy depending on enemy rank.\n\u2022 Passively increases Blade Barrage impact and explosive damage by 25%.\n\u2022 Landing 5 Blade Barrage knives triggers a Solar Detonation (up to 2 per cast).\n\u2022 Each Detonation deals significant damage across a 10m radius with no falloff and releases 4 Scorching Shrapnel applying 20 Scorch each (unaffected by Ember of Ashes).\n\u2022 Detonations & shrapnel deal ~35% reduced damage to Boss-Tier combatants and are not buffed by Super Stat.\n\u2022 Blade Barrage hits and kills refund up to a maximum of 50% Super energy.\n\u2022 Overall increase to Blade Barrage damage against Boss combatants is roughly ~140%!"
     },
     "armor_mods": {
-      "helmet": ["2x Dynamo", "1x Harmonic Siphon"],
-      "gloves": ["Dexterity Mod (matching weapon choice)", "1x Harmonic Loader"],
-      "chest": ["User's choice (Damage Resistance / Reserves)"],
-      "legs": ["2x Solar Weapon Surge", "1x Holster Mod (user's choice)"],
-      "class_item": ["Powerful Attraction", "Distribution", "Reaper"]
+      "helmet": [
+        "2x Dynamo",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "Dexterity Mod (matching weapon choice)",
+        "1x Harmonic Loader"
+      ],
+      "chest": [
+        "User's choice (Damage Resistance / Reserves)"
+      ],
+      "legs": [
+        "2x Solar Weapon Surge",
+        "1x Holster Mod (user's choice)"
+      ],
+      "class_item": [
+        "Powerful Attraction",
+        "Distribution",
+        "Reaper"
+      ]
     },
     "stat_priority": "150+ Weapon & Super stat (200 is best), at least 100 Class stat, 0 Health, low Melee and Grenade (not a key part of the build).",
     "ghost_mod": "Powerhouse (Recommended to get close to target stat splits)"
@@ -56,10 +76,16 @@
     "subclass": "Arc",
     "guardian_class": "Warlock",
     "activity": "Dungeon / Raid",
-    "tactical_inquiry": ["Boss DPS", "Soft Ad Clear"],
+    "tactical_inquiry": [
+      "Boss DPS",
+      "Soft Ad Clear"
+    ],
     "title": "Arc Warlock Chaos Reach Infinite Super & Ad Clear (Geomag Stabilizers)",
     "super": "Chaos Reach",
-    "aspects": ["Arc Soul", "Electrostatic Mind"],
+    "aspects": [
+      "Arc Soul",
+      "Electrostatic Mind"
+    ],
     "fragments": [
       "Spark of Resistance",
       "Spark of Frequency",
@@ -87,20 +113,36 @@
     },
     "armor_set": {
       "name": "Luminopotent Set (Fireteam Ops or focus from Zavala)",
-      "bonus_4pc": "4-Piece Set Bonus: 'Shock and Clear' — Final blows with Jolt or against Jolted combatants create Ionic Traces which fund your Super."
+      "bonus_4pc": "4-Piece Set Bonus: 'Shock and Clear' \u2014 Final blows with Jolt or against Jolted combatants create Ionic Traces which fund your Super."
     },
     "exotic_armor": {
       "name": "Geomag Stabilizers",
       "slot": "Boots",
       "description": "Damaging targets with Chaos Reach extends its duration. Collecting Ionic Traces grants you energy for Chaos Reach. Sprinting while near max Bolt Charge will grant stacks over time.",
-      "community_insight": "• Collecting Ionic Traces grants 4% Chaos Reach Super Energy.\n• While at 5 Stacks of Bolt Charge or higher, after sprinting for at least 1.5 seconds, maintaining sprint grants a Stack of Bolt Charge every 0.33 seconds.\n• Chaos Reach refunds 10% Super Energy on hit (0.75s cooldown between refunds).\n• This can increase Chaos Reach beam duration by up to ~120%!"
+      "community_insight": "\u2022 Collecting Ionic Traces grants 4% Chaos Reach Super Energy.\n\u2022 While at 5 Stacks of Bolt Charge or higher, after sprinting for at least 1.5 seconds, maintaining sprint grants a Stack of Bolt Charge every 0.33 seconds.\n\u2022 Chaos Reach refunds 10% Super Energy on hit (0.75s cooldown between refunds).\n\u2022 This can increase Chaos Reach beam duration by up to ~120%!"
     },
     "armor_mods": {
-      "helmet": ["1x Harmonic Siphon", "2x Font of Wisdom (Super Fonts)"],
-      "gloves": ["2x Font of Discipline (Grenade Fonts)", "1x Bolstering Detonation"],
-      "chest": ["User's choice (Reserves / Resistances)"],
-      "legs": ["1x Arc Weapon Surge", "1x Better Already", "1x Recuperation"],
-      "class_item": ["1x Reaper", "1x Powerful Attraction", "1x Time Dilation"]
+      "helmet": [
+        "1x Harmonic Siphon",
+        "2x Font of Wisdom (Super Fonts)"
+      ],
+      "gloves": [
+        "2x Font of Discipline (Grenade Fonts)",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Reserves / Resistances)"
+      ],
+      "legs": [
+        "1x Arc Weapon Surge",
+        "1x Better Already",
+        "1x Recuperation"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Powerful Attraction",
+        "1x Time Dilation"
+      ]
     },
     "stat_priority": "150+ Grenade and Super stats, 50+ Class and Weapons, 0 Health and Melee are not really used (unless you find yourself doing more melee than grenades).",
     "ghost_mod": "Grenadier, Powerhouse, or Demolitionist (Recommended for these stats)"
@@ -110,10 +152,16 @@
     "subclass": "Stasis",
     "guardian_class": "Titan",
     "activity": "Grandmaster+",
-    "tactical_inquiry": ["Survivability", "Survavability"],
+    "tactical_inquiry": [
+      "Survivability",
+      "Survavability"
+    ],
     "title": "Stasis Titan Unkillable Glacial Guard & Frost Armor (Icefall Mantle)",
     "super": "Glacial Quake",
-    "aspects": ["Howl of the Storm", "Tectonic Harvest"],
+    "aspects": [
+      "Howl of the Storm",
+      "Tectonic Harvest"
+    ],
     "fragments": [
       "Whisper of Hunger",
       "Whisper of Shards",
@@ -149,16 +197,274 @@
       "name": "Icefall Mantle",
       "slot": "Gauntlets",
       "description": "While you have a Stasis Super equipped, rapid Stasis final blows grant Frost Armor. You heal a small amount whenever you gain Frost Armor. Replaces your class ability with a burst of Stasis energy that freezes nearby combatants, slows nearby opponents, and grants you increased Frost Armor.",
-      "community_insight": "• Requires a Stasis Super Ability to be equipped.\n• Overwrites Barricade Cooldown to a unique, faster 70-second base cooldown (~30 seconds at 100 Class Stat).\n• Scoring 2 Stasis Kills within 3 seconds of each grants a Stack of Frost Armor.\n• Restores 10 HP for each Stack of Frost Armor you gain from any source.\n• Replaces Barricade with Glacial Guard (does not work with Thruster).\n• On Glacial Guard Cast: Grants maximum Frost Armor Stacks (restoring HP for each stack gained) and applies 100 Slow (40 in PVP) to nearby combatants."
+      "community_insight": "\u2022 Requires a Stasis Super Ability to be equipped.\n\u2022 Overwrites Barricade Cooldown to a unique, faster 70-second base cooldown (~30 seconds at 100 Class Stat).\n\u2022 Scoring 2 Stasis Kills within 3 seconds of each grants a Stack of Frost Armor.\n\u2022 Restores 10 HP for each Stack of Frost Armor you gain from any source.\n\u2022 Replaces Barricade with Glacial Guard (does not work with Thruster).\n\u2022 On Glacial Guard Cast: Grants maximum Frost Armor Stacks (restoring HP for each stack gained) and applies 100 Slow (40 in PVP) to nearby combatants."
     },
     "armor_mods": {
-      "helmet": ["2x Hands-On", "1x Harmonic Siphon"],
-      "gloves": ["1x Impact Induction", "1x Grenade Kickstart", "1x Heavy Handed"],
-      "chest": ["User's choice (Elemental Resists)"],
-      "legs": ["2x Invigoration", "1x Solar Weapon Surge (or Kinetic Surge if using Fighting Lion)"],
-      "class_item": ["1x Reaper", "1x Powerful Attraction", "1x Time Dilation"]
+      "helmet": [
+        "2x Hands-On",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "1x Impact Induction",
+        "1x Grenade Kickstart",
+        "1x Heavy Handed"
+      ],
+      "chest": [
+        "User's choice (Elemental Resists)"
+      ],
+      "legs": [
+        "2x Invigoration",
+        "1x Solar Weapon Surge (or Kinetic Surge if using Fighting Lion)"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Powerful Attraction",
+        "1x Time Dilation"
+      ]
     },
     "stat_priority": "100+ Weapon, Super, and Melee stat. Health, Grenade, and Class are user's choice (those stats don't really matter for this loop).",
     "ghost_mod": "Skirmisher, Powerhouse, or Paragon (Recommended for achieving these stats)"
+  },
+  {
+    "id": "verified-stasis-hunter-soft-ad-clear",
+    "subclass": "Stasis",
+    "guardian_class": "Hunter",
+    "activity": "Dungeon / Raid",
+    "tactical_inquiry": [
+      "Soft Ad Clear"
+    ],
+    "title": "Stasis Hunter Infinite Withering Blade & Crystal Storm (Mask of Fealty)",
+    "super": "Silence and Squall",
+    "aspects": [
+      "Shatterdive",
+      "Grim Harvest"
+    ],
+    "fragments": [
+      "Whisper of Shards",
+      "Whisper of Chains",
+      "Whisper of Rime",
+      "Whisper of Conduction",
+      "Whisper of Rending"
+    ],
+    "class_ability": "User's choice (Gambler's Dodge recommended)",
+    "melee": "Withering Blade",
+    "jump": "User's choice (Triple Jump recommended)",
+    "grenade": "Glacier Grenade",
+    "weapons": {
+      "energy": "Icebreaker (Recommended if unlocked for Energy slot)",
+      "kinetic": "Fighting Lion (Recommended for Primary/Kinetic slot)",
+      "heavy": "User's choice depending on loadout preference"
+    },
+    "artifact": {
+      "name": "Slayer Baron Apothecary Satchel",
+      "perks": [
+        "Crystalline Converter",
+        "Wind Chill",
+        "Frost Renewal",
+        "Hail the Storm",
+        "Curative Orbs",
+        "Brain Freeze",
+        "Debilitating Wave"
+      ]
+    },
+    "armor_set": {
+      "name": "Seventh Seraph Set (Cosmodrome) OR Exodus Down Set (Nessus)",
+      "bonus_4pc": "High Tier-5 armor set providing maximum stat allocation for endgame PvE."
+    },
+    "exotic_armor": {
+      "name": "Mask of Fealty",
+      "slot": "Helmet",
+      "description": "Withering Blade hits and bounces create a small Stasis crystal and refund a portion of melee energy. Using Withering Blade to shatter crystals or frozen targets releases a spread of Withering Blades.",
+      "community_insight": "\u2022 Withering Blade hits and bounces grant 7.5% Melee Ability Energy.\n\u2022 Additionally, the 1st and 3rd bounces spawn a Small Stasis Crystal.\n\u2022 Shattering a Stasis Crystal or Frozen Enemy with Withering Blade releases a spread of 3 Withering Blades.\n\u2022 Ability energy gained is NOT affected by Chunk Energy Scalars."
+    },
+    "armor_mods": {
+      "helmet": [
+        "2x Solar Siphon (or Kinetic if using Fighting Lion)",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "2x Heavy Handed",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "1x Solar Weapon Surge",
+        "1x Stasis Weapon Surge (based on user guns)",
+        "1x Invigoration"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "stat_priority": "100+ Melee and Super stat (100+ Weapons also recommended if reachable). Class, Health, and Grenade can be any/user's choice.",
+    "ghost_mod": "Skirmisher, Brawler, Paragon, or Powerhouse (Recommended for hitting target stat distribution)"
+  },
+  {
+    "id": "verified-void-hunter-survivability-adclear",
+    "subclass": "Void",
+    "guardian_class": "Hunter",
+    "activity": "Dungeon / Raid",
+    "tactical_inquiry": [
+      "Static Survivability",
+      "Soft Ad Clear"
+    ],
+    "title": "Void Hunter Smoke Bomb Loop & Weakening Invisibility (Khepri's Sting)",
+    "super": "Moebius Quiver",
+    "aspects": [
+      "On the Prowl",
+      "Stylish Executioner"
+    ],
+    "fragments": [
+      "Echo of Persistence",
+      "Echo of Starvation",
+      "Echo of Exchange",
+      "Echo of Instability",
+      "Echo of Provision"
+    ],
+    "class_ability": "Gambler's Dodge",
+    "melee": "Phantom Surge (Snare Bomb / Smoke)",
+    "jump": "User's choice (Triple Jump recommended)",
+    "grenade": "User's choice (Vortex Grenade recommended)",
+    "weapons": {
+      "energy": "Turncoat (Void Hand Cannon - Recommended)",
+      "heavy": "Apex Predator (Rocket Launcher - Recommended)",
+      "kinetic": "User's choice (Any Primary weapon)"
+    },
+    "artifact": {
+      "name": "NPA Repulsion Regulator",
+      "perks": [
+        "Unto the Breach",
+        "Volatile Flow",
+        "Overload Grenades",
+        "Bricks from Beyond",
+        "Protective Breach",
+        "Supernova",
+        "Void Weapon Channeling"
+      ]
+    },
+    "armor_set": {
+      "name": "Vault of Glass Armor Set OR Root of Nightmares Armor Set",
+      "bonus_4pc": "Raid armor set with intrinsic raid mods and premier stat spikes."
+    },
+    "exotic_armor": {
+      "name": "Khepri's Sting",
+      "slot": "Gauntlets",
+      "description": "Defeating a weakened target releases a burst of weakening smoke and refunds Void melee ability energy.",
+      "community_insight": "\u2022 Requires a Void Melee to be equipped in order to function.\n\u2022 Defeating Weakened enemies grants 30% Void Melee Energy and releases a Weakening puff of Void Smoke at their location.\n\u2022 Void Smoke is functionally identical to Smoke Bomb and triggers melee-associated effects."
+    },
+    "armor_mods": {
+      "helmet": [
+        "1x Dynamo",
+        "2x Harmonic Siphon"
+      ],
+      "gloves": [
+        "1x Heavy Handed",
+        "1x Focusing Strike",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "2x Void Weapon Surge",
+        "1x Harmonic Scavenger"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "stat_priority": "100+ stats for Weapons, Class, and Melee. Health, Grenade, and Super are user's choice.",
+    "ghost_mod": "Powerhouse, Reaver, or Specialist (Recommended for hitting target stat distribution)"
+  },
+  {
+    "id": "verified-prismatic-hunter-universal-survivability",
+    "subclass": "Prismatic",
+    "guardian_class": "Hunter",
+    "activity": [
+      "Dungeon / Raid",
+      "Grandmaster+"
+    ],
+    "tactical_inquiry": [
+      "Boss DPS",
+      "Soft Ad Clear",
+      "Survivability",
+      "Static Survivability"
+    ],
+    "title": "Prismatic Hunter Universal Overshield & Damage Loop (Fortune's Favor)",
+    "super": "Golden Gun, Deadfall, or Silence and Squall (User's choice)",
+    "aspects": [
+      "Stylish Executioner",
+      "Threaded Specter"
+    ],
+    "fragments": [
+      "Facet of Purpose",
+      "Facet of Hope",
+      "Facet of Dawn",
+      "Facet of Protection",
+      "Facet of Blessing"
+    ],
+    "class_ability": "Gambler's Dodge",
+    "melee": "Combination Blow",
+    "jump": "User's choice (Triple Jump recommended)",
+    "grenade": "Duskfield Grenade",
+    "weapons": {
+      "heavy": "Truth (Rocket Launcher - Recommended)",
+      "energy": "Age-Old Bond OR Gnawing Hunger (with Destabilizing Rounds + Repulsor Brace)",
+      "kinetic": "Festival Flight (with Attrition Orbs + Slice for Primary slot)"
+    },
+    "artifact": {
+      "name": "Queensfoil Censer",
+      "perks": [
+        "Torch",
+        "Heart of the Flame",
+        "Kindling Trigger",
+        "Dragon's Bite",
+        "Unraveling Orbs",
+        "Wished into Being",
+        "Rays of Precision"
+      ]
+    },
+    "armor_set": {
+      "name": "Vault of Glass Armor Set OR Root of Nightmares Armor Set",
+      "bonus_4pc": "Premier raid armor providing high-tier masterwork stats and raid-exclusive mod slots."
+    },
+    "exotic_armor": {
+      "name": "Fortune's Favor",
+      "slot": "Chest Armor",
+      "description": "After landing a final blow while at full health, or when out of combat for an extended duration, your shields will slowly recharge into an overshield. When you have an overshield, your weapons gain increased accuracy, stability, handling, and damage against combatants, and final blows will grant a short period of increased mobility once the overshield is depleted.",
+      "community_insight": "\u2022 While at Full HP, scoring a Weapon Kill or not taking damage for 4.5 [PVP: 15] seconds continuously generates 6.6 [PVP: 1.1] Void Overshield HP per second until taking damage again.\n\u2022 Grants the following while ANY Overshield is active:\n  - 15% increased weapon damage against Combatants (20% for Heat-Based weapons)\n  - +25 Stability\n  - +25 Handling\n  - 5% Decreased Accuracy Cone Size (Damage bonus stacks with other Empowering buffs)\n\u2022 While any Overshield is active, scoring a kill enables 'Hasty Escape' (activates upon Overshield depletion, granting +30 Mobility for 5 seconds)."
+    },
+    "armor_mods": {
+      "helmet": [
+        "1x Heavy Ammo Finder",
+        "1x Dynamo",
+        "1x Harmonic Siphon"
+      ],
+      "gloves": [
+        "1x Void Loader",
+        "1x Focusing Strike",
+        "1x Bolstering Detonation"
+      ],
+      "chest": [
+        "User's choice (Resistances/Reserves)"
+      ],
+      "legs": [
+        "2x Void Weapon Surge",
+        "1x Kinetic Holster"
+      ],
+      "class_item": [
+        "1x Reaper",
+        "1x Time Dilation",
+        "1x Powerful Attraction"
+      ]
+    },
+    "stat_priority": "100+ Weapons and Super stat. Health, Melee, Grenade, and Class are user's choice.",
+    "ghost_mod": "Powerhouse (Recommended for locking in high Weapons & Super tiers)"
   }
 ]
