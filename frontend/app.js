@@ -180,6 +180,30 @@ class GhostAudioEngine {
       osc.stop(now + 0.22);
     } catch (e) {}
   }
+
+  // Warning alert buzz
+  playAlert() {
+    if (!state.soundEnabled) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.setValueAtTime(160, now + 0.1);
+
+      gain.gain.setValueAtTime(0.09, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } catch (e) {}
+  }
 }
 
 const sfx = new GhostAudioEngine();
@@ -1040,8 +1064,16 @@ function promptSecurityClearance(action, subtitle, desc) {
   }
   if (err) err.style.display = 'none';
   if (modal) {
-    sfx.playAlert();
-    modal.showModal();
+    try { try { sfx.playAlert(); } catch(e) {} } catch(e) {}
+    try {
+      if (typeof modal.showModal === 'function') {
+        modal.showModal();
+      } else {
+        modal.setAttribute('open', '');
+      }
+    } catch(e) {
+      modal.setAttribute('open', '');
+    }
     setTimeout(() => input?.focus(), 100);
   }
 }
@@ -1407,7 +1439,7 @@ document.addEventListener('DOMContentLoaded', () => {
           document.getElementById('modalAddWiki')?.showModal();
         }
       } else {
-        sfx.playAlert();
+        try { sfx.playAlert(); } catch(e) {}
         if (passcodeErrorMsg) passcodeErrorMsg.style.display = 'block';
         inputSecurityPasscode.classList.remove('passcode-shake');
         void inputSecurityPasscode.offsetWidth;
@@ -2042,7 +2074,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnLockAdmin) {
     btnLockAdmin.addEventListener('click', () => {
       sessionStorage.removeItem('felicia_clan_auth');
-      sfx.playAlert();
+      try { sfx.playAlert(); } catch(e) {}
       switchTabDirect('tab-comms');
       alert('Clan Administrator Mode locked. Security passcode required to re-enter Logistics.');
     });
