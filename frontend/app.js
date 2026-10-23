@@ -1464,7 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         promptSecurityClearance(
           'add_wiki',
           'VERIFIED GUIDE CREATION AUTHORIZATION',
-          'Only authorized clan members may contribute verified weapon and encounter guides. Enter the Clan Authorization Code (3354242) to add an entry.'
+          'Only authorized clan members may contribute verified weapon and encounter guides. Enter the Clan Authorization Code to add an entry.'
         );
         return;
       }
