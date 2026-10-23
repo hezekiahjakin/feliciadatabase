@@ -279,6 +279,23 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
     v_match = find_verified_build(subclass, guardian_class, activity, tactical_inquiry)
     if v_match:
         return format_verified_build_response(v_match)
+
+    # 0. Exodus Armor Set inquiry
+    if any(k in q_lower for k in ["exodus", "electromagnet", "repurposed charge"]):
+        return (
+            "Right then, Guardian. Let us pull up the Vanguard telemetry on the **Exodus Armor Set (Exodus Down)**.\n\n"
+            "It is without a doubt one of the most widely used and resilient armor sets in the game right now, especially for Grandmasters and Master dungeons where survivability is paramount.\n\n"
+            "### 1. Optimal Farming Route\n"
+            "• **Master Lost Sectors on Nessus:** This is the absolute best way to grind out the set. When Nessus is the active daily Master Lost Sector, farm it for high Tier-5 stat spikes and rapid set completion. Nessus Public Events and world activities are also reliable alternate sources.\n\n"
+            "### 2. Set Perks & Tactical Utility\n"
+            "• **2-Piece Perk: Emergency Electromagnet**\n"
+            "  *\"When your shields become broken, collect all nearby Orbs of Power and ammo bricks.\"*\n"
+            "  *Tactical Value:* An absolute lifesaver. The instant your shield pops, it automatically vacuums up every nearby Orb of Power and ammo brick within radius. That immediately triggers your Orb-healing mods (like *Better Already* and *Recuperation*) and restocks your heavy/special ammo without forcing you to sprint out into lethal crossfire.\n\n"
+            "• **4-Piece Perk: Repurposed Charge**\n"
+            "  *\"Whenever you gain, lose, or spend an Armor Charge, heal and gain damage reduction for a short time. This effect scales with the amount of Armor Charge gained, lost, or spent.\"*\n"
+            "  *Tactical Value:* This creates an unyielding defensive loop. Whether you are picking up an Orb to gain a charge, spending charges on Kickstart/Finisher mods, or letting them decay with Weapon Surges, you are receiving continuous bursts of healing and damage reduction throughout the encounter.\n\n"
+            "If you are looking for an endgame defensive foundation, you cannot go wrong with a 4-piece Exodus set. Slot it in, mind your charge cycles, and you will be remarkably difficult to put down!"
+        )
     
     # 1. Catalyst inquiry
     if any(k in q_lower for k in ["catty", "catalyst", "catties"]):

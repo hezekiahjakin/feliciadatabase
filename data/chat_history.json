@@ -70,5 +70,13 @@
     "guardian_class": "Warlock",
     "activity": "Dungeon / Raid",
     "timestamp": 1792701355.88677
+  },
+  {
+    "id": "5bcf681b-9090-45ff-9862-b898e8eadf53",
+    "user": "What does the Exodus armor set do and what are its perks?",
+    "felicia": "Right then, Guardian. Here is the operational intel on Exodus Armor Set (Exodus Down) - Set Perks & Farming Guide:\n\n### Exodus Armor Set (Exodus Down)\n\nThe **Exodus Down** armor set is one of the premier and most widely used defensive armor sets in Destiny 2 endgame PvE, renowned for providing critical clutch survivability through its set bonuses.\n\n#### Acquisition & Farming:\n• **Master Lost Sectors on Nessus:** Widely considered the best and most efficient way to grind out the Exodus armor set. When Nessus hosts the daily Master Lost Sector, farm it for rapid completions and high-tier stat rolls. Nessus Public Events and world activities are also reliable alternate sources.\n\n#### Set Perks & Bonuses:\n• **2-Piece Perk: Emergency Electromagnet**\n  *\"When your shields become broken, collect all nearby Orbs of Power and ammo bricks.\"*\n  *Tactical Utility:* Acts as an immediate emergency vacuum when you take critical damage. Pulling nearby Orbs instantly triggers healing mods (Better Already, Recuperation) and restores Armor Charges, while pulling ammo bricks ensures you never run dry in the middle of a firefight without leaving cover.\n\n• **4-Piece Perk: Repurposed Charge**\n  *\"Whenever you gain, lose, or spend an Armor Charge, heal and gain damage reduction for a short time. This effect scales with the amount of Armor Charge gained, lost, or spent.\"*\n  *Tactical Utility:* An absolute powerhouse for Armor Charge loops (Surge mods, Kickstarts, and Font mods). Every single charge interaction yields active healing and damage resistance, creating a continuous survivability loop in Grandmaster Nightfalls and Master Raids.\n\nLet me know if you want me to adjust this for your Warlock loadout or fireteam composition!",
+    "guardian_class": "Warlock",
+    "activity": "Grandmaster+",
+    "timestamp": 1792701377.7388165
   }
 ]
