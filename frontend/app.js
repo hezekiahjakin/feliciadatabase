@@ -1011,9 +1011,42 @@ function renderBuildsGrid() {
 }
 
 /* ==========================================================================
-   NAVIGATION & TAB SWITCHING
+   NAVIGATION & TAB SWITCHING WITH CLAN PASSCODE SECURITY
    ========================================================================== */
-function switchTab(tabId) {
+const CLAN_SECURITY_PASSCODE = '3354242';
+let pendingSecurityAction = null;
+
+function isClanAuthorized() {
+  return sessionStorage.getItem('felicia_clan_auth') === 'true';
+}
+
+function promptSecurityClearance(action, subtitle, desc) {
+  if (isClanAuthorized()) {
+    if (action === 'settings') switchTabDirect('tab-settings');
+    if (action === 'add_wiki') document.getElementById('modalAddWiki')?.showModal();
+    return;
+  }
+  pendingSecurityAction = action;
+  const modal = document.getElementById('modalSecurityPasscode');
+  const input = document.getElementById('inputSecurityPasscode');
+  const err = document.getElementById('passcodeErrorMsg');
+  const sub = document.getElementById('passcodeContextSubtitle');
+  const descEl = document.getElementById('passcodeDescriptionText');
+  if (sub) sub.textContent = subtitle || 'RESTRICTED VANGUARD SECURITY PROTOCOL';
+  if (descEl) descEl.textContent = desc || 'Please enter the Clan Authorization Code to proceed.';
+  if (input) {
+    input.value = '';
+    input.classList.remove('passcode-shake');
+  }
+  if (err) err.style.display = 'none';
+  if (modal) {
+    sfx.playAlert();
+    modal.showModal();
+    setTimeout(() => input?.focus(), 100);
+  }
+}
+
+function switchTabDirect(tabId) {
   state.currentTab = tabId;
   sfx.playChirp();
 
@@ -1024,6 +1057,18 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-pane').forEach(pane => {
     pane.classList.toggle('active', pane.id === tabId);
   });
+}
+
+function switchTab(tabId) {
+  if (tabId === 'tab-settings' && !isClanAuthorized()) {
+    promptSecurityClearance(
+      'settings',
+      'RESTRICTED LOGISTICS & API CREDENTIALS',
+      'Firebase API Keys, App IDs, and the Gemini AI engine are restricted. Enter the Clan Authorization Code to access Logistics.'
+    );
+    return;
+  }
+  switchTabDirect(tabId);
 }
 
 /* ==========================================================================
@@ -1329,7 +1374,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Add Wiki Modal
+  // Security Passcode Modal Handlers
+  const modalSecurityPasscode = document.getElementById('modalSecurityPasscode');
+  const formSecurityPasscode = document.getElementById('formSecurityPasscode');
+  const inputSecurityPasscode = document.getElementById('inputSecurityPasscode');
+  const btnCloseSecurityPasscode = document.getElementById('btnCloseSecurityPasscode');
+  const btnCancelSecurityPasscode = document.getElementById('btnCancelSecurityPasscode');
+  const passcodeErrorMsg = document.getElementById('passcodeErrorMsg');
+
+  [btnCloseSecurityPasscode, btnCancelSecurityPasscode].forEach(b => {
+    if (b && modalSecurityPasscode) {
+      b.addEventListener('click', () => {
+        modalSecurityPasscode.close();
+        pendingSecurityAction = null;
+      });
+    }
+  });
+
+  if (formSecurityPasscode) {
+    formSecurityPasscode.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const enteredCode = (inputSecurityPasscode.value || '').trim();
+      if (enteredCode === CLAN_SECURITY_PASSCODE) {
+        sessionStorage.setItem('felicia_clan_auth', 'true');
+        sfx.playReceive();
+        modalSecurityPasscode.close();
+        const action = pendingSecurityAction;
+        pendingSecurityAction = null;
+        if (action === 'settings') {
+          switchTabDirect('tab-settings');
+        } else if (action === 'add_wiki') {
+          document.getElementById('modalAddWiki')?.showModal();
+        }
+      } else {
+        sfx.playAlert();
+        if (passcodeErrorMsg) passcodeErrorMsg.style.display = 'block';
+        inputSecurityPasscode.classList.remove('passcode-shake');
+        void inputSecurityPasscode.offsetWidth;
+        inputSecurityPasscode.classList.add('passcode-shake');
+        inputSecurityPasscode.value = '';
+        inputSecurityPasscode.focus();
+      }
+    });
+  }
+
+  // Add Wiki / Guide Modal (Passcode Protected)
   const modalAddWiki = document.getElementById('modalAddWiki');
   const btnOpenAddWiki = document.getElementById('btnOpenAddWiki');
   const btnCloseAddWiki = document.getElementById('btnCloseAddWiki');
@@ -1339,6 +1428,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnOpenAddWiki && modalAddWiki) {
     btnOpenAddWiki.addEventListener('click', () => {
       sfx.playChirp();
+      if (!isClanAuthorized()) {
+        promptSecurityClearance(
+          'add_wiki',
+          'VERIFIED GUIDE CREATION AUTHORIZATION',
+          'Only authorized clan members may contribute verified weapon and encounter guides. Enter the Clan Authorization Code (3354242) to add an entry.'
+        );
+        return;
+      }
       modalAddWiki.showModal();
     });
     [btnCloseAddWiki, btnCancelAddWiki].forEach(b => {
@@ -1366,41 +1463,13 @@ document.addEventListener('DOMContentLoaded', () => {
             modalAddWiki.close();
             formAddWiki.reset();
             sfx.playReceive();
-            alert(`Intel '${title}' archived successfully!`);
+            alert(`Guide '${title}' archived successfully!`);
           }
         } catch (err) {
-          alert('Failed to save intel: ' + err.message);
+          alert('Failed to save guide: ' + err.message);
         }
       });
     }
-  }
-
-  // Wiki File Upload
-  const wikiFileInput = document.getElementById('wikiFileInput');
-  if (wikiFileInput) {
-    wikiFileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('category', 'Imported Wiki');
-
-      try {
-        const res = await fetch('/api/wiki/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-          sfx.playReceive();
-          alert(`Successfully imported ${data.count || 1} intel entry from '${file.name}'!`);
-          loadWikiData();
-        }
-      } catch (err) {
-        alert('Upload failed: ' + err.message);
-      }
-    });
   }
 
   // =========================================================================
@@ -1968,6 +2037,16 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadBuilds();
     }
   });
+
+  const btnLockAdmin = document.getElementById('btnLockAdmin');
+  if (btnLockAdmin) {
+    btnLockAdmin.addEventListener('click', () => {
+      sessionStorage.removeItem('felicia_clan_auth');
+      sfx.playAlert();
+      switchTabDirect('tab-comms');
+      alert('Clan Administrator Mode locked. Security passcode required to re-enter Logistics.');
+    });
+  }
 
   initSpeechRecognition();
   loadWikiData();

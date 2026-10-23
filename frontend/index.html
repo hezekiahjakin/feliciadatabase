@@ -67,7 +67,7 @@
       </button>
       <button class="nav-tab" data-tab="tab-wiki">
         <span class="nav-icon">📚</span>
-        <span class="nav-title">Wiki &amp; Intel</span>
+        <span class="nav-title">Guides</span>
       </button>
       <button class="nav-tab" data-tab="tab-vault">
         <span class="nav-icon">🛡️</span>
@@ -217,17 +217,13 @@
         
         <div class="wiki-header-card">
           <div class="wiki-title-group">
-            <h2 class="section-title">DESTINY 2 ARCHIVAL REPOSITORY &amp; WIKI IMPORT</h2>
-            <p class="section-sub">Import gun stats, armor set bonuses, catalyst requirements, or custom notes. F.E.L.I.C.I.A. automatically incorporates these into her live tactical calculations!</p>
+            <h2 class="section-title">DESTINY 2 TACTICAL GUIDES &amp; ARCHIVES</h2>
+            <p class="section-sub">Clan tactical guides, gun stats, armor set bonuses, catalyst walkthroughs, and verified blueprints. F.E.L.I.C.I.A. automatically incorporates these into her live tactical calculations!</p>
           </div>
           <div class="wiki-actions">
             <button class="btn-tactical btn-primary" id="btnOpenAddWiki">
-              <span class="icon">➕</span> Add Intel Entry
+              <span class="icon">🔒</span> Add Intel Entry
             </button>
-            <label class="btn-tactical btn-secondary upload-btn-label">
-              <span class="icon">📤</span> Import Wiki File
-              <input type="file" id="wikiFileInput" accept=".txt,.md,.json,.csv" style="display:none;">
-            </label>
           </div>
         </div>
 
@@ -277,6 +273,14 @@
     <section class="tab-pane" id="tab-settings">
       <div class="settings-layout">
         
+        <!-- Admin Clearance Bar -->
+        <div class="settings-admin-header">
+          <div class="admin-badge">🔒 CLAN ADMINISTRATOR MODE ACTIVE</div>
+          <button class="btn-tactical btn-secondary btn-sm" id="btnLockAdmin">
+            <span class="icon">🔒</span> Lock Admin Access
+          </button>
+        </div>
+
         <!-- Construct Design Selector -->
         <div class="settings-card">
           <h3 class="card-title">✦ CONSTRUCT AVATAR &amp; VISUAL DESIGN</h3>
@@ -407,6 +411,35 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </section>
 
   </main>
+
+  <!-- MODAL: CLAN SECURITY PASSCODE CLEARANCE -->
+  <dialog class="hud-modal modal-passcode" id="modalSecurityPasscode">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 class="modal-title">🔒 CLAN CLEARANCE REQUIRED</h3>
+          <span class="modal-sub" id="passcodeContextSubtitle">RESTRICTED VANGUARD SECURITY PROTOCOL</span>
+        </div>
+        <button class="btn-modal-close" id="btnCloseSecurityPasscode">&times;</button>
+      </div>
+      <form id="formSecurityPasscode" class="modal-body">
+        <p class="passcode-description" id="passcodeDescriptionText">
+          Restricted access. Please enter the Clan Authorization Code to proceed.
+        </p>
+        <div class="form-group">
+          <label>AUTHORIZATION CODE</label>
+          <input type="password" id="inputSecurityPasscode" class="input-tactical input-passcode" required placeholder="Enter passcode" maxlength="20" autocomplete="off">
+          <div id="passcodeErrorMsg" class="passcode-error-msg" style="display:none;">
+            ⚠ ACCESS DENIED: Invalid Clan Clearance Code
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-tactical btn-secondary" id="btnCancelSecurityPasscode">Cancel</button>
+          <button type="submit" class="btn-tactical btn-primary" id="btnSubmitSecurityPasscode">Authorize Access ➔</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 
   <!-- MODAL: ADD CUSTOM WIKI INTEL -->
   <dialog class="hud-modal" id="modalAddWiki">
