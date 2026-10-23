@@ -805,7 +805,8 @@ function renderWikiGrid(filterCat = 'all', searchQuery = '') {
     card.className = 'wiki-card';
 
     const isCustom = item.is_custom;
-    const catClass = isCustom ? 'badge-cat custom' : 'badge-cat';
+    const catLower = (item.category || '').toLowerCase();
+    const catClass = isCustom ? `badge-cat custom ${catLower}` : `badge-cat ${catLower}`;
     const tagsHtml = (item.tags || []).map(t => `<span class="tag-badge">${t}</span>`).join('');
 
     card.innerHTML = `

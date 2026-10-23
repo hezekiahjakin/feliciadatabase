@@ -1168,6 +1168,18 @@ html, body {
   color: #C084FC;
 }
 
+.badge-cat.raids {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #EF4444;
+  color: #F87171;
+}
+
+.badge-cat.dungeons {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38BDF8;
+  color: #38BDF8;
+}
+
 .wiki-card-summary {
   font-size: 13px;
   color: var(--text-secondary);

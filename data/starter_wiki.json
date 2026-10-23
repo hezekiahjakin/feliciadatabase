@@ -40,30 +40,6 @@
     "content": "Acquisition: Random drop upon completing any core playlist activity (Strikes, Crucible, Gambit).\n\nCatalyst Completion: Defeat 400 combatants with Trinity Ghoul.\n\nCatalyst Perk: 'Forked Lightning' — Lightning Rod perk now activates on ANY Arc final blow (including melee, grenades, or the chain lightning itself!), not just precision bow kills. You can shoot at the floor and wipe entire waves of enemies."
   },
   {
-    "id": "build-warlock-sunbracers",
-    "title": "Solar Warlock - Infinite Sunbracers Grenade Spam",
-    "category": "Builds",
-    "tags": ["Warlock", "Solar", "Endgame", "Grandmaster", "Raid"],
-    "summary": "Endless Solar Grenades, Restoration x2, and massive room-clearing DPS.",
-    "content": "Subclass: Solar 3.0 Warlock\nSuper: Well of Radiance or Song of Flame\nAspects: Touch of Flame (enhanced Solar grenades with magma blobs) + Icarus Dash or Heat Rises\nFragments: Ember of Empyrean (extends restoration/radiant on solar kills), Ember of Torches (powered melee grants Radiant), Ember of Ashes (more scorch), Ember of Searing (firesprites on scorched kills).\nExotic Armor: Sunbracers (Exotic Gauntlets)\nKey Loop: Snap fingers with Incinerator Snap to kill red-bar enemy -> Activates Sunbracers Ready -> Throw up to 5 Solar Grenades within 4 seconds -> Phoenix Dive grants Restoration x2 -> Every solar kill resets timer to 12s.\nWeapons: Sunshot / Calus Mini-Tool (Incandescent) + Apex Predator / Edge Transit."
-  },
-  {
-    "id": "build-titan-prismatic-consecration",
-    "title": "Prismatic Titan - Triple Consecration Ignitions",
-    "category": "Builds",
-    "tags": ["Titan", "Prismatic", "Melee", "Consecration", "Synthoceps"],
-    "summary": "Triple Frenzied Blade charges fueling massive Solar Consecration wave slams.",
-    "content": "Subclass: Prismatic Titan\nSuper: Twilight Arsenal (Void) or Hammer of Sol\nAspects: Consecration (slide melee sends solar wave then slam ignition) + Knockout (melee kills start health regen & boost melee range/damage)\nMelee: Frenzied Blade (Grants 3 melee charges on Prismatic!)\nFragments: Facet of Courage (light abilities do more damage to darkness-debuffed targets), Facet of Blessing (melee final blows start health regen), Facet of Dawn (powered melee makes radiant), Facet of Ruin (increases ignition & shatter radius).\nExotic Armor: Synthoceps (huge melee & super damage when surrounded) or Exotic Class Item (Spirit of Synthoceps + Spirit of Inmost Light).\nLoop: Slide -> Tap Melee -> Tap Melee again -> Massive fiery slam deletes entire packs and Champions in Grandmasters."
-  },
-  {
-    "id": "build-hunter-gyrfalcon",
-    "title": "Void Hunter - Gyrfalcon's Infinite Invisibility & Volatile",
-    "category": "Builds",
-    "tags": ["Hunter", "Void", "Invisibility", "Gyrfalcon", "Survival"],
-    "summary": "Non-stop invisibility loops with volatile rounds and overshields.",
-    "content": "Subclass: Void 3.0 Hunter (Nightstalker)\nSuper: Shadowshot: Deadfall (for 30% team debuff) or Moebius Quiver\nAspects: Stylish Executioner (defeating void-debuffed target grants invisibility and Truesight) + Vanishing Step (dodge to go invisible)\nFragments: Echo of Starvation (picking up orb of power or void breach grants Devour), Echo of Persistence (invis and devour last longer), Echo of Cessation (finisher creates volatile blast).\nExotic Armor: Gyrfalcon's Hauberk\nWeapons: Graviton Lance / Funnelweb / Buried Bloodline / The Title\nLoop: Dodge or get invisible -> Come out firing Void weapon -> All rounds are Volatile -> Volatile target dies -> Stylish Executioner triggers -> Go invisible again! Devour keeps health full permanently."
-  },
-  {
     "id": "mechanics-champions",
     "title": "Champion Counters & Stun Mechanics",
     "category": "Mechanics",

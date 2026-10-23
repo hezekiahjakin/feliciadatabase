@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v10">
+  <link rel="stylesheet" href="styles.css?v=20261023_v11">
 </head>
 <body class="theme-vanguard">
 
@@ -232,6 +232,8 @@
             <button class="cat-pill active" data-cat="all">All Intel</button>
             <button class="cat-pill" data-cat="Catalysts">Catalysts</button>
             <button class="cat-pill" data-cat="Builds">Builds</button>
+            <button class="cat-pill" data-cat="Raids">Raids</button>
+            <button class="cat-pill" data-cat="Dungeons">Dungeons</button>
             <button class="cat-pill" data-cat="Mechanics">Mechanics</button>
             <button class="cat-pill" data-cat="Custom">Imported Custom</button>
           </div>
@@ -505,9 +507,11 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
             <select id="newWikiCategory" class="input-tactical select-tactical">
               <option value="Catalysts">Catalysts</option>
               <option value="Builds">Builds</option>
+              <option value="Raids">Raids</option>
+              <option value="Dungeons">Dungeons</option>
               <option value="Weapons">Weapons</option>
               <option value="Armor">Armor</option>
-              <option value="Mechanics">Mechanics &amp; Raids</option>
+              <option value="Mechanics">Mechanics</option>
               <option value="Custom" selected>Custom Intel</option>
             </select>
           </div>
@@ -1076,6 +1080,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v10"></script>
+  <script type="module" src="app.js?v=20261023_v11"></script>
 </body>
 </html>
