@@ -2358,3 +2358,468 @@ input:checked + .toggle-slider:before {
   40%, 80% { transform: translateX(8px); }
 }
 
+/* ==========================================================================
+   GOD ROLL FINDER // VANGUARD ARMORY
+   ========================================================================== */
+.armory-view-switchers {
+  display: flex;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-dim);
+}
+
+.btn-subnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-subnav:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-subnav.active {
+  color: #0F172A;
+  background: var(--vanguard-amber);
+  box-shadow: 0 0 12px rgba(245, 166, 35, 0.35);
+}
+
+.godrolls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.godrolls-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 16px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.search-input-wrapper .search-input {
+  width: 100%;
+  padding-left: 42px;
+  padding-right: 36px;
+  height: 44px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 10, 15, 0.85);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  color: #F8FAFC;
+}
+
+.search-input-wrapper .search-input:focus {
+  border-color: var(--vanguard-amber);
+  box-shadow: 0 0 12px rgba(245, 166, 35, 0.25);
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  display: none;
+}
+
+.btn-clear-search:hover {
+  color: var(--vanguard-amber);
+}
+
+.godrolls-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pills-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-lbl {
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.pill-btn {
+  padding: 5px 12px;
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pill-btn:hover {
+  border-color: var(--border-bright);
+  color: var(--text-primary);
+}
+
+.pill-btn.active {
+  background: rgba(245, 166, 35, 0.15);
+  border-color: var(--vanguard-amber);
+  color: var(--vanguard-amber);
+  font-weight: 700;
+}
+
+.filter-select {
+  padding: 5px 12px;
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(7, 10, 15, 0.9);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  border-radius: 4px;
+}
+
+.armory-counter-badge {
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--vanguard-amber);
+  background: rgba(245, 166, 35, 0.1);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 166, 35, 0.25);
+}
+
+/* God Rolls Grid */
+.godrolls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.godroll-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  gap: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.godroll-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 166, 35, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.godroll-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--vanguard-amber), transparent);
+  opacity: 0.5;
+}
+
+.gr-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gr-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.gr-badge {
+  font-family: var(--font-tactical);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.gr-badge.gr-slot.kinetic { background: rgba(226, 232, 240, 0.12); color: #F1F5F9; border: 1px solid rgba(241, 245, 249, 0.3); }
+.gr-badge.gr-slot.energy  { background: rgba(245, 166, 35, 0.12); color: #F5A623; border: 1px solid rgba(245, 166, 35, 0.3); }
+.gr-badge.gr-slot.heavy   { background: rgba(168, 85, 247, 0.12); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.3); }
+
+.gr-badge.gr-elem.solar   { background: rgba(249, 115, 22, 0.15); color: #FB923C; border: 1px solid rgba(249, 115, 22, 0.35); }
+.gr-badge.gr-elem.arc     { background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.35); }
+.gr-badge.gr-elem.void    { background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.35); }
+.gr-badge.gr-elem.strand  { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.35); }
+.gr-badge.gr-elem.stasis  { background: rgba(96, 165, 250, 0.15); color: #60A5FA; border: 1px solid rgba(96, 165, 250, 0.35); }
+.gr-badge.gr-elem.kinetic { background: rgba(226, 232, 240, 0.12); color: #E2E8F0; border: 1px solid rgba(226, 232, 240, 0.25); }
+
+.gr-badge.gr-frame {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  border: 1px solid var(--border-dim);
+}
+
+.gr-weapon-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #F8FAFC;
+  margin: 0;
+}
+
+.gr-source-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-tactical);
+}
+
+/* PVE & PVP Split Columns */
+.gr-rolls-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 540px) {
+  .gr-rolls-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gr-roll-box {
+  display: flex;
+  flex-direction: column;
+  background: rgba(7, 10, 15, 0.85);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  gap: 8px;
+  border: 1px solid var(--border-dim);
+}
+
+.gr-roll-box.pve-box {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.gr-roll-box.pvp-box {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.gr-box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gr-mode-icon {
+  font-size: 14px;
+}
+
+.gr-mode-title {
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.pve-box .gr-mode-title { color: #38BDF8; }
+.pvp-box .gr-mode-title { color: #F87171; }
+
+.gr-perks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gr-perk-row {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 3px 6px;
+  border-radius: 3px;
+  gap: 1px;
+}
+
+.gr-perk-row.highlight {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pve-box .gr-perk-row.highlight {
+  border-left: 2px solid #38BDF8;
+}
+
+.pvp-box .gr-perk-row.highlight {
+  border-left: 2px solid #EF4444;
+}
+
+.perk-label {
+  font-size: 9px;
+  font-family: var(--font-tactical);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.perk-val {
+  font-size: 11px;
+  font-weight: 600;
+  color: #E2E8F0;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.perk-val.primary {
+  color: #38BDF8;
+  font-weight: 700;
+}
+
+.perk-val.primary-pvp {
+  color: #F87171;
+  font-weight: 700;
+}
+
+.perk-val.mw {
+  color: var(--vanguard-amber);
+}
+
+.gr-insight-note {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+/* Card Actions */
+.gr-card-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-dim);
+}
+
+.btn-gr-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-gr-ask {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--vanguard-amber);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+}
+
+.btn-gr-ask:hover {
+  background: var(--vanguard-amber);
+  color: #0F172A;
+}
+
+.btn-gr-edit {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-dim);
+  max-width: 90px;
+}
+
+.btn-gr-edit:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+}
+
+/* Modal form sections for God Rolls */
+.godroll-form-section {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 10, 15, 0.7);
+  margin-bottom: 12px;
+  border: 1px solid var(--border-dim);
+}
+
+.godroll-form-section.pve-section {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.godroll-form-section.pvp-section {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.form-section-title {
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.pve-section .form-section-title { color: #38BDF8; }
+.pvp-section .form-section-title { color: #F87171; }
+

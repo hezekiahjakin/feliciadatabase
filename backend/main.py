@@ -25,6 +25,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 STARTER_WIKI_PATH = os.path.join(DATA_DIR, "starter_wiki.json")
 USER_WIKI_PATH = os.path.join(DATA_DIR, "user_wiki.json")
 BUILDS_PATH = os.path.join(DATA_DIR, "builds.json")
+GOD_ROLLS_PATH = os.path.join(DATA_DIR, "god_rolls.json")
+STARTER_GOD_ROLLS_PATH = os.path.join(DATA_DIR, "starter_god_rolls.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "chat_history.json")
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
@@ -63,6 +65,13 @@ def get_all_wiki_data() -> List[dict]:
     starter = load_json(STARTER_WIKI_PATH, [])
     user_data = load_json(USER_WIKI_PATH, [])
     return starter + user_data
+
+def get_all_god_rolls() -> List[dict]:
+    rolls = load_json(GOD_ROLLS_PATH, None)
+    if rolls is None:
+        rolls = load_json(STARTER_GOD_ROLLS_PATH, [])
+        save_json(GOD_ROLLS_PATH, rolls)
+    return rolls
 
 # System prompt for F.E.L.I.C.I.A.
 FELICIA_SYSTEM_PROMPT = """You are F.E.L.I.C.I.A. — Fireteam Evaluation & Logistics Intelligence Construct for Interactive Analysis.
@@ -148,6 +157,17 @@ class WikiItem(BaseModel):
     tags: List[str] = []
     summary: str
     content: str
+
+class GodRollItem(BaseModel):
+    id: Optional[str] = None
+    name: str
+    slot: str  # Kinetic, Energy, Heavy
+    type: str  # Hand Cannon, Auto Rifle, etc.
+    element: str  # Kinetic, Solar, Arc, Void, Strand, Stasis
+    frame: Optional[str] = ""
+    source: Optional[str] = ""
+    pve: Optional[Dict[str, Any]] = {}
+    pvp: Optional[Dict[str, Any]] = {}
 
 def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]], system_instruction: str) -> str:
     config = get_config()
@@ -320,6 +340,36 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
             "Tell me the specific weapon you are masterworking, and I will pull up the exact requirements!"
         )
 
+    # 1b. Weapon God Roll inquiry
+    god_rolls = get_all_god_rolls()
+    for w in god_rolls:
+        w_name = w.get("name", "").lower()
+        base_name = re.sub(r'\(.*?\)', '', w_name).strip()
+        clean_base = re.sub(r'[^a-z0-9]', '', base_name)
+        clean_q = re.sub(r'[^a-z0-9]', '', q_lower)
+        if clean_base and len(clean_base) >= 3 and clean_base in clean_q and any(k in q_lower for k in ["roll", "god roll", "godroll", "pve", "pvp", "perk", "perks", "weapon", "best", "how", "what", "is", "stats"]):
+            pve = w.get("pve", {})
+            pvp = w.get("pvp", {})
+            return (
+                f"Right then, Guardian. Here is the verified Vanguard telemetry on **{w.get('name')}** ({w.get('slot')} Slot // {w.get('element')} {w.get('type')}, {w.get('frame')}):\n\n"
+                f"### ⚔️ PVE God Roll (Grandmasters, Raids, Dungeons)\n"
+                f"• **Barrel / String:** {pve.get('barrel', 'User choice')}\n"
+                f"• **Magazine / Battery:** {pve.get('mag', 'User choice')}\n"
+                f"• **Trait 1 (Perk 1):** {pve.get('perk1', 'User choice')}\n"
+                f"• **Trait 2 (Perk 2):** {pve.get('perk2', 'User choice')}\n"
+                f"• **Masterwork:** {pve.get('masterwork', 'Reload Speed')}\n"
+                f"• *Tactical Insight:* {pve.get('notes', '')}\n\n"
+                f"### 🎯 PVP God Roll (Crucible / Trials of Osiris)\n"
+                f"• **Barrel / Sights:** {pvp.get('barrel', 'Hammer-Forged Rifling')}\n"
+                f"• **Magazine:** {pvp.get('mag', 'Accurized Rounds')}\n"
+                f"• **Trait 1 (Perk 1):** {pvp.get('perk1', 'User choice')}\n"
+                f"• **Trait 2 (Perk 2):** {pvp.get('perk2', 'User choice')}\n"
+                f"• **Masterwork:** {pvp.get('masterwork', 'Range')}\n"
+                f"• *Tactical Insight:* {pvp.get('notes', '')}\n\n"
+                f"✦ **Source / Activity:** {w.get('source', 'Destiny 2 activities')}\n\n"
+                f"Craftable or farmed, this roll will do serious work for you. Let me know if you want to pair this with an endgame subclass build!"
+            )
+
     # 2. Build or Loadout Review with Stats & Weapons
     if any(k in q_lower for k in ["build", "loadout", "review", "health", "stats", "weapons"]):
         advice_points = []
@@ -464,6 +514,29 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             f"CRITICAL INSTRUCTION: The Guardian has selected this exact verified setup! You MUST deliver this complete, battle-tested blueprint with all its aspects, fragments, weapons, artifact perks, armor set bonuses, armor mods, community insights, stat priorities, and ghost mod. Deliver it with your authentic Scottish Vanguard authority and dry tactical wit!"
         )
 
+    # Check for weapon god roll match in database
+    matched_weapons = []
+    all_rolls = get_all_god_rolls()
+    for w in all_rolls:
+        base_name = re.sub(r'\(.*?\)', '', w.get("name", "")).strip().lower()
+        clean_base = re.sub(r'[^a-z0-9]', '', base_name)
+        clean_msg = re.sub(r'[^a-z0-9]', '', msg_lower)
+        if clean_base and len(clean_base) >= 3 and clean_base in clean_msg:
+            matched_weapons.append(w)
+    
+    godroll_context = ""
+    if matched_weapons:
+        godroll_context = "\n\n★ VERIFIED WEAPON GOD ROLLS FROM ARMORY ARCHIVES:\n"
+        for w in matched_weapons[:2]:
+            pve = w.get("pve", {})
+            pvp = w.get("pvp", {})
+            godroll_context += (
+                f"- Weapon: {w.get('name')} ({w.get('slot')} Slot // {w.get('element')} {w.get('type')}, {w.get('frame')})\n"
+                f"  Source: {w.get('source')}\n"
+                f"  PVE God Roll: Barrel: {pve.get('barrel')}, Mag: {pve.get('mag')}, Perk 1: {pve.get('perk1')}, Perk 2: {pve.get('perk2')}, MW: {pve.get('masterwork')}. Notes: {pve.get('notes')}\n"
+                f"  PVP God Roll: Barrel: {pvp.get('barrel')}, Mag: {pvp.get('mag')}, Perk 1: {pvp.get('perk1')}, Perk 2: {pvp.get('perk2')}, MW: {pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
+            )
+
     subclass_name = (req.subclass or "Solar").capitalize()
     enhanced_prompt = (
         f"TACTICAL PROFILE:\n"
@@ -472,7 +545,8 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
         f"• Operational Activity: {req.activity}\n"
         f"• Tactical Inquiry Focus: {req.tactical_inquiry or 'General'}\n"
         f"{verified_blueprint_context}\n"
-        f"{knowledge_context}\n\n"
+        f"{knowledge_context}\n"
+        f"{godroll_context}\n\n"
         f"Guardian Transmission: {req.message}"
     )
     
@@ -657,6 +731,54 @@ def delete_build_endpoint(build_id: str, background_tasks: BackgroundTasks):
     cfg = get_config()
     background_tasks.add_task(sync_to_firebase, "felicia/saved_builds", builds, cfg.get("firebase_auth_token", ""))
     return {"status": "deleted", "id": build_id}
+
+@app.get("/api/godrolls")
+def get_godrolls_endpoint():
+    rolls = get_all_god_rolls()
+    return {"godrolls": rolls}
+
+@app.post("/api/godrolls")
+def save_godroll_endpoint(item: GodRollItem, background_tasks: BackgroundTasks):
+    rolls = get_all_god_rolls()
+    roll_id = item.id
+    if not roll_id:
+        clean_slug = re.sub(r'[^a-z0-9]+', '-', item.name.lower()).strip('-')
+        roll_id = f"roll-{clean_slug}-{uuid.uuid4().hex[:4]}"
+    
+    existing_idx = next((i for i, r in enumerate(rolls) if r.get("id") == roll_id or r.get("name", "").lower() == item.name.lower()), -1)
+    
+    roll_data = {
+        "id": roll_id,
+        "name": item.name,
+        "slot": item.slot,
+        "type": item.type,
+        "element": item.element,
+        "frame": item.frame or "",
+        "source": item.source or "",
+        "pve": item.pve or {},
+        "pvp": item.pvp or {}
+    }
+    
+    if existing_idx >= 0:
+        rolls[existing_idx] = roll_data
+    else:
+        rolls.insert(0, roll_data)
+        
+    save_json(GOD_ROLLS_PATH, rolls)
+    
+    cfg = get_config()
+    background_tasks.add_task(sync_to_firebase, "felicia/god_rolls", rolls, cfg.get("firebase_auth_token", ""))
+    return {"status": "success", "roll": roll_data}
+
+@app.delete("/api/godrolls/{roll_id}")
+def delete_godroll_endpoint(roll_id: str, background_tasks: BackgroundTasks):
+    rolls = get_all_god_rolls()
+    rolls = [r for r in rolls if r.get("id") != roll_id]
+    save_json(GOD_ROLLS_PATH, rolls)
+    
+    cfg = get_config()
+    background_tasks.add_task(sync_to_firebase, "felicia/god_rolls", rolls, cfg.get("firebase_auth_token", ""))
+    return {"status": "deleted", "id": roll_id}
 
 @app.get("/api/history")
 def get_history_endpoint():

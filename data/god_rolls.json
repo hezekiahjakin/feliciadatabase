@@ -1,0 +1,827 @@
+[
+  {
+    "id": "roll-fatebringer",
+    "name": "Fatebringer (Timelost)",
+    "slot": "Kinetic",
+    "type": "Hand Cannon",
+    "element": "Kinetic",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Vault of Glass Raid (Master)",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Tactical Mag",
+      "perk1": "Explosive Payload / Rewind Rounds",
+      "perk2": "Frenzy / Firefly",
+      "masterwork": "Reload Speed",
+      "notes": "Explosive Payload ignores range falloff for ad clearing. Frenzy keeps handling, reload, and damage buffed permanently in combat."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Explosive Payload",
+      "perk2": "Eye of the Storm / Opening Shot",
+      "masterwork": "Range",
+      "notes": "Crucible dueling king. Explosive Payload causes severe screen shake flinch, and Eye of the Storm tightens accuracy cone under fire."
+    }
+  },
+  {
+    "id": "roll-zaoulis-bane",
+    "name": "Zaouli's Bane (Harrowed / Normal)",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Solar",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "King's Fall Raid (Craftable)",
+    "pve": {
+      "barrel": "Smallbore / Fluted Barrel",
+      "mag": "Flared Magwell / Tactical Mag",
+      "perk1": "Enhanced Explosive Payload",
+      "perk2": "Enhanced Incandescent",
+      "masterwork": "Reload Speed",
+      "notes": "The legendary Solar Hand Cannon standard. Explosive Payload staggers targets while Enhanced Incandescent ignites entire rooms of combatants."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Opening Shot",
+      "perk2": "Eye of the Storm",
+      "masterwork": "Range",
+      "notes": "High range push with Opening Shot for first-shot accuracy, and Eye of the Storm for reliable three-taps in high-stakes duels."
+    }
+  },
+  {
+    "id": "roll-the-midnight-coup",
+    "name": "The Midnight Coup",
+    "slot": "Kinetic",
+    "type": "Hand Cannon",
+    "element": "Kinetic",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Smallbore",
+      "mag": "Tactical Mag / Appended Mag",
+      "perk1": "Firefly / Explosive Payload",
+      "perk2": "One for All / Frenzy",
+      "masterwork": "Reload Speed",
+      "notes": "Firefly combined with One for All or Frenzy provides massive 35% damage boosts and explosive kinetic splash damage."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Moving Target",
+      "perk2": "Zen Moment / Opening Shot",
+      "masterwork": "Range",
+      "notes": "Indomitability origin trait grants grenade energy, while Zen Moment eliminates weapon flinch for effortless headshots."
+    }
+  },
+  {
+    "id": "roll-igneous-hammer",
+    "name": "Igneous Hammer (Adept)",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Solar",
+    "frame": "Aggressive Frame (120 RPM)",
+    "source": "Trials of Osiris",
+    "pve": {
+      "barrel": "Fluted Barrel",
+      "mag": "Appended Mag / Flared Magwell",
+      "perk1": "Rapid Hit / Keep Away",
+      "perk2": "Incandescent / Frenzy",
+      "masterwork": "Handling",
+      "notes": "High single-shot damage for bursting major combatants. Incandescent spreads Solar scorch in GM nightfalls."
+    },
+    "pvp": {
+      "barrel": "Fluted Barrel / Smallbore",
+      "mag": "Ricochet Rounds",
+      "perk1": "Keep Away",
+      "perk2": "Precision Instrument / Eye of the Storm",
+      "masterwork": "Range",
+      "notes": "The undisputed king of 120 RPM hand cannons. Keep Away pushes range past 40 meters, while Precision Instrument secures 2-crit 1-body kills on all resilience tiers."
+    }
+  },
+  {
+    "id": "roll-rose",
+    "name": "Rose",
+    "slot": "Kinetic",
+    "type": "Hand Cannon",
+    "element": "Kinetic",
+    "frame": "Lightweight Frame (140 RPM)",
+    "source": "Crucible Competitive Playlist",
+    "pve": {
+      "barrel": "Smallbore",
+      "mag": "Tactical Mag",
+      "perk1": "Rapid Hit",
+      "perk2": "Explosive Payload",
+      "masterwork": "Reload Speed",
+      "notes": "Lightweight bonus +20 Mobility and fast handling makes it snappy for kinetic primary ad clearing."
+    },
+    "pvp": {
+      "barrel": "Smallbore / Hammer-Forged",
+      "mag": "Accurized Rounds",
+      "perk1": "Slideshot",
+      "perk2": "Opening Shot / Eye of the Storm",
+      "masterwork": "Range",
+      "notes": "Fastest feeling hand cannon in Destiny 2. Slideshot refunds ammo and boosts range + stability continuously in skirmishes."
+    }
+  },
+  {
+    "id": "roll-lunas-howl",
+    "name": "Luna's Howl",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Solar",
+    "frame": "Precision Frame (140 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Smallbore",
+      "mag": "Appended Mag / Tactical Mag",
+      "perk1": "Heal Clip",
+      "perk2": "Incandescent",
+      "masterwork": "Reload Speed",
+      "notes": "The premier support/offense hand cannon: Heal Clip provides Cure x2 to you and allies on reload, while Incandescent burns surrounding ads."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Ricochet Rounds",
+      "perk1": "Slideshot / Eye of the Storm",
+      "perk2": "Magnificent Howl / Precision Instrument",
+      "masterwork": "Range",
+      "notes": "Precision Frame recoil pattern shoots like a laser. Magnificent Howl banks 2-tap headshots for devastating Crucible streaks."
+    }
+  },
+  {
+    "id": "roll-the-call",
+    "name": "The Call",
+    "slot": "Kinetic",
+    "type": "Sidearm",
+    "element": "Strand",
+    "frame": "Rocket-Assisted Frame",
+    "source": "The Pale Heart (Craftable)",
+    "pve": {
+      "barrel": "Quickdraw / Smart Drift Control",
+      "mag": "Tactical Mag / Appended Mag",
+      "perk1": "Lead from Gold / Demolitionist",
+      "perk2": "One for All / Desperate Measures / Vorpal",
+      "masterwork": "Reload Speed",
+      "notes": "Endgame PVE MVP. Uses Special ammo to fire micro-tracking rocket darts that demolish Champions, yellow bars, and dense clusters of ads."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "High-Caliber Rounds",
+      "perk1": "Beacon Rounds",
+      "perk2": "Desperate Measures",
+      "masterwork": "Velocity",
+      "notes": "Beacon Rounds grants aggressive projectile tracking after a kill, catching opponents around cover."
+    }
+  },
+  {
+    "id": "roll-aberrant-action",
+    "name": "Aberrant Action",
+    "slot": "Energy",
+    "type": "Sidearm",
+    "element": "Solar",
+    "frame": "Rocket-Assisted Frame",
+    "source": "Echoes Episode (Craftable)",
+    "pve": {
+      "barrel": "Fluted Barrel / Quickdraw",
+      "mag": "Appended Mag / Tactical Mag",
+      "perk1": "Heal Clip",
+      "perk2": "Incandescent",
+      "masterwork": "Reload Speed",
+      "notes": "The god-tier Solar rocket sidearm. Heal Clip gives instant Cure x2 on reload, and Incandescent spreads massive scorch explosions with rocket splash."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "High-Caliber Rounds",
+      "perk1": "Beacon Rounds / Threat Detector",
+      "perk2": "Harmony / Demolitionist",
+      "masterwork": "Velocity",
+      "notes": "High projectile velocity and heavy flinch against rushing shotgunners."
+    }
+  },
+  {
+    "id": "roll-apex-predator",
+    "name": "Apex Predator",
+    "slot": "Heavy",
+    "type": "Rocket Launcher",
+    "element": "Solar",
+    "frame": "Adaptive Frame",
+    "source": "Last Wish Raid (Craftable)",
+    "pve": {
+      "barrel": "Quick Launch",
+      "mag": "Impact Casing",
+      "perk1": "Enhanced Reconstruction",
+      "perk2": "Enhanced Bait and Switch",
+      "masterwork": "Handling / Reload",
+      "notes": "The undisputed #1 raid boss DPS rocket. Reconstruction auto-loads 2 rockets into the tube, and Bait and Switch triggers a 30% damage multiplier."
+    },
+    "pvp": {
+      "barrel": "Volatile Launch",
+      "mag": "Black Powder",
+      "perk1": "Tracking Module",
+      "perk2": "Danger Zone / Explosive Light",
+      "masterwork": "Blast Radius",
+      "notes": "Tracking Module locks onto airborne targets while high blast radius cleans up teams on capture zones."
+    }
+  },
+  {
+    "id": "roll-edge-transit",
+    "name": "Edge Transit",
+    "slot": "Heavy",
+    "type": "Grenade Launcher",
+    "element": "Void",
+    "frame": "Adaptive Frame (120 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Hard Launch",
+      "mag": "Spike Grenades",
+      "perk1": "Envious Assassin / Cascade Point",
+      "perk2": "Bait and Switch",
+      "masterwork": "Velocity / Reload",
+      "notes": "The highest burst-DPS heavy grenade launcher in Destiny history. Envious overflows the drum to 18-21 shots, unleashed at +30% Bait and Switch damage."
+    },
+    "pvp": {
+      "barrel": "Volatile Launch",
+      "mag": "Proximity Grenades",
+      "perk1": "Impulse Amplifier",
+      "perk2": "Explosive Light",
+      "masterwork": "Blast Radius",
+      "notes": "Impulse Amplifier dramatically accelerates projectile speed, while Proximity Grenades guarantee one-shot kills without direct hits."
+    }
+  },
+  {
+    "id": "roll-cataphract-gl3",
+    "name": "Cataphract GL3 (Adept)",
+    "slot": "Heavy",
+    "type": "Grenade Launcher",
+    "element": "Strand",
+    "frame": "Adaptive Frame (120 RPM)",
+    "source": "Trials of Osiris",
+    "pve": {
+      "barrel": "Hard Launch",
+      "mag": "Spike Grenades",
+      "perk1": "Envious Assassin / Auto-Loading Holster",
+      "perk2": "Bait and Switch",
+      "masterwork": "Velocity",
+      "notes": "Top Strand Heavy GL. Matches Strand surge in Grandmasters and Raids, synergizing with unraveling orbs and Bait and Switch."
+    },
+    "pvp": {
+      "barrel": "Volatile Launch",
+      "mag": "Proximity Grenades",
+      "perk1": "Impulse Amplifier",
+      "perk2": "Chain Reaction",
+      "masterwork": "Blast Radius",
+      "notes": "Impulse rockets grenades across Crucible lanes, and Chain Reaction eliminates clustered fireteams."
+    }
+  },
+  {
+    "id": "roll-forbearance",
+    "name": "Forbearance",
+    "slot": "Energy",
+    "type": "Grenade Launcher",
+    "element": "Arc",
+    "frame": "Wave Frame",
+    "source": "Vow of the Disciple Raid / Onslaught",
+    "pve": {
+      "barrel": "Quick Launch",
+      "mag": "High-Velocity Rounds",
+      "perk1": "Enhanced Ambitious Assassin",
+      "perk2": "Enhanced Chain Reaction",
+      "masterwork": "Handling / Reload",
+      "notes": "The greatest ad-clearing special weapon in Destiny 2 history. One wave triggers Chain Reaction explosions that wipe entire waves and load 2 shots into the chamber."
+    },
+    "pvp": {
+      "barrel": "Quick Launch",
+      "mag": "High-Velocity Rounds",
+      "perk1": "Disruption Break",
+      "perk2": "Chain Reaction / Wellspring",
+      "masterwork": "Velocity",
+      "notes": "Disruption Break shatters enemy shields and provides a 50% kinetic damage boost to immediately clean up with a primary swap."
+    }
+  },
+  {
+    "id": "roll-turncoat",
+    "name": "Turncoat",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Void",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "The Pale Heart / World Drop",
+    "pve": {
+      "barrel": "Smallbore / Corkscrew Rifling",
+      "mag": "Tactical Mag / Flared Magwell",
+      "perk1": "Repulsor Brace",
+      "perk2": "Destabilizing Rounds",
+      "masterwork": "Reload Speed",
+      "notes": "The holy grail Void loop: Destabilizing Rounds makes targets volatile, and defeating them immediately grants an overshield via Repulsor Brace."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Ricochet Rounds",
+      "perk1": "Keep Away",
+      "perk2": "Eye of the Storm",
+      "masterwork": "Range",
+      "notes": "Crisp 140 RPM Void dueling roll with maxed out accuracy and bullet magnetism."
+    }
+  },
+  {
+    "id": "roll-festival-flight",
+    "name": "Festival Flight",
+    "slot": "Kinetic",
+    "type": "Grenade Launcher",
+    "element": "Strand",
+    "frame": "Area-Denial Frame",
+    "source": "Season of the Witch / Episode Activities",
+    "pve": {
+      "barrel": "Quick Launch",
+      "mag": "High-Velocity Rounds",
+      "perk1": "Slice / Attrition Orbs",
+      "perk2": "Demolitionist / Chain Reaction",
+      "masterwork": "Velocity",
+      "notes": "Lays down persistent Strand puddles that sever enemies and continuously spawn Orbs of Power via Attrition Orbs."
+    },
+    "pvp": {
+      "barrel": "Volatile Launch",
+      "mag": "Implosion Rounds",
+      "perk1": "Slice",
+      "perk2": "Harmony",
+      "masterwork": "Blast Radius",
+      "notes": "Area denial locks down heavy ammo spawn points and capture zones."
+    }
+  },
+  {
+    "id": "roll-age-old-bond",
+    "name": "Age-Old Bond",
+    "slot": "Energy",
+    "type": "Auto Rifle",
+    "element": "Void",
+    "frame": "High-Impact Frame (360 RPM)",
+    "source": "Last Wish Raid (Craftable)",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Tactical Mag",
+      "perk1": "Enhanced Repulsor Brace",
+      "perk2": "Enhanced Destabilizing Rounds",
+      "masterwork": "Reload Speed",
+      "notes": "Hits like a truck from scout rifle range. Void volatility + continuous Void Overshields make you unkillable in Grandmasters."
+    },
+    "pvp": {
+      "barrel": "Extended Barrel",
+      "mag": "Ricochet Rounds",
+      "perk1": "Dynamic Sway Reduction",
+      "perk2": "Target Lock / Kill Clip",
+      "masterwork": "Range",
+      "notes": "Heavy hitting 360 RPM auto rifle with exceptional range falloff and lethality."
+    }
+  },
+  {
+    "id": "roll-gnawing-hunger",
+    "name": "Gnawing Hunger",
+    "slot": "Energy",
+    "type": "Auto Rifle",
+    "element": "Void",
+    "frame": "Adaptive Frame (600 RPM)",
+    "source": "Dares of Eternity / World Pool",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Tactical Mag / Appended Mag",
+      "perk1": "Subsistence",
+      "perk2": "Demolitionist / Rampage",
+      "masterwork": "Reload Speed",
+      "notes": "Classic community favorite. Subsistence automatically reloads the mag on every kill, while Demolitionist feeds 10% grenade energy."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Zen Moment / Tap the Trigger",
+      "perk2": "Kill Clip",
+      "masterwork": "Range",
+      "notes": "Zen Moment eliminates recoil drift, allowing rapid 0.7s TTK kills once Kill Clip is activated."
+    }
+  },
+  {
+    "id": "roll-ros-arago-iv",
+    "name": "Ros Arago IV",
+    "slot": "Energy",
+    "type": "Auto Rifle",
+    "element": "Void",
+    "frame": "Adaptive Frame (600 RPM)",
+    "source": "World Drop / Master Lost Sectors",
+    "pve": {
+      "barrel": "Smallbore / Fluted Barrel",
+      "mag": "Tactical Mag / Appended Mag",
+      "perk1": "Rewind Rounds / Repulsor Brace",
+      "perk2": "Onslaught",
+      "masterwork": "Reload Speed",
+      "notes": "The modern standard 600 RPM Void auto. Onslaught accelerates fire rate to 720+ RPM on kills, while Rewind Rounds refills bullets automatically."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Ricochet Rounds",
+      "perk1": "Dynamic Sway Reduction",
+      "perk2": "Target Lock / Onslaught",
+      "masterwork": "Range",
+      "notes": "Dynamic Sway guarantees pinpoint laser accuracy from hip or ADS, while Target Lock melts opponents who peak corners."
+    }
+  },
+  {
+    "id": "roll-the-recluse",
+    "name": "The Recluse",
+    "slot": "Energy",
+    "type": "Submachine Gun",
+    "element": "Void",
+    "frame": "Lightweight Frame (900 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Appended Mag / Flared Magwell",
+      "perk1": "Threat Detector / Subsistence",
+      "perk2": "Master of Arms / Frenzy",
+      "masterwork": "Reload Speed",
+      "notes": "The legendary SMG returns. Master of Arms provides an instant universal damage buff on any weapon kill, and Indomitability refunds grenade energy."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Ricochet Rounds",
+      "perk1": "Dynamic Sway Reduction",
+      "perk2": "Target Lock / Tap the Trigger",
+      "masterwork": "Range",
+      "notes": "Max range push gives it lethal stopping power up to 21 meters with zero recoil sway."
+    }
+  },
+  {
+    "id": "roll-multimach-ccx",
+    "name": "Multimach CCX",
+    "slot": "Kinetic",
+    "type": "Submachine Gun",
+    "element": "Kinetic",
+    "frame": "Lightweight Frame (900 RPM)",
+    "source": "Iron Banner",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Tactical Mag",
+      "perk1": "Attrition Orbs",
+      "perk2": "Kinetic Tremors",
+      "masterwork": "Reload Speed",
+      "notes": "Kinetic Tremors emits 3 shockwaves on sustained fire, turning this fast SMG into an AoE powerhouse."
+    },
+    "pvp": {
+      "barrel": "Model 8 Red / Hammer-Forged",
+      "mag": "Accurized Rounds",
+      "perk1": "Moving Target / Dynamic Sway",
+      "perk2": "Kill Clip / Target Lock",
+      "masterwork": "Range",
+      "notes": "Crucible staple. Lightweight sprint speed boost combined with Kill Clip delivers blistering 0.67s TTK."
+    }
+  },
+  {
+    "id": "roll-ikelos-smg",
+    "name": "IKELOS_SMG_v1.0.3",
+    "slot": "Energy",
+    "type": "Submachine Gun",
+    "element": "Arc",
+    "frame": "Aggressive Frame (750 RPM)",
+    "source": "Operation: Seraph's Shield (Craftable)",
+    "pve": {
+      "barrel": "Smallbore",
+      "mag": "Seraph Rounds",
+      "perk1": "Enhanced Threat Detector",
+      "perk2": "Enhanced Voltshot",
+      "masterwork": "Reload Speed",
+      "notes": "The benchmark Arc SMG. Enhanced Voltshot electrifies entire rooms, while Seraph Rounds over-penetrates shields and ricochets off walls."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Seraph Rounds",
+      "perk1": "Dynamic Sway Reduction",
+      "perk2": "Tap the Trigger",
+      "masterwork": "Range",
+      "notes": "Max stability and range synergy for dominating close-to-medium range primary engagements."
+    }
+  },
+  {
+    "id": "roll-blast-furnace",
+    "name": "Blast Furnace",
+    "slot": "Kinetic",
+    "type": "Pulse Rifle",
+    "element": "Kinetic",
+    "frame": "Aggressive Frame (450 RPM 4-Burst)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Tactical Mag",
+      "perk1": "Kinetic Tremors",
+      "perk2": "One for All / Firefly",
+      "masterwork": "Reload Speed",
+      "notes": "The 4-burst heavy pulse activates Kinetic Tremors after just two bursts, dealing monstrous sustained shockwave damage to champions."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Zen Moment / Keep Away",
+      "perk2": "Kill Clip / Headseeker",
+      "masterwork": "Range",
+      "notes": "Headseeker makes 2-burst kills ridiculously forgiving, while Zen Moment removes all incoming flinch."
+    }
+  },
+  {
+    "id": "roll-elsies-rifle",
+    "name": "Elsie's Rifle",
+    "slot": "Energy",
+    "type": "Pulse Rifle",
+    "element": "Void",
+    "frame": "High-Impact Frame (340 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Tactical Mag",
+      "perk1": "Rewind Rounds / Repulsor Brace",
+      "perk2": "Destabilizing Rounds / Frenzy",
+      "masterwork": "Reload Speed",
+      "notes": "High base damage with Rewind Rounds for sustained fire, or Repulsor Brace for continuous overshields."
+    },
+    "pvp": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Ricochet Rounds",
+      "perk1": "Zen Moment / Keep Away",
+      "perk2": "Headseeker",
+      "masterwork": "Range",
+      "notes": "One of the most lethal 340 RPM pulses in the game. Guaranteed 0.67s optimal TTK with Headseeker and Zen Moment stability."
+    }
+  },
+  {
+    "id": "roll-no-hesitation",
+    "name": "No Hesitation",
+    "slot": "Energy",
+    "type": "Auto Rifle",
+    "element": "Solar",
+    "frame": "Support Frame",
+    "source": "The Pale Heart (Craftable)",
+    "pve": {
+      "barrel": "Fluted Barrel",
+      "mag": "Tactical Mag",
+      "perk1": "Physic / Subsistence",
+      "perk2": "Circle of Life / Incandescent",
+      "masterwork": "Handling",
+      "notes": "First-of-its-kind Support Auto Rifle. Hipfire shooting heals allies with Restoration, while Circle of Life grants a 25% damage buff for healing teammates."
+    },
+    "pvp": {
+      "barrel": "Hammer-Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Subsistence",
+      "perk2": "Desperate Measures",
+      "masterwork": "Range",
+      "notes": "Fast projectile travel with healing utility to clutch team-fights."
+    }
+  },
+  {
+    "id": "roll-scintillation",
+    "name": "Scintillation (Adept)",
+    "slot": "Heavy",
+    "type": "Linear Fusion Rifle",
+    "element": "Strand",
+    "frame": "Adaptive Frame (3-Burst)",
+    "source": "Nightfall Strikes (Grandmaster)",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Enhanced Battery",
+      "perk1": "Rewind Rounds",
+      "perk2": "Bait and Switch / Firing Line",
+      "masterwork": "Charge Time",
+      "notes": "The premier 3-burst Strand Linear. Rewind Rounds ensures you shoot through an entire boss damage phase without manual reloads."
+    },
+    "pvp": {
+      "barrel": "Fluted Barrel",
+      "mag": "Accelerated Coils",
+      "perk1": "Slickdraw",
+      "perk2": "Target Lock",
+      "masterwork": "Charge Time",
+      "notes": "Rapid charge time and high single-burst damage for heavy ammo cleanups."
+    }
+  },
+  {
+    "id": "roll-commemoration",
+    "name": "Commemoration",
+    "slot": "Heavy",
+    "type": "Machine Gun",
+    "element": "Void",
+    "frame": "Adaptive Frame (450 RPM)",
+    "source": "Deep Stone Crypt Raid (Craftable)",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Tactical Mag",
+      "perk1": "Enhanced Reconstruction",
+      "perk2": "Enhanced Killing Tally",
+      "masterwork": "Range / Stability",
+      "notes": "The gold standard heavy machine gun. Reconstruction loads up to 140 rounds into the mag, and Killing Tally provides a permanent 30% damage boost until stowed."
+    },
+    "pvp": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Accurized Rounds",
+      "perk1": "Dynamic Sway Reduction",
+      "perk2": "Under Pressure / Eye of the Storm",
+      "masterwork": "Range",
+      "notes": "Laser-beam precision machine gun for wiping entire enemy teams with one heavy brick pickup."
+    }
+  },
+  {
+    "id": "roll-hammerhead",
+    "name": "Hammerhead",
+    "slot": "Heavy",
+    "type": "Machine Gun",
+    "element": "Void",
+    "frame": "Adaptive Frame (450 RPM)",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Appended Mag",
+      "perk1": "Rewind Rounds / Fourth Time's the Charm",
+      "perk2": "Killing Tally / Onslaught",
+      "masterwork": "Reload Speed",
+      "notes": "Rewind Rounds or FTTC combined with Onslaught or Killing Tally turns Hammerhead into an ad-eradicating chainsaw."
+    },
+    "pvp": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Ricochet Rounds",
+      "perk1": "Under Pressure",
+      "perk2": "Tap the Trigger / High-Impact Reserves",
+      "masterwork": "Range",
+      "notes": "Unrivaled consistency from Crucible heavy drops. Under Pressure and Tap the Trigger grant max stability immediately."
+    }
+  },
+  {
+    "id": "roll-matador-64",
+    "name": "Matador 64",
+    "slot": "Energy",
+    "type": "Shotgun",
+    "element": "Arc",
+    "frame": "Precision Frame",
+    "source": "Grasp of Avarice Dungeon",
+    "pve": {
+      "barrel": "Barrel Shroud",
+      "mag": "Assault Mag",
+      "perk1": "Lead from Gold",
+      "perk2": "Golden Tricorn",
+      "masterwork": "Handling",
+      "notes": "Solid special shotgun for bursting down knights, champions, and majors in dungeon encounters."
+    },
+    "pvp": {
+      "barrel": "Full Choke / Barrel Shroud",
+      "mag": "Accurized Rounds",
+      "perk1": "Threat Detector",
+      "perk2": "Opening Shot",
+      "masterwork": "Handling / Range",
+      "notes": "The #1 competitive Crucible energy shotgun. Threat Detector maxes handling when enemies push, and Opening Shot extends one-hit kill distance to the physical pellet cap."
+    }
+  },
+  {
+    "id": "roll-conditional-finality",
+    "name": "Conditional Finality",
+    "slot": "Kinetic",
+    "type": "Shotgun",
+    "element": "Stasis / Solar",
+    "frame": "Exotic Double-Barrel Frame",
+    "source": "Root of Nightmares Raid (Nezarec)",
+    "pve": {
+      "barrel": "Fixed Exotic (Dual Trigger)",
+      "mag": "Fixed Exotic (Alloy Magazine)",
+      "perk1": "Paracausal Pellets (Stasis Freeze)",
+      "perk2": "Paracausal Pellets (Solar Ignite)",
+      "masterwork": "Fixed Exotic",
+      "notes": "The undisputed best special weapon in the entire game. First shot freezes Unstoppable/Overload champions, second shot triggers a massive 50K+ damage Solar Ignition."
+    },
+    "pvp": {
+      "barrel": "Fixed Exotic (Dual Trigger)",
+      "mag": "Fixed Exotic (Alloy Magazine)",
+      "perk1": "Paracausal Pellets (Freeze)",
+      "perk2": "Paracausal Pellets (Ignite)",
+      "masterwork": "Fixed Exotic",
+      "notes": "Shut down Titan Ward of Dawn and Warlock Well of Radiance instantly. The Stasis shot freezes Guardians out of their supers, and the Solar shot detonates them."
+    }
+  },
+  {
+    "id": "roll-succession",
+    "name": "Succession",
+    "slot": "Kinetic",
+    "type": "Sniper Rifle",
+    "element": "Kinetic",
+    "frame": "Aggressive Frame (72 RPM)",
+    "source": "Deep Stone Crypt Raid / Onslaught",
+    "pve": {
+      "barrel": "Fluted Barrel",
+      "mag": "Tactical Mag",
+      "perk1": "Enhanced Reconstruction",
+      "perk2": "Enhanced Vorpal Weapon / Firing Line",
+      "masterwork": "Handling / Reload",
+      "notes": "Reconstruction doubles magazine size to 8 sniper rounds in the chamber, perfect for picking off champions and distant raid mechanics."
+    },
+    "pvp": {
+      "barrel": "Fluted Barrel",
+      "mag": "Accurized Rounds",
+      "perk1": "Moving Target",
+      "perk2": "Snapshot Sights",
+      "masterwork": "Handling",
+      "notes": "Aggressive 72 RPM sniper capable of body-shot cleaning up weakened targets or shutting down supers on headshot."
+    }
+  },
+  {
+    "id": "roll-scatter-signal",
+    "name": "Scatter Signal",
+    "slot": "Kinetic",
+    "type": "Fusion Rifle",
+    "element": "Strand",
+    "frame": "Rapid-Fire Frame",
+    "source": "Season of the Wish (Craftable)",
+    "pve": {
+      "barrel": "Fluted Barrel",
+      "mag": "Enhanced Battery",
+      "perk1": "Overflow",
+      "perk2": "Controlled Burst",
+      "masterwork": "Charge Time",
+      "notes": "Fastest DPS special fusion rifle in the kinetic slot. Controlled Burst reduces charge time and boosts damage by 20% on all bolts hit."
+    },
+    "pvp": {
+      "barrel": "Smallbore",
+      "mag": "Accelerated Coils",
+      "perk1": "Perpetual Motion",
+      "perk2": "Kickstart",
+      "masterwork": "Range",
+      "notes": "Fast charging slide-burst fusion for aggressive shotgun defense."
+    }
+  },
+  {
+    "id": "roll-the-mountaintop",
+    "name": "The Mountaintop",
+    "slot": "Kinetic",
+    "type": "Grenade Launcher",
+    "element": "Kinetic",
+    "frame": "Micro-Missile Frame",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Hard Launch",
+      "mag": "Spike Grenades",
+      "perk1": "Auto-Loading Holster / Lead from Gold",
+      "perk2": "Recomb / Frenzy / Vorpal Weapon",
+      "masterwork": "Velocity / Reload",
+      "notes": "Fires a pinpoint straight-line rocket grenade. Recombination stores up to +100% damage on the next shot, obliterating Champions and Majors in a single trigger pull. Also allows rocket-jumping!"
+    },
+    "pvp": {
+      "barrel": "Hard Launch",
+      "mag": "Spike Grenades / Implosion",
+      "perk1": "Impulse Amplifier",
+      "perk2": "Harmony / Recombination",
+      "masterwork": "Velocity",
+      "notes": "Max velocity laser rocket that instantly chunks opponents for 160+ damage, setting up effortless primary swaps."
+    }
+  },
+  {
+    "id": "roll-falling-guillotine",
+    "name": "Falling Guillotine",
+    "slot": "Heavy",
+    "type": "Sword",
+    "element": "Void",
+    "frame": "Vortex Frame",
+    "source": "Into the Light / Onslaught (BRAVE)",
+    "pve": {
+      "barrel": "Jagged Edge",
+      "mag": "Swordmaster's Guard",
+      "perk1": "Frenzy / Relentless Strikes",
+      "perk2": "Bait and Switch / Surrounded",
+      "masterwork": "Impact",
+      "notes": "Rolls double damage perks! Frenzy or Relentless Strikes paired with Bait and Switch or Surrounded delivers the highest sustained sword DPS in the game."
+    },
+    "pvp": {
+      "barrel": "Enduring Blade",
+      "mag": "Heavy Guard",
+      "perk1": "Vorpal Weapon",
+      "perk2": "Eager Edge",
+      "masterwork": "Impact",
+      "notes": "Vortex heavy attack cleans out entire bubbles and points."
+    }
+  },
+  {
+    "id": "roll-the-slammer",
+    "name": "The Slammer (Adept)",
+    "slot": "Heavy",
+    "type": "Sword",
+    "element": "Stasis",
+    "frame": "Vortex Frame",
+    "source": "Nightfall Strikes (Grandmaster)",
+    "pve": {
+      "barrel": "Jagged Edge",
+      "mag": "Swordmaster's Guard",
+      "perk1": "Relentless Strikes",
+      "perk2": "Cold Steel / Bait and Switch",
+      "masterwork": "Impact",
+      "notes": "Cold Steel applies Slow on every powered sword hit, instantly freezing Overload and Unstoppable champions in their tracks."
+    },
+    "pvp": {
+      "barrel": "Jagged Edge",
+      "mag": "Swordmaster's Guard",
+      "perk1": "Eager Edge",
+      "perk2": "Cold Steel",
+      "masterwork": "Impact",
+      "notes": "Eager Edge lunges you across the map at supersonic speed for quick assassinations."
+    }
+  }
+]

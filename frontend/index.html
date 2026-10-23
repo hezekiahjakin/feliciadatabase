@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v6">
+  <link rel="stylesheet" href="styles.css?v=20261023_v7">
 </head>
 <body class="theme-vanguard">
 
@@ -70,8 +70,8 @@
         <span class="nav-title">Guides</span>
       </button>
       <button class="nav-tab" data-tab="tab-vault">
-        <span class="nav-icon">🛡️</span>
-        <span class="nav-title">Fireteam Vault</span>
+        <span class="nav-icon">🎯</span>
+        <span class="nav-title">God Roll Finder</span>
       </button>
       <button class="nav-tab" data-tab="tab-settings">
         <span class="nav-icon">⚙️</span>
@@ -250,22 +250,91 @@
       </div>
     </section>
 
-    <!-- TAB 3: FIRETEAM VAULT (SAVED BUILDS) -->
+    <!-- TAB 3: GOD ROLL FINDER & LOADOUT VAULT -->
     <section class="tab-pane" id="tab-vault">
       <div class="vault-layout">
         <div class="vault-header-card">
-          <div>
-            <h2 class="section-title">FIRETEAM LOADOUT VAULT</h2>
-            <p class="section-sub">Save tactical builds crafted with F.E.L.I.C.I.A. for quick retrieval across your phone, tablet, and PC.</p>
+          <div class="vault-header-titles">
+            <h2 class="section-title">🎯 GOD ROLL FINDER // VANGUARD ARMORY</h2>
+            <p class="section-sub">Search meta Destiny 2 weapons, inspect verified PVE and PVP God Rolls, and consult F.E.L.I.C.I.A. on weapon perk synergy.</p>
           </div>
-          <button class="btn-tactical btn-primary" id="btnOpenAddBuild">
-            <span class="icon">🛡️</span> Save New Loadout
-          </button>
+          <div class="armory-view-switchers">
+            <button class="btn-subnav active" id="btnViewGodRolls" data-view="godrolls">
+              <span class="icon">🎯</span> God Rolls
+            </button>
+            <button class="btn-subnav" id="btnViewLoadouts" data-view="loadouts">
+              <span class="icon">🛡️</span> Saved Loadouts
+            </button>
+          </div>
+          <div class="vault-header-actions">
+            <button class="btn-tactical btn-secondary" id="btnOpenAddGodRoll">
+              <span class="icon">➕</span> Add / Edit Weapon Roll
+            </button>
+            <button class="btn-tactical btn-primary" id="btnOpenAddBuild" style="display:none;">
+              <span class="icon">🛡️</span> Save New Loadout
+            </button>
+          </div>
         </div>
 
-        <div class="vault-grid" id="vaultGrid">
-          <!-- Populated dynamically -->
+        <!-- GOD ROLLS VIEW (DEFAULT) -->
+        <div class="godrolls-container" id="godrollsContainer">
+          <!-- Search & Filter Controls -->
+          <div class="godrolls-filter-bar">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="godRollSearchInput" class="hud-input search-input" placeholder="Search weapons by name (e.g., Fatebringer, Zaouli's Bane, The Call, Apex Predator)...">
+              <button class="btn-clear-search" id="btnClearGodRollSearch" title="Clear Search">&times;</button>
+            </div>
+
+            <!-- Filter Categories -->
+            <div class="godrolls-pills-row">
+              <div class="pills-group" id="slotFilters">
+                <span class="filter-lbl">SLOT:</span>
+                <button class="pill-btn active" data-slot="all">All</button>
+                <button class="pill-btn" data-slot="Kinetic">Kinetic</button>
+                <button class="pill-btn" data-slot="Energy">Energy</button>
+                <button class="pill-btn" data-slot="Heavy">Heavy</button>
+              </div>
+
+              <div class="pills-group" id="typeFilters">
+                <span class="filter-lbl">TYPE:</span>
+                <select id="typeFilterSelect" class="hud-select filter-select">
+                  <option value="all">All Weapon Types</option>
+                  <option value="Hand Cannon">Hand Cannons</option>
+                  <option value="Auto Rifle">Auto Rifles</option>
+                  <option value="Pulse Rifle">Pulse Rifles</option>
+                  <option value="Submachine Gun">Submachine Guns (SMGs)</option>
+                  <option value="Sidearm">Sidearms</option>
+                  <option value="Shotgun">Shotguns</option>
+                  <option value="Fusion Rifle">Fusion Rifles</option>
+                  <option value="Sniper Rifle">Sniper Rifles</option>
+                  <option value="Grenade Launcher">Grenade Launchers</option>
+                  <option value="Rocket Launcher">Rocket Launchers</option>
+                  <option value="Linear Fusion">Linear Fusion Rifles</option>
+                  <option value="Machine Gun">Machine Guns</option>
+                  <option value="Sword">Swords</option>
+                </select>
+              </div>
+
+              <div class="armory-counter-badge" id="armoryCounterBadge">
+                SHOWING WEAPONS
+              </div>
+            </div>
+          </div>
+
+          <!-- God Rolls Grid -->
+          <div class="godrolls-grid" id="godrollsGrid">
+            <!-- Populated dynamically -->
+          </div>
         </div>
+
+        <!-- SAVED LOADOUTS VIEW (TOGGLED) -->
+        <div class="loadouts-container" id="loadoutsContainer" style="display:none;">
+          <div class="vault-grid" id="vaultGrid">
+            <!-- Populated dynamically with saved loadouts -->
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -884,6 +953,131 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
+  <!-- MODAL: ADD / EDIT GOD ROLL -->
+  <dialog class="hud-modal modal-wide" id="modalEditGodRoll">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="editGodRollModalTitle">✦ WEAPON ARMORY // ADD / EDIT GOD ROLL</h3>
+        <button class="btn-modal-close" id="btnCloseEditGodRoll">&times;</button>
+      </div>
+      <form id="formEditGodRoll" class="modal-body">
+        <input type="hidden" id="editRollId" value="">
+        
+        <div class="form-row form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="rollWeaponName">Weapon Name *</label>
+            <input type="text" id="rollWeaponName" class="hud-input" required placeholder="e.g. Zaouli's Bane (Harrowed)">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="rollSource">Source / Activity</label>
+            <input type="text" id="rollSource" class="hud-input" placeholder="e.g. King's Fall Raid (Craftable)">
+          </div>
+        </div>
+
+        <div class="form-row form-grid-4">
+          <div class="form-group">
+            <label class="form-label" for="rollSlot">Weapon Slot *</label>
+            <select id="rollSlot" class="hud-select" required>
+              <option value="Kinetic">Kinetic</option>
+              <option value="Energy">Energy</option>
+              <option value="Heavy">Heavy</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="rollType">Weapon Type *</label>
+            <input type="text" id="rollType" class="hud-input" required placeholder="e.g. Hand Cannon">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="rollElement">Element *</label>
+            <select id="rollElement" class="hud-select" required>
+              <option value="Kinetic">Kinetic</option>
+              <option value="Solar">Solar</option>
+              <option value="Arc">Arc</option>
+              <option value="Void">Void</option>
+              <option value="Strand">Strand</option>
+              <option value="Stasis">Stasis</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="rollFrame">Archetype / Frame</label>
+            <input type="text" id="rollFrame" class="hud-input" placeholder="e.g. Adaptive Frame (140 RPM)">
+          </div>
+        </div>
+
+        <!-- PVE ROLL SECTION -->
+        <div class="godroll-form-section pve-section">
+          <h4 class="form-section-title">⚔️ PVE GOD ROLL SPECIFICATION</h4>
+          <div class="form-row form-grid-3">
+            <div class="form-group">
+              <label class="form-label" for="pveBarrel">Barrel / String</label>
+              <input type="text" id="pveBarrel" class="hud-input" placeholder="e.g. Smallbore / Corkscrew Rifling">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pveMag">Magazine / Battery / Arrow</label>
+              <input type="text" id="pveMag" class="hud-input" placeholder="e.g. Tactical Mag / Flared Magwell">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pveMasterwork">Masterwork</label>
+              <input type="text" id="pveMasterwork" class="hud-input" placeholder="e.g. Reload Speed">
+            </div>
+          </div>
+          <div class="form-row form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="pvePerk1">Trait 1 (Perk 1) *</label>
+              <input type="text" id="pvePerk1" class="hud-input" required placeholder="e.g. Enhanced Explosive Payload">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pvePerk2">Trait 2 (Perk 2) *</label>
+              <input type="text" id="pvePerk2" class="hud-input" required placeholder="e.g. Enhanced Incandescent">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="pveNotes">PVE Tactical Insight / Synergies</label>
+            <textarea id="pveNotes" class="hud-textarea" rows="2" placeholder="Why this roll is top-tier in PVE, build interactions, ad-clear or boss DPS notes..."></textarea>
+          </div>
+        </div>
+
+        <!-- PVP ROLL SECTION -->
+        <div class="godroll-form-section pvp-section">
+          <h4 class="form-section-title">🎯 PVP GOD ROLL SPECIFICATION</h4>
+          <div class="form-row form-grid-3">
+            <div class="form-group">
+              <label class="form-label" for="pvpBarrel">Barrel / Sights</label>
+              <input type="text" id="pvpBarrel" class="hud-input" placeholder="e.g. Hammer-Forged Rifling">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pvpMag">Magazine / Ammo</label>
+              <input type="text" id="pvpMag" class="hud-input" placeholder="e.g. Accurized Rounds / Ricochet Rounds">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pvpMasterwork">Masterwork</label>
+              <input type="text" id="pvpMasterwork" class="hud-input" placeholder="e.g. Range">
+            </div>
+          </div>
+          <div class="form-row form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="pvpPerk1">Trait 1 (Perk 1) *</label>
+              <input type="text" id="pvpPerk1" class="hud-input" required placeholder="e.g. Opening Shot / Keep Away">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pvpPerk2">Trait 2 (Perk 2) *</label>
+              <input type="text" id="pvpPerk2" class="hud-input" required placeholder="e.g. Eye of the Storm / Precision Instrument">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="pvpNotes">PVP Tactical Insight / Dueling Notes</label>
+            <textarea id="pvpNotes" class="hud-textarea" rows="2" placeholder="Crucible dueling advantages, TTK boosts, flinch mitigation, range breakpoints..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-tactical btn-secondary" id="btnCancelEditGodRoll">Cancel</button>
+          <button type="submit" class="btn-tactical btn-primary">💾 Save Weapon Roll</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
   <!-- MODAL: VIEW FULL WIKI ARTICLE -->
   <dialog class="hud-modal" id="modalViewWiki">
     <div class="modal-content">
@@ -905,6 +1099,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v6"></script>
+  <script type="module" src="app.js?v=20261023_v7"></script>
 </body>
 </html>

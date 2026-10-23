@@ -39,6 +39,9 @@ const state = {
   chatHistory: [],
   wikiList: [],
   buildsList: [],
+  godRollsList: [],
+  godRollsFilter: { search: '', slot: 'all', type: 'all' },
+  armoryView: 'godrolls',
   isThinking: false,
   isSpeaking: false,
   cursor: { x: 0, y: 0, targetX: 0, targetY: 0 },
@@ -1039,6 +1042,181 @@ function renderBuildsGrid() {
 }
 
 /* ==========================================================================
+   GOD ROLL FINDER // VANGUARD WEAPON ARMORY
+   ========================================================================== */
+let pendingGodRollData = null;
+
+async function loadGodRolls() {
+  try {
+    const res = await fetch('/api/godrolls');
+    const data = await res.json();
+    state.godRollsList = data.godrolls || [];
+    renderGodRollsGrid();
+  } catch (err) {
+    console.error('Failed to load god rolls:', err);
+  }
+}
+
+function renderGodRollsGrid() {
+  const grid = document.getElementById('godrollsGrid');
+  const counter = document.getElementById('armoryCounterBadge');
+  if (!grid) return;
+
+  const searchQ = (state.godRollsFilter.search || '').toLowerCase().trim();
+  const slotQ = state.godRollsFilter.slot || 'all';
+  const typeQ = state.godRollsFilter.type || 'all';
+
+  const filtered = state.godRollsList.filter(w => {
+    if (slotQ !== 'all' && w.slot?.toLowerCase() !== slotQ.toLowerCase()) return false;
+    if (typeQ !== 'all' && !w.type?.toLowerCase().includes(typeQ.toLowerCase())) return false;
+    if (searchQ) {
+      const matchName = w.name?.toLowerCase().includes(searchQ);
+      const matchType = w.type?.toLowerCase().includes(searchQ);
+      const matchElem = w.element?.toLowerCase().includes(searchQ);
+      const matchFrame = w.frame?.toLowerCase().includes(searchQ);
+      const matchSource = w.source?.toLowerCase().includes(searchQ);
+      const matchPvePerks = (w.pve?.perk1 + ' ' + w.pve?.perk2 + ' ' + w.pve?.barrel + ' ' + w.pve?.mag).toLowerCase().includes(searchQ);
+      const matchPvpPerks = (w.pvp?.perk1 + ' ' + w.pvp?.perk2 + ' ' + w.pvp?.barrel + ' ' + w.pvp?.mag).toLowerCase().includes(searchQ);
+      if (!matchName && !matchType && !matchElem && !matchFrame && !matchSource && !matchPvePerks && !matchPvpPerks) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (counter) {
+    counter.textContent = `SHOWING ${filtered.length} WEAPONS`;
+  }
+
+  grid.innerHTML = '';
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#64748B; font-family:var(--font-tactical); font-size:16px;">
+      NO WEAPONS FOUND MATCHING "${searchQ.toUpperCase()}". TRY ANOTHER SEARCH OR TAP 'ADD / EDIT WEAPON ROLL'!
+    </div>`;
+    return;
+  }
+
+  filtered.forEach(weapon => {
+    const card = document.createElement('div');
+    card.className = 'godroll-card';
+    card.dataset.id = weapon.id;
+
+    const pve = weapon.pve || {};
+    const pvp = weapon.pvp || {};
+
+    const slotClass = (weapon.slot || 'kinetic').toLowerCase();
+    const elemClass = (weapon.element || 'kinetic').toLowerCase();
+
+    card.innerHTML = `
+      <div class="gr-card-header">
+        <div class="gr-badge-row">
+          <span class="gr-badge gr-slot ${slotClass}">${weapon.slot || 'Kinetic'}</span>
+          <span class="gr-badge gr-elem ${elemClass}">${weapon.element || 'Kinetic'}</span>
+          <span class="gr-badge gr-frame">${weapon.frame || weapon.type}</span>
+        </div>
+        <h3 class="gr-weapon-name">${weapon.name}</h3>
+        <div class="gr-source-tag">📍 ${weapon.source || 'Destiny 2 Activities'}</div>
+      </div>
+
+      <div class="gr-rolls-columns">
+        <div class="gr-roll-box pve-box">
+          <div class="gr-box-header">
+            <span class="gr-mode-icon">⚔️</span>
+            <span class="gr-mode-title">PVE GOD ROLL</span>
+          </div>
+          <div class="gr-perks-list">
+            <div class="gr-perk-row"><span class="perk-label">Barrel</span><span class="perk-val">${pve.barrel || 'User choice'}</span></div>
+            <div class="gr-perk-row"><span class="perk-label">Mag</span><span class="perk-val">${pve.mag || 'User choice'}</span></div>
+            <div class="gr-perk-row highlight"><span class="perk-label">Trait 1</span><span class="perk-val primary">${pve.perk1 || 'User choice'}</span></div>
+            <div class="gr-perk-row highlight"><span class="perk-label">Trait 2</span><span class="perk-val primary">${pve.perk2 || 'User choice'}</span></div>
+            <div class="gr-perk-row"><span class="perk-label">Masterwork</span><span class="perk-val mw">${pve.masterwork || 'Reload Speed'}</span></div>
+          </div>
+          ${pve.notes ? `<div class="gr-insight-note">"${pve.notes}"</div>` : ''}
+        </div>
+
+        <div class="gr-roll-box pvp-box">
+          <div class="gr-box-header">
+            <span class="gr-mode-icon">🎯</span>
+            <span class="gr-mode-title">PVP GOD ROLL</span>
+          </div>
+          <div class="gr-perks-list">
+            <div class="gr-perk-row"><span class="perk-label">Barrel</span><span class="perk-val">${pvp.barrel || 'Hammer-Forged'}</span></div>
+            <div class="gr-perk-row"><span class="perk-label">Mag</span><span class="perk-val">${pvp.mag || 'Accurized Rounds'}</span></div>
+            <div class="gr-perk-row highlight"><span class="perk-label">Trait 1</span><span class="perk-val primary-pvp">${pvp.perk1 || 'User choice'}</span></div>
+            <div class="gr-perk-row highlight"><span class="perk-label">Trait 2</span><span class="perk-val primary-pvp">${pvp.perk2 || 'User choice'}</span></div>
+            <div class="gr-perk-row"><span class="perk-label">Masterwork</span><span class="perk-val mw">${pvp.masterwork || 'Range'}</span></div>
+          </div>
+          ${pvp.notes ? `<div class="gr-insight-note">"${pvp.notes}"</div>` : ''}
+        </div>
+      </div>
+
+      <div class="gr-card-footer">
+        <button class="btn-gr-action btn-gr-ask" title="Consult F.E.L.I.C.I.A. on this weapon">
+          <span>🗣️ Consult F.E.L.I.C.I.A.</span>
+        </button>
+        <button class="btn-gr-action btn-gr-edit" title="Edit God Roll info">
+          <span>✏️ Edit</span>
+        </button>
+      </div>
+    `;
+
+    card.querySelector('.btn-gr-ask').addEventListener('click', () => {
+      switchTab('tab-comms');
+      const prompt = `What are the God Rolls and best perk combinations for '${weapon.name}' (${weapon.slot} ${weapon.element} ${weapon.type})? How should I build around it for PVE and PVP?`;
+      const input = document.getElementById('chatInput');
+      if (input) input.value = prompt;
+      sendChatMessage(prompt);
+    });
+
+    card.querySelector('.btn-gr-edit').addEventListener('click', () => {
+      pendingGodRollData = weapon;
+      promptSecurityClearance(
+        'edit_godroll',
+        'RESTRICTED ARMORY ROLL EDIT',
+        `Enter Clan Authorization Code (3354242) to edit the verified god roll data for '${weapon.name}'.`
+      );
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+function openEditGodRollModal(weapon = null) {
+  const modal = document.getElementById('modalEditGodRoll');
+  const titleEl = document.getElementById('editGodRollModalTitle');
+  if (!modal) return;
+
+  document.getElementById('editRollId').value = weapon?.id || '';
+  document.getElementById('rollWeaponName').value = weapon?.name || '';
+  document.getElementById('rollSource').value = weapon?.source || '';
+  document.getElementById('rollSlot').value = weapon?.slot || 'Kinetic';
+  document.getElementById('rollType').value = weapon?.type || 'Hand Cannon';
+  document.getElementById('rollElement').value = weapon?.element || 'Kinetic';
+  document.getElementById('rollFrame').value = weapon?.frame || '';
+
+  document.getElementById('pveBarrel').value = weapon?.pve?.barrel || '';
+  document.getElementById('pveMag').value = weapon?.pve?.mag || '';
+  document.getElementById('pvePerk1').value = weapon?.pve?.perk1 || '';
+  document.getElementById('pvePerk2').value = weapon?.pve?.perk2 || '';
+  document.getElementById('pveMasterwork').value = weapon?.pve?.masterwork || '';
+  document.getElementById('pveNotes').value = weapon?.pve?.notes || '';
+
+  document.getElementById('pvpBarrel').value = weapon?.pvp?.barrel || '';
+  document.getElementById('pvpMag').value = weapon?.pvp?.mag || '';
+  document.getElementById('pvpPerk1').value = weapon?.pvp?.perk1 || '';
+  document.getElementById('pvpPerk2').value = weapon?.pvp?.perk2 || '';
+  document.getElementById('pvpMasterwork').value = weapon?.pvp?.masterwork || '';
+  document.getElementById('pvpNotes').value = weapon?.pvp?.notes || '';
+
+  if (titleEl) {
+    titleEl.textContent = weapon ? `✦ WEAPON ARMORY // EDIT '${weapon.name.toUpperCase()}'` : '✦ WEAPON ARMORY // ADD NEW WEAPON ROLL';
+  }
+
+  sfx.playChirp();
+  modal.showModal();
+}
+
+/* ==========================================================================
    NAVIGATION & TAB SWITCHING WITH CLAN PASSCODE SECURITY
    ========================================================================== */
 const CLAN_SECURITY_PASSCODE = '3354242';
@@ -1052,6 +1230,7 @@ function promptSecurityClearance(action, subtitle, desc) {
   if (isClanAuthorized()) {
     if (action === 'settings') switchTabDirect('tab-settings');
     if (action === 'add_wiki') document.getElementById('modalAddWiki')?.showModal();
+    if (action === 'edit_godroll') openEditGodRollModal(pendingGodRollData);
     return;
   }
   pendingSecurityAction = action;
@@ -1441,6 +1620,8 @@ document.addEventListener('DOMContentLoaded', () => {
           switchTabDirect('tab-settings');
         } else if (action === 'add_wiki') {
           document.getElementById('modalAddWiki')?.showModal();
+        } else if (action === 'edit_godroll') {
+          openEditGodRollModal(pendingGodRollData);
         }
       } else {
         try { sfx.playAlert(); } catch(e) {}
@@ -2034,6 +2215,176 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================================
+  // GOD ROLL FINDER // ARMORY EVENT LISTENERS
+  // =========================================================================
+  const btnViewGodRolls = document.getElementById('btnViewGodRolls');
+  const btnViewLoadouts = document.getElementById('btnViewLoadouts');
+  const godrollsContainer = document.getElementById('godrollsContainer');
+  const loadoutsContainer = document.getElementById('loadoutsContainer');
+  const btnOpenAddGodRoll = document.getElementById('btnOpenAddGodRoll');
+  const btnOpenAddBuild = document.getElementById('btnOpenAddBuild');
+  const godRollSearchInput = document.getElementById('godRollSearchInput');
+  const btnClearGodRollSearch = document.getElementById('btnClearGodRollSearch');
+  const typeFilterSelect = document.getElementById('typeFilterSelect');
+  const modalEditGodRoll = document.getElementById('modalEditGodRoll');
+  const formEditGodRoll = document.getElementById('formEditGodRoll');
+  const btnCloseEditGodRoll = document.getElementById('btnCloseEditGodRoll');
+  const btnCancelEditGodRoll = document.getElementById('btnCancelEditGodRoll');
+
+  // View switchers (God Rolls vs Saved Loadouts)
+  if (btnViewGodRolls && btnViewLoadouts) {
+    btnViewGodRolls.addEventListener('click', () => {
+      sfx.playChirp();
+      btnViewGodRolls.classList.add('active');
+      btnViewLoadouts.classList.remove('active');
+      if (godrollsContainer) godrollsContainer.style.display = 'flex';
+      if (loadoutsContainer) loadoutsContainer.style.display = 'none';
+      if (btnOpenAddGodRoll) btnOpenAddGodRoll.style.display = 'inline-flex';
+      if (btnOpenAddBuild) btnOpenAddBuild.style.display = 'none';
+      state.armoryView = 'godrolls';
+    });
+
+    btnViewLoadouts.addEventListener('click', () => {
+      sfx.playChirp();
+      btnViewLoadouts.classList.add('active');
+      btnViewGodRolls.classList.remove('active');
+      if (godrollsContainer) godrollsContainer.style.display = 'none';
+      if (loadoutsContainer) loadoutsContainer.style.display = 'block';
+      if (btnOpenAddGodRoll) btnOpenAddGodRoll.style.display = 'none';
+      if (btnOpenAddBuild) btnOpenAddBuild.style.display = 'inline-flex';
+      state.armoryView = 'loadouts';
+      renderBuildsGrid();
+    });
+  }
+
+  // Open Add Weapon Roll
+  if (btnOpenAddGodRoll) {
+    btnOpenAddGodRoll.addEventListener('click', () => {
+      pendingGodRollData = null;
+      promptSecurityClearance(
+        'edit_godroll',
+        'RESTRICTED ARMORY DATA ENTRY',
+        'Enter Clan Authorization Code (3354242) to add a new verified god roll to the armory.'
+      );
+    });
+  }
+
+  // Close / Cancel Add Roll Modal
+  [btnCloseEditGodRoll, btnCancelEditGodRoll].forEach(b => {
+    if (b && modalEditGodRoll) {
+      b.addEventListener('click', () => {
+        modalEditGodRoll.close();
+      });
+    }
+  });
+
+  // Save God Roll Form Submit
+  if (formEditGodRoll) {
+    formEditGodRoll.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const rollId = document.getElementById('editRollId').value;
+      const name = document.getElementById('rollWeaponName').value.trim();
+      const source = document.getElementById('rollSource').value.trim();
+      const slot = document.getElementById('rollSlot').value;
+      const type = document.getElementById('rollType').value.trim();
+      const element = document.getElementById('rollElement').value;
+      const frame = document.getElementById('rollFrame').value.trim();
+
+      const pve = {
+        barrel: document.getElementById('pveBarrel').value.trim(),
+        mag: document.getElementById('pveMag').value.trim(),
+        perk1: document.getElementById('pvePerk1').value.trim(),
+        perk2: document.getElementById('pvePerk2').value.trim(),
+        masterwork: document.getElementById('pveMasterwork').value.trim() || 'Reload Speed',
+        notes: document.getElementById('pveNotes').value.trim()
+      };
+
+      const pvp = {
+        barrel: document.getElementById('pvpBarrel').value.trim(),
+        mag: document.getElementById('pvpMag').value.trim(),
+        perk1: document.getElementById('pvpPerk1').value.trim(),
+        perk2: document.getElementById('pvpPerk2').value.trim(),
+        masterwork: document.getElementById('pvpMasterwork').value.trim() || 'Range',
+        notes: document.getElementById('pvpNotes').value.trim()
+      };
+
+      const payload = {
+        id: rollId || undefined,
+        name,
+        source,
+        slot,
+        type,
+        element,
+        frame,
+        pve,
+        pvp
+      };
+
+      try {
+        const res = await fetch('/api/godrolls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          sfx.playReceive();
+          modalEditGodRoll.close();
+          await loadGodRolls();
+        } else {
+          alert('Failed to save god roll');
+        }
+      } catch (err) {
+        console.error('Error saving god roll:', err);
+        alert('Network error saving roll: ' + err.message);
+      }
+    });
+  }
+
+  // Live search input
+  if (godRollSearchInput) {
+    godRollSearchInput.addEventListener('input', (e) => {
+      state.godRollsFilter.search = e.target.value;
+      if (btnClearGodRollSearch) {
+        btnClearGodRollSearch.style.display = e.target.value ? 'block' : 'none';
+      }
+      renderGodRollsGrid();
+    });
+  }
+
+  if (btnClearGodRollSearch) {
+    btnClearGodRollSearch.addEventListener('click', () => {
+      if (godRollSearchInput) {
+        godRollSearchInput.value = '';
+        state.godRollsFilter.search = '';
+        btnClearGodRollSearch.style.display = 'none';
+        godRollSearchInput.focus();
+        renderGodRollsGrid();
+      }
+    });
+  }
+
+  // Slot Filter Pills
+  document.querySelectorAll('#slotFilters .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#slotFilters .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.godRollsFilter.slot = btn.dataset.slot || 'all';
+      sfx.playChirp();
+      renderGodRollsGrid();
+    });
+  });
+
+  // Weapon Type Select Filter
+  if (typeFilterSelect) {
+    typeFilterSelect.addEventListener('change', (e) => {
+      state.godRollsFilter.type = e.target.value;
+      sfx.playChirp();
+      renderGodRollsGrid();
+    });
+  }
+
+  // =========================================================================
   // FIREBASE AUTHENTICATION STATE OBSERVER
   // =========================================================================
   subscribeAuth(async (user) => {
@@ -2088,6 +2439,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initSpeechRecognition();
   loadWikiData();
+  loadGodRolls();
   loadBuilds();
   loadMobileConnectInfo();
 });
