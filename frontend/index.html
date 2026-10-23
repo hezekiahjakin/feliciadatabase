@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v8">
+  <link rel="stylesheet" href="styles.css?v=20261023_v9">
 </head>
 <body class="theme-vanguard">
 
@@ -250,33 +250,22 @@
       </div>
     </section>
 
-    <!-- TAB 3: GOD ROLL FINDER & LOADOUT VAULT -->
+    <!-- TAB 3: GOD ROLL FINDER -->
     <section class="tab-pane" id="tab-vault">
       <div class="vault-layout">
         <div class="vault-header-card">
           <div class="vault-header-titles">
-            <h2 class="section-title">🎯 GOD ROLL FINDER // VANGUARD ARMORY</h2>
+            <h2 class="section-title">🎯 GOD ROLL FINDER</h2>
             <p class="section-sub">Search meta Destiny 2 weapons, inspect verified PVE and PVP God Rolls, and consult F.E.L.I.C.I.A. on weapon perk synergy.</p>
-          </div>
-          <div class="armory-view-switchers">
-            <button class="btn-subnav active" id="btnViewGodRolls" data-view="godrolls">
-              <span class="icon">🎯</span> God Rolls
-            </button>
-            <button class="btn-subnav" id="btnViewLoadouts" data-view="loadouts">
-              <span class="icon">🛡️</span> Saved Loadouts
-            </button>
           </div>
           <div class="vault-header-actions">
             <button class="btn-tactical btn-secondary" id="btnOpenAddGodRoll">
               <span class="icon">➕</span> Add / Edit Weapon Roll
             </button>
-            <button class="btn-tactical btn-primary" id="btnOpenAddBuild" style="display:none;">
-              <span class="icon">🛡️</span> Save New Loadout
-            </button>
           </div>
         </div>
 
-        <!-- GOD ROLLS VIEW (DEFAULT) -->
+        <!-- GOD ROLLS VIEW -->
         <div class="godrolls-container" id="godrollsContainer">
           <!-- Search & Filter Controls -->
           <div class="godrolls-filter-bar">
@@ -325,13 +314,6 @@
           <!-- God Rolls Grid -->
           <div class="godrolls-grid" id="godrollsGrid">
             <!-- Populated dynamically -->
-          </div>
-        </div>
-
-        <!-- SAVED LOADOUTS VIEW (TOGGLED) -->
-        <div class="loadouts-container" id="loadoutsContainer" style="display:none;">
-          <div class="vault-grid" id="vaultGrid">
-            <!-- Populated dynamically with saved loadouts -->
           </div>
         </div>
 
@@ -1099,6 +1081,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v8"></script>
+  <script type="module" src="app.js?v=20261023_v9"></script>
 </body>
 </html>

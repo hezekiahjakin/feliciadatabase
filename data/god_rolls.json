@@ -1,5 +1,55 @@
 [
   {
+    "id": "roll-eyasluna-b910",
+    "name": "Eyasluna",
+    "slot": "Kinetic",
+    "type": "Hand Cannon",
+    "element": "Stasis",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Grasp of Avarice Dungeon",
+    "pve": {
+      "barrel": "Hammer Forged Rifling or Corkscrew Rifling",
+      "mag": "Ricochet Rounds or Accurized Rounds",
+      "perk1": "Firefly",
+      "perk2": "Headstone",
+      "masterwork": "Range",
+      "notes": "Headstone spawning Stasis Crystals on kills paired with the explosives of Firefly is an amazing combo for Ad Clear while having fun!"
+    },
+    "pvp": {
+      "barrel": "Hammer Forged Rifling or Corkscrew Rifling",
+      "mag": "Ricochet Rounds or Accurized Rounds",
+      "perk1": "Slideshot",
+      "perk2": "Precision Instrument",
+      "masterwork": "Range",
+      "notes": "Highly elite Hand Cannon for PVP, used by popular Content Creators like Zavalr and others! Slideshot for that reload, extra range + stability on sliding make it really easy to use in Crucible and Trials of Osiris!"
+    }
+  },
+  {
+    "id": "roll-exalted-truth-359b",
+    "name": "Exalted Truth",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Void",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Trials of Osiris",
+    "pve": {
+      "barrel": "Fluted Barrel or Corkscrew Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Destabilizing Rounds",
+      "perk2": "Repulsor Brace",
+      "masterwork": "Range",
+      "notes": "Destabilizing + Repulsor is a nasty PVE combo with Void Debuffs and Bursts giving the user an Overshield on Kills!"
+    },
+    "pvp": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Slideshot",
+      "perk2": "Precision Instrument",
+      "masterwork": "Range",
+      "notes": "Sliding with Slideshot gives a boost in range and stability, great if you don't have an exotic on to reload your gun, plus Precision Instrument for a longer range for DMG fall off is an amazing and popular combo used by Pro's in Crucible and Trials!"
+    }
+  },
+  {
     "id": "roll-fatebringer",
     "name": "Fatebringer (Timelost)",
     "slot": "Kinetic",
@@ -119,7 +169,7 @@
       "barrel": "Smallbore / Hammer-Forged",
       "mag": "Accurized Rounds",
       "perk1": "Slideshot",
-      "perk2": "Opening Shot / Eye of the Storm",
+      "perk2": "Opening Shot / Eye of the Storm / Precision Instrument",
       "masterwork": "Range",
       "notes": "Fastest feeling hand cannon in Destiny 2. Slideshot refunds ammo and boosts range + stability continuously in skirmishes."
     }
@@ -297,31 +347,6 @@
       "perk2": "Chain Reaction / Wellspring",
       "masterwork": "Velocity",
       "notes": "Disruption Break shatters enemy shields and provides a 50% kinetic damage boost to immediately clean up with a primary swap."
-    }
-  },
-  {
-    "id": "roll-turncoat",
-    "name": "Turncoat",
-    "slot": "Energy",
-    "type": "Hand Cannon",
-    "element": "Void",
-    "frame": "Adaptive Frame (140 RPM)",
-    "source": "The Pale Heart / World Drop",
-    "pve": {
-      "barrel": "Smallbore / Corkscrew Rifling",
-      "mag": "Tactical Mag / Flared Magwell",
-      "perk1": "Repulsor Brace",
-      "perk2": "Destabilizing Rounds",
-      "masterwork": "Reload Speed",
-      "notes": "The holy grail Void loop: Destabilizing Rounds makes targets volatile, and defeating them immediately grants an overshield via Repulsor Brace."
-    },
-    "pvp": {
-      "barrel": "Hammer-Forged Rifling",
-      "mag": "Ricochet Rounds",
-      "perk1": "Keep Away",
-      "perk2": "Eye of the Storm",
-      "masterwork": "Range",
-      "notes": "Crisp 140 RPM Void dueling roll with maxed out accuracy and bullet magnetism."
     }
   },
   {
@@ -672,31 +697,6 @@
       "perk2": "Opening Shot",
       "masterwork": "Handling / Range",
       "notes": "The #1 competitive Crucible energy shotgun. Threat Detector maxes handling when enemies push, and Opening Shot extends one-hit kill distance to the physical pellet cap."
-    }
-  },
-  {
-    "id": "roll-conditional-finality",
-    "name": "Conditional Finality",
-    "slot": "Kinetic",
-    "type": "Shotgun",
-    "element": "Stasis / Solar",
-    "frame": "Exotic Double-Barrel Frame",
-    "source": "Root of Nightmares Raid (Nezarec)",
-    "pve": {
-      "barrel": "Fixed Exotic (Dual Trigger)",
-      "mag": "Fixed Exotic (Alloy Magazine)",
-      "perk1": "Paracausal Pellets (Stasis Freeze)",
-      "perk2": "Paracausal Pellets (Solar Ignite)",
-      "masterwork": "Fixed Exotic",
-      "notes": "The undisputed best special weapon in the entire game. First shot freezes Unstoppable/Overload champions, second shot triggers a massive 50K+ damage Solar Ignition."
-    },
-    "pvp": {
-      "barrel": "Fixed Exotic (Dual Trigger)",
-      "mag": "Fixed Exotic (Alloy Magazine)",
-      "perk1": "Paracausal Pellets (Freeze)",
-      "perk2": "Paracausal Pellets (Ignite)",
-      "masterwork": "Fixed Exotic",
-      "notes": "Shut down Titan Ward of Dawn and Warlock Well of Radiance instantly. The Stasis shot freezes Guardians out of their supers, and the Solar shot detonates them."
     }
   },
   {

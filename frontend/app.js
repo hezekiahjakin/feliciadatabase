@@ -2215,12 +2215,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================================
-  // GOD ROLL FINDER // ARMORY EVENT LISTENERS
+  // GOD ROLL FINDER EVENT LISTENERS
   // =========================================================================
-  const btnViewGodRolls = document.getElementById('btnViewGodRolls');
-  const btnViewLoadouts = document.getElementById('btnViewLoadouts');
-  const godrollsContainer = document.getElementById('godrollsContainer');
-  const loadoutsContainer = document.getElementById('loadoutsContainer');
   const btnOpenAddGodRoll = document.getElementById('btnOpenAddGodRoll');
   const godRollSearchInput = document.getElementById('godRollSearchInput');
   const btnClearGodRollSearch = document.getElementById('btnClearGodRollSearch');
@@ -2229,32 +2225,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const formEditGodRoll = document.getElementById('formEditGodRoll');
   const btnCloseEditGodRoll = document.getElementById('btnCloseEditGodRoll');
   const btnCancelEditGodRoll = document.getElementById('btnCancelEditGodRoll');
-
-  // View switchers (God Rolls vs Saved Loadouts)
-  if (btnViewGodRolls && btnViewLoadouts) {
-    btnViewGodRolls.addEventListener('click', () => {
-      sfx.playChirp();
-      btnViewGodRolls.classList.add('active');
-      btnViewLoadouts.classList.remove('active');
-      if (godrollsContainer) godrollsContainer.style.display = 'flex';
-      if (loadoutsContainer) loadoutsContainer.style.display = 'none';
-      if (btnOpenAddGodRoll) btnOpenAddGodRoll.style.display = 'inline-flex';
-      if (btnOpenAddBuild) btnOpenAddBuild.style.display = 'none';
-      state.armoryView = 'godrolls';
-    });
-
-    btnViewLoadouts.addEventListener('click', () => {
-      sfx.playChirp();
-      btnViewLoadouts.classList.add('active');
-      btnViewGodRolls.classList.remove('active');
-      if (godrollsContainer) godrollsContainer.style.display = 'none';
-      if (loadoutsContainer) loadoutsContainer.style.display = 'block';
-      if (btnOpenAddGodRoll) btnOpenAddGodRoll.style.display = 'none';
-      if (btnOpenAddBuild) btnOpenAddBuild.style.display = 'inline-flex';
-      state.armoryView = 'loadouts';
-      renderBuildsGrid();
-    });
-  }
 
   // Open Add Weapon Roll
   if (btnOpenAddGodRoll) {
