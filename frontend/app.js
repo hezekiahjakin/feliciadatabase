@@ -1278,8 +1278,8 @@ function switchTab(tabId) {
   if (tabId === 'tab-settings' && !isClanAuthorized()) {
     promptSecurityClearance(
       'settings',
-      'RESTRICTED LOGISTICS & API CREDENTIALS',
-      'Firebase API Keys, App IDs, and the Gemini AI engine are restricted. Enter the Clan Authorization Code to access Logistics.'
+      'RESTRICTED ADMIN SETTINGS & API CREDENTIALS',
+      'Firebase API Keys, App IDs, and the Gemini AI engine are restricted. Enter the Clan Authorization Code to access Admin Settings.'
     );
     return;
   }
@@ -2402,7 +2402,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sessionStorage.removeItem('felicia_clan_auth');
       try { sfx.playAlert(); } catch(e) {}
       switchTabDirect('tab-comms');
-      alert('Clan Administrator Mode locked. Security passcode required to re-enter Logistics.');
+      alert('Clan Administrator Mode locked. Security passcode required to re-enter Admin Settings.');
     });
   }
 

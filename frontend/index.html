@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v9">
+  <link rel="stylesheet" href="styles.css?v=20261023_v10">
 </head>
 <body class="theme-vanguard">
 
@@ -33,11 +33,6 @@
       <div class="status-indicator online" id="statusPill" title="Construct Status">
         <span class="pulse-dot"></span>
         <span class="status-label">CALIBRATED // ACTIVE</span>
-      </div>
-
-      <div class="firebase-status-badge" id="firebaseBadge" title="Firebase Project: ping-vault-matrix">
-        <span class="fb-icon">🔥</span>
-        <span class="fb-text" id="firebaseStatusText">ping-vault-matrix</span>
       </div>
 
       <div class="firebase-status-badge auth-badge" id="authBadge" title="Firebase Authentication & Profile">
@@ -63,7 +58,7 @@
     <nav class="hud-nav" id="hudNav">
       <button class="nav-tab active" data-tab="tab-comms">
         <span class="nav-icon">📡</span>
-        <span class="nav-title">Comms // AI</span>
+        <span class="nav-title">AI Chat</span>
       </button>
       <button class="nav-tab" data-tab="tab-wiki">
         <span class="nav-icon">📚</span>
@@ -75,7 +70,7 @@
       </button>
       <button class="nav-tab" data-tab="tab-settings">
         <span class="nav-icon">⚙️</span>
-        <span class="nav-title">Logistics // Config</span>
+        <span class="nav-title">Admin Settings</span>
       </button>
     </nav>
 
@@ -1081,6 +1076,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v9"></script>
+  <script type="module" src="app.js?v=20261023_v10"></script>
 </body>
 </html>

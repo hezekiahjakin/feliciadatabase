@@ -59,19 +59,19 @@
     "source": "Vault of Glass Raid (Master)",
     "pve": {
       "barrel": "Corkscrew Rifling",
-      "mag": "Tactical Mag",
-      "perk1": "Explosive Payload / Rewind Rounds",
+      "mag": "Tactical Mag / Accurized Rounds",
+      "perk1": "Explosive Payload / Osmosis",
       "perk2": "Frenzy / Firefly",
-      "masterwork": "Reload Speed",
+      "masterwork": "Range",
       "notes": "Explosive Payload ignores range falloff for ad clearing. Frenzy keeps handling, reload, and damage buffed permanently in combat."
     },
     "pvp": {
-      "barrel": "Hammer-Forged Rifling",
+      "barrel": "Hammer-Forged Rifling or Corkscrew Rifling",
       "mag": "Accurized Rounds",
-      "perk1": "Explosive Payload",
-      "perk2": "Eye of the Storm / Opening Shot",
+      "perk1": "Explosive Payload / Opening Shot",
+      "perk2": "Eye of the Storm / Precision Instrument",
       "masterwork": "Range",
-      "notes": "Crucible dueling king. Explosive Payload causes severe screen shake flinch, and Eye of the Storm tightens accuracy cone under fire."
+      "notes": "Crucible dueling king. Explosive Payload causes severe screen shake flinch, and Eye of the Storm tightens accuracy cone under fire. Opening Shot is great for that first hit to break Overshields. Precision Instrument is amazing for DMG fall off distance."
     }
   },
   {
