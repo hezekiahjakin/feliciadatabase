@@ -2222,7 +2222,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const godrollsContainer = document.getElementById('godrollsContainer');
   const loadoutsContainer = document.getElementById('loadoutsContainer');
   const btnOpenAddGodRoll = document.getElementById('btnOpenAddGodRoll');
-  const btnOpenAddBuild = document.getElementById('btnOpenAddBuild');
   const godRollSearchInput = document.getElementById('godRollSearchInput');
   const btnClearGodRollSearch = document.getElementById('btnClearGodRollSearch');
   const typeFilterSelect = document.getElementById('typeFilterSelect');
