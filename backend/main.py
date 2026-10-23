@@ -91,16 +91,21 @@ EXPERTISE & DOMAIN KNOWLEDGE:
   * Weapons: Exotics, Legendaries, god rolls, weapon crafting, enhanced perks, frame archetypes across Kinetic, Energy, and Heavy weapon slots.
   * Catalysts ('catties'): How to acquire them, quest steps (e.g. Witherhoard's Filthy Lucre), completion objectives, and exact perk upgrades (e.g. Auto-Loading Holster on Witherhoard, +2 rockets on Gjallarhorn).
   * Subclasses: Solar 3.0, Arc 3.0, Void 3.0, Stasis, Strand, and Prismatic combinations (Aspects, Fragments, Supers, Melees, Grenades).
-  * Armor Exotics & Stats Evaluation:
-    - Health (Resilience): Tier 10 (100) is non-negotiable for 30% damage resistance in PVE/Grandmasters.
-    - Melee (Strength): Crucial for melee-centric builds (e.g., Synthoceps, Sunbracers triggers, Combination Blow).
-    - Grenade (Discipline): High uptime for ability loops (Touch of Flame, Bleak Watchers, Vortex grenades).
-    - Super (Intellect): Tier 3-5 is usually sufficient in modern PVE due to weapon orb generation.
-    - Class (Class Ability / Recovery): Dictates Rift, Barricade, or Dodge cooldowns and health regeneration speed.
+  * Modern Destiny 2 Stat System (CRITICAL INSTRUCTION):
+    - Destiny 2 uses a modern 6-stat system: Health, Melee, Grenade, Super, Class, and Weapons.
+    - Stats scale from 0 to 200 (NOT capped at 100). 100+ is a solid baseline for endgame, while primary focus stats push to 150+ or the 200 maximum.
+    - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "(Resilience)", "(Strength)", "(Discipline)", "(Intellect)", "(Recovery)", or "(Mobility)". Refer ONLY to the modern stat names: Health, Melee, Grenade, Super, Class, Weapons.
+    - Health: Governs maximum health pool and damage resistance in PVE/Grandmasters. 100+ is mandatory for endgame survivability, pushing towards 150-200 for peak tankiness.
+    - Melee: Governs melee damage and melee ability cooldown. Essential for melee builds (e.g. Synthoceps, Combination Blow, Consecration).
+    - Grenade: Governs grenade damage and grenade ability cooldown for ability-loop builds.
+    - Super: Governs super ability damage and super regeneration rate.
+    - Class: Governs class ability cooldown (Barricade, Rift, Dodge) and class-specific benefits.
+    - Weapons: Governs weapon handling, reload speed, stability, and firearm combat effectiveness.
   * Endgame Fireteam Tactics: Grandmaster Nightfalls, Raids, Dungeons, Champion counters (Anti-Barrier, Overload, Unstoppable verbs and weapons), boss DPS rotations, and survivability loops.
 
 RESPONSE GUIDELINES:
-- When evaluating or crafting builds, always assess the 5 core stat categories (Health, Melee, Grenade, Super, Class) and the 3 weapon slots (Kinetic, Energy, Heavy).
+- When evaluating or crafting builds, always assess the 6 core stats (Health, Melee, Grenade, Super, Class, Weapons) on the 0-200 scale and the 3 weapon slots (Kinetic, Energy, Heavy).
+- NEVER mention legacy stat names in parentheses.
 - When asked for builds or catalyst advice, give structured, clear, and actionable steps with bullet points.
 - If the user asks about an exotic catalyst ('catty'), explain: 1) Where to get it, 2) Objectives to master it (with efficient farm locations like Shuro Chi or Grasp loot cave), and 3) The exact perks it grants.
 - Ground your answers in the provided knowledge base snippets whenever available.
@@ -316,32 +321,35 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
         )
 
     # 2. Build or Loadout Review with Stats & Weapons
-    if any(k in q_lower for k in ["build", "loadout", "review", "resilience", "health", "stats"]):
+    if any(k in q_lower for k in ["build", "loadout", "review", "health", "stats", "weapons"]):
         advice_points = []
         
-        # Stat analysis
-        if "tier 10" in q_lower or "100" in q_lower:
-            advice_points.append("✦ **Health (Resilience):** Spot on having your resilience maxed. Tier 10 grants 30% flat damage resistance, which is mandatory for staying alive in endgame activities.")
-        else:
-            advice_points.append("✦ **Health (Resilience):** Watch your Resilience. In Grandmasters and Master dungeons, anything below Tier 10 (100) is a death sentence. Prioritize chest and leg armor mods to hit that 30% DR threshold.")
+        # Stat analysis (0-200 scale, modern 6 stats, NO legacy parenthetical terms)
+        advice_points.append("✦ **Health:** Ensure your Health is dialed in at 100+ minimum for endgame activities, pushing towards 150–200 for maximum survivability against Grandmaster and Raid burst damage.")
 
-        if "grenade" in q_lower or "discipline" in q_lower:
-            advice_points.append("✦ **Grenade (Discipline):** High discipline keeps your ability loops cycling. Pair this with Firepower or Heavy Handed on your arms for consistent orb generation.")
+        if "grenade" in q_lower:
+            advice_points.append("✦ **Grenade:** High Grenade investment keeps your ability loops cycling rapidly. Pair with Firepower on your gauntlets to churn out Orbs of Power for the squad.")
 
-        if "melee" in q_lower or "strength" in q_lower:
-            advice_points.append("✦ **Melee (Strength):** Solid strength tier if you rely on powered melee triggers (like Sunbracers celestial fire or Titan Consecration). Otherwise, you can afford to redistribute some points into Recovery.")
+        if "melee" in q_lower:
+            advice_points.append("✦ **Melee:** Strong Melee stat investment pays off massively on melee-driven engines (like Combination Blow or Consecration). Push it past 100+ to accelerate cooldowns and amplify impact.")
 
-        if "class" in q_lower or "recovery" in q_lower:
-            advice_points.append("✦ **Class & Recovery:** Keeps your Rift, Barricade, or Dodge uptime sharp. For Warlocks and Titans, Recovery dictates health regen delay, so do not let it drop below Tier 6.")
+        if "super" in q_lower:
+            advice_points.append("✦ **Super:** Dialing in your Super stat cuts your cooldown dramatically and empowers high-impact DPS supers for raid damage phases.")
+
+        if "class" in q_lower:
+            advice_points.append("✦ **Class:** Keeps your Class ability uptime (Rift, Barricade, or Dodge) snappy so your utility loops never stall.")
+
+        if "weapon" in q_lower:
+            advice_points.append("✦ **Weapons:** Investing in the Weapons stat tightens your weapon handling, reload speeds, and firearm lethality across Kinetic, Energy, and Heavy slots.")
 
         # Weapons synergy
-        weapon_notes = "✦ **Weapons Arsenal:** Ensure your Kinetic, Energy, and Heavy loadout covers the Champion counters (Overload, Anti-Barrier, Unstoppable). Never double up on primary weapons in Master or Grandmaster activities—always pack at least one high-impact Special weapon (like a Fusion or Rocket Sidearm) alongside your heavy boss burst option."
+        weapon_notes = "✦ **Weapons Arsenal:** Ensure your Kinetic, Energy, and Heavy loadout covers required Champion counters (Overload, Anti-Barrier, Unstoppable). Never run double primary in Master or Grandmaster activities—always pack at least one high-impact Special weapon alongside your heavy boss burst option."
 
         return (
             f"All right, Guardian. Let us review this {subclass} {guardian_class} setup tailored for {activity} with a focus on {tactical_inquiry}.\n\n"
             f"{chr(10).join(advice_points)}\n\n"
             f"{weapon_notes}\n\n"
-            f"No nonsense here—the foundation is solid. Get your surges aligned on your boots and we are ready for the drop. Grand!"
+            f"No nonsense here—the foundation is solid on the modern 200-scale stat system. Get your surges aligned on your boots and we are ready for the drop. Grand!"
         )
 
     # 3. Default contextual response from matching wiki
@@ -355,7 +363,7 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
 
     return (
         f"All right, Guardian. F.E.L.I.C.I.A. monitoring comms for {guardian_class} operations in {activity}. "
-        f"Whether you need to fine-tune your stat tiers (Health, Melee, Grenade, Super, Class), plan weapon rolls, or check catalyst drop locations, I am ready. What is next on the board?"
+        f"Whether you need to fine-tune your stat ratings (Health, Melee, Grenade, Super, Class, Weapons) on the 200 scale, plan weapon rolls, or check catalyst drop locations, I am ready. What is next on the board?"
     )
 
 # Firebase RTDB helper

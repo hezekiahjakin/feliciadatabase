@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v5">
+  <link rel="stylesheet" href="styles.css?v=20261023_v6">
 </head>
 <body class="theme-vanguard">
 
@@ -529,58 +529,68 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
         <div class="stat-sliders-section">
           <div class="section-badge-bar">
             <span class="bar-tag">STAT ALLOCATION</span>
-            <span class="bar-desc">Target Tier ratings (0–100 / Tier 1–10)</span>
+            <span class="bar-desc">Modern Stat System (0–200 scaling)</span>
           </div>
           
           <div class="stat-sliders-grid">
-            <!-- Health (Resilience) -->
+            <!-- Health -->
             <div class="stat-slider-card stat-health">
               <div class="stat-card-header">
-                <span class="stat-name">❤️ HEALTH (RESILIENCE)</span>
-                <span class="stat-tier" id="tierHealthBadge">Tier 10 (100)</span>
+                <span class="stat-name">❤️ HEALTH</span>
+                <span class="stat-tier" id="tierHealthBadge">100 / 200</span>
               </div>
-              <input type="range" id="statHealth" min="0" max="100" step="5" value="100" class="stat-range range-health">
-              <div class="stat-meta-note">Tier 10 grants maximum 30% PVE damage reduction.</div>
+              <input type="range" id="statHealth" min="0" max="200" step="5" value="100" class="stat-range range-health">
+              <div class="stat-meta-note">Damage resistance and survivability scaling up to 200.</div>
             </div>
 
-            <!-- Melee (Strength) -->
+            <!-- Melee -->
             <div class="stat-slider-card stat-melee">
               <div class="stat-card-header">
-                <span class="stat-name">⚡ MELEE (STRENGTH)</span>
-                <span class="stat-tier" id="tierMeleeBadge">Tier 6 (60)</span>
+                <span class="stat-name">👊 MELEE</span>
+                <span class="stat-tier" id="tierMeleeBadge">60 / 200</span>
               </div>
-              <input type="range" id="statMelee" min="0" max="100" step="5" value="60" class="stat-range range-melee">
-              <div class="stat-meta-note">Powers up powered melee cooldowns.</div>
+              <input type="range" id="statMelee" min="0" max="200" step="5" value="60" class="stat-range range-melee">
+              <div class="stat-meta-note">Powers up melee cooldown and ability damage up to 200.</div>
             </div>
 
-            <!-- Grenade (Discipline) -->
+            <!-- Grenade -->
             <div class="stat-slider-card stat-grenade">
               <div class="stat-card-header">
-                <span class="stat-name">💣 GRENADE (DISCIPLINE)</span>
-                <span class="stat-tier" id="tierGrenadeBadge">Tier 10 (100)</span>
+                <span class="stat-name">💣 GRENADE</span>
+                <span class="stat-tier" id="tierGrenadeBadge">100 / 200</span>
               </div>
-              <input type="range" id="statGrenade" min="0" max="100" step="5" value="100" class="stat-range range-grenade">
-              <div class="stat-meta-note">Max uptime for vortex, solar, or storm grenades.</div>
+              <input type="range" id="statGrenade" min="0" max="200" step="5" value="100" class="stat-range range-grenade">
+              <div class="stat-meta-note">Max uptime for vortex, solar, or storm grenades up to 200.</div>
             </div>
 
-            <!-- Super (Intellect) -->
+            <!-- Super -->
             <div class="stat-slider-card stat-super">
               <div class="stat-card-header">
-                <span class="stat-name">✨ SUPER (INTELLECT)</span>
-                <span class="stat-tier" id="tierSuperBadge">Tier 4 (40)</span>
+                <span class="stat-name">✨ SUPER</span>
+                <span class="stat-tier" id="tierSuperBadge">40 / 200</span>
               </div>
-              <input type="range" id="statSuper" min="0" max="100" step="5" value="40" class="stat-range range-super">
-              <div class="stat-meta-note">Super passive cooldown tier.</div>
+              <input type="range" id="statSuper" min="0" max="200" step="5" value="40" class="stat-range range-super">
+              <div class="stat-meta-note">Super passive recharge and generation scaling up to 200.</div>
             </div>
 
-            <!-- Class Ability (Recovery) -->
+            <!-- Class Ability -->
             <div class="stat-slider-card stat-class">
               <div class="stat-card-header">
-                <span class="stat-name">🛡️ CLASS (RECOVERY)</span>
-                <span class="stat-tier" id="tierClassBadge">Tier 8 (80)</span>
+                <span class="stat-name">🛡️ CLASS</span>
+                <span class="stat-tier" id="tierClassBadge">80 / 200</span>
               </div>
-              <input type="range" id="statClass" min="0" max="100" step="5" value="80" class="stat-range range-class">
-              <div class="stat-meta-note">Class ability recharge (Rift / Barricade / Dodge) &amp; health regen speed.</div>
+              <input type="range" id="statClass" min="0" max="200" step="5" value="80" class="stat-range range-class">
+              <div class="stat-meta-note">Class ability uptime (Rift / Barricade / Dodge) up to 200.</div>
+            </div>
+
+            <!-- Weapons -->
+            <div class="stat-slider-card stat-weapons">
+              <div class="stat-card-header">
+                <span class="stat-name">🎯 WEAPONS</span>
+                <span class="stat-tier" id="tierWeaponsBadge">100 / 200</span>
+              </div>
+              <input type="range" id="statWeapons" min="0" max="200" step="5" value="100" class="stat-range range-weapons">
+              <div class="stat-meta-note">Weapon handling, reload speed, and offensive output up to 200.</div>
             </div>
           </div>
         </div>
@@ -895,6 +905,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v5"></script>
+  <script type="module" src="app.js?v=20261023_v6"></script>
 </body>
 </html>

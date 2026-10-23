@@ -952,27 +952,31 @@ function renderBuildsGrid() {
         <span class="badge-cat">${gClass}</span>
       </div>
 
-      <!-- 5 Stat Categories HUD Chips -->
+      <!-- 6 Stat Categories HUD Chips (0-200) -->
       <div class="vault-stats-chips">
         <div class="vault-stat-cell">
           <span class="stat-cell-lbl">HEALTH</span>
-          <span class="stat-cell-val health">T${Math.floor((stats.health ?? 100)/10)} <span style="font-size:10px;">(${stats.health ?? 100})</span></span>
+          <span class="stat-cell-val health">${stats.health ?? 100}</span>
         </div>
         <div class="vault-stat-cell">
           <span class="stat-cell-lbl">MELEE</span>
-          <span class="stat-cell-val melee">T${Math.floor((stats.melee ?? 60)/10)} <span style="font-size:10px;">(${stats.melee ?? 60})</span></span>
+          <span class="stat-cell-val melee">${stats.melee ?? 60}</span>
         </div>
         <div class="vault-stat-cell">
           <span class="stat-cell-lbl">GRENADE</span>
-          <span class="stat-cell-val grenade">T${Math.floor((stats.grenade ?? 100)/10)} <span style="font-size:10px;">(${stats.grenade ?? 100})</span></span>
+          <span class="stat-cell-val grenade">${stats.grenade ?? 100}</span>
         </div>
         <div class="vault-stat-cell">
           <span class="stat-cell-lbl">SUPER</span>
-          <span class="stat-cell-val super">T${Math.floor((stats.super ?? 40)/10)} <span style="font-size:10px;">(${stats.super ?? 40})</span></span>
+          <span class="stat-cell-val super">${stats.super ?? 40}</span>
         </div>
         <div class="vault-stat-cell">
           <span class="stat-cell-lbl">CLASS</span>
-          <span class="stat-cell-val class">T${Math.floor((stats.classStat ?? 80)/10)} <span style="font-size:10px;">(${stats.classStat ?? 80})</span></span>
+          <span class="stat-cell-val class">${stats.classStat ?? 80}</span>
+        </div>
+        <div class="vault-stat-cell">
+          <span class="stat-cell-lbl">WEAPONS</span>
+          <span class="stat-cell-val weapons">${stats.weapons ?? 100}</span>
         </div>
       </div>
 
@@ -1006,7 +1010,7 @@ function renderBuildsGrid() {
 
     card.querySelector('.btn-equip-chat').addEventListener('click', () => {
       switchTab('tab-comms');
-      const prompt = `Review my loadout: '${buildTitle}' (${gClass} ${subclass} with ${exotic}). Stats: Health ${stats.health}, Melee ${stats.melee}, Grenade ${stats.grenade}, Super ${stats.super}, Class ${stats.classStat}. Weapons: Kinetic ${kineticName}, Energy ${energyName}, Heavy ${heavyName}. Evaluate my stat distribution and weapon synergy!`;
+      const prompt = `Review my loadout: '${buildTitle}' (${gClass} ${subclass} with ${exotic}). Stats: Health ${stats.health}, Melee ${stats.melee}, Grenade ${stats.grenade}, Super ${stats.super}, Class ${stats.classStat}, Weapons ${stats.weapons || 100}. Weapons: Kinetic ${kineticName}, Energy ${energyName}, Heavy ${heavyName}. Evaluate my stat distribution (scaling 0-200) and weapon synergy!`;
       const input = document.getElementById('chatInput');
       if (input) input.value = prompt;
       sendChatMessage(prompt);
@@ -1513,13 +1517,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCancelAddBuild = document.getElementById('btnCancelAddBuild');
   const formAddBuild = document.getElementById('formAddBuild');
 
-  // Live Stat Slider Badges
+  // Live Stat Slider Badges (0-200 modern system)
   const statSliders = [
     { inputId: 'statHealth', badgeId: 'tierHealthBadge' },
     { inputId: 'statMelee', badgeId: 'tierMeleeBadge' },
     { inputId: 'statGrenade', badgeId: 'tierGrenadeBadge' },
     { inputId: 'statSuper', badgeId: 'tierSuperBadge' },
-    { inputId: 'statClass', badgeId: 'tierClassBadge' }
+    { inputId: 'statClass', badgeId: 'tierClassBadge' },
+    { inputId: 'statWeapons', badgeId: 'tierWeaponsBadge' }
   ];
 
   statSliders.forEach(s => {
@@ -1528,8 +1533,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el && badge) {
       el.addEventListener('input', () => {
         const val = parseInt(el.value);
-        const tier = Math.floor(val / 10);
-        badge.textContent = `Tier ${tier} (${val})`;
+        badge.textContent = `${val} / 200`;
       });
     }
   });
@@ -1551,6 +1555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const grenadeVal = parseInt(document.getElementById('statGrenade')?.value || 100);
         const superVal = parseInt(document.getElementById('statSuper')?.value || 40);
         const classVal = parseInt(document.getElementById('statClass')?.value || 80);
+        const weaponsVal = parseInt(document.getElementById('statWeapons')?.value || 100);
 
         const kineticWeapon = {
           name: document.getElementById('buildKinetic')?.value || 'Primary Weapon',
@@ -1587,7 +1592,8 @@ document.addEventListener('DOMContentLoaded', () => {
             melee: meleeVal,
             grenade: grenadeVal,
             super: superVal,
-            classStat: classVal
+            classStat: classVal,
+            weapons: weaponsVal
           },
           weapons: {
             kinetic: kineticWeapon,

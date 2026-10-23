@@ -218,8 +218,8 @@ export async function updateUserCallsign(newDisplayName) {
 
 /* ==========================================================================
    CLOUD FIRESTORE // USER LOADOUTS & BUILD CRAFTING
-   Tracking: Health (Resilience), Melee (Strength), Grenade (Discipline),
-             Super (Intellect), Class (Recovery/Ability), and Weapons.
+   Tracking modern 6-stat system (0-200 scale):
+   Health, Melee, Grenade, Super, Class, and Weapons.
    ========================================================================== */
 
 export async function getFirestoreLoadouts(userId) {
@@ -251,13 +251,14 @@ export async function saveFirestoreLoadout(userId, loadoutData) {
     subclass: loadoutData.subclass || "Solar 3.0",
     exoticArmor: loadoutData.exoticArmor || loadoutData.exotic_armor || "None",
     
-    // Detailed Stat Categories (Health, Melee, Grenade, Super, Class)
+    // Modern Stat System (Health, Melee, Grenade, Super, Class, Weapons) scaling 0-200
     stats: {
-      health: Number(loadoutData.stats?.health ?? loadoutData.health ?? 100),    // Resilience (Tier 1-10 / 0-100)
-      melee: Number(loadoutData.stats?.melee ?? loadoutData.melee ?? 60),        // Strength
-      grenade: Number(loadoutData.stats?.grenade ?? loadoutData.grenade ?? 100), // Discipline
-      super: Number(loadoutData.stats?.super ?? loadoutData.super ?? 40),        // Intellect
-      classStat: Number(loadoutData.stats?.classStat ?? loadoutData.classStat ?? 80) // Recovery/Class
+      health: Number(loadoutData.stats?.health ?? loadoutData.health ?? 100),
+      melee: Number(loadoutData.stats?.melee ?? loadoutData.melee ?? 60),
+      grenade: Number(loadoutData.stats?.grenade ?? loadoutData.grenade ?? 100),
+      super: Number(loadoutData.stats?.super ?? loadoutData.super ?? 40),
+      classStat: Number(loadoutData.stats?.classStat ?? loadoutData.classStat ?? 80),
+      weapons: Number(loadoutData.stats?.weapons ?? loadoutData.weapons ?? 100)
     },
 
     // Weapons (Kinetic, Energy, Heavy)

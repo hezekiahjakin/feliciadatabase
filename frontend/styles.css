@@ -1740,6 +1740,10 @@ input:checked + .toggle-slider:before {
   background: #A855F7;
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
 }
+.range-weapons::-webkit-slider-thumb {
+  background: #EAB308;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.8);
+}
 
 /* Weapons Arsenal */
 .weapons-section {
@@ -2128,7 +2132,7 @@ input:checked + .toggle-slider:before {
 
 .vault-stats-chips {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   background: rgba(7, 10, 15, 0.8);
   padding: 8px;
@@ -2162,6 +2166,7 @@ input:checked + .toggle-slider:before {
 .stat-cell-val.grenade{ color: #10B981; }
 .stat-cell-val.super  { color: #EF4444; }
 .stat-cell-val.class  { color: #A855F7; }
+.stat-cell-val.weapons{ color: #EAB308; }
 
 .vault-weapons-summary {
   display: flex;
