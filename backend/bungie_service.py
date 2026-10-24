@@ -33,6 +33,7 @@ BUCKET_CHEST = 14239492
 BUCKET_LEGS = 20886954
 BUCKET_CLASS_ITEM = 1585787867
 BUCKET_SUBCLASS = 3284755031
+BUCKET_SEASONAL_ARTIFACT = 1506418338
 BUCKET_VAULT_GENERAL = 138197802
 BUCKET_POSTMASTER = 215593132
 
@@ -50,7 +51,11 @@ ARMOR_BUCKETS = {
     BUCKET_CLASS_ITEM: "Class Armor",
 }
 
-ALL_GEAR_BUCKETS = {**WEAPON_BUCKETS, **ARMOR_BUCKETS}
+ARTIFACT_BUCKETS = {
+    BUCKET_SEASONAL_ARTIFACT: "Artifact",
+}
+
+ALL_GEAR_BUCKETS = {**WEAPON_BUCKETS, **ARMOR_BUCKETS, **ARTIFACT_BUCKETS}
 
 DAMAGE_TYPE_MAP = {
     0: "Kinetic",
@@ -526,12 +531,13 @@ def _enrich_item(
         return None
 
     item_type = d.get("itemType", 0)
-    # 3 = Weapon, 2 = Armor
-    if item_type not in (2, 3):
+    equip_bucket = int(d.get("bucketTypeHash", 0))
+    # 3 = Weapon, 2 = Armor, 28 = Seasonal Artifact
+    is_artifact = (item_type == 28) or (equip_bucket == BUCKET_SEASONAL_ARTIFACT)
+    if item_type not in (2, 3) and not is_artifact:
         return None
 
-    equip_bucket = int(d.get("bucketTypeHash", 0))
-    if equip_bucket not in ALL_GEAR_BUCKETS:
+    if equip_bucket not in ALL_GEAR_BUCKETS and not is_artifact:
         return None
 
     instance_id = str(raw_item.get("itemInstanceId", ""))
@@ -542,8 +548,15 @@ def _enrich_item(
     element = DAMAGE_TYPE_MAP.get(int(dmg_enum), "Kinetic")
     power = inst.get("primaryStat", {}).get("value", 0)
 
-    category = "Weapon" if item_type == 3 else "Armor"
-    slot_name = ALL_GEAR_BUCKETS.get(equip_bucket, "Gear")
+    if is_artifact:
+        category = "Artifact"
+        slot_name = "Artifact"
+    elif item_type == 3:
+        category = "Weapon"
+        slot_name = ALL_GEAR_BUCKETS.get(equip_bucket, "Kinetic")
+    else:
+        category = "Armor"
+        slot_name = ALL_GEAR_BUCKETS.get(equip_bucket, "Helmet")
     tier_name = d.get("tierTypeName", "Legendary")
 
     # Parse sockets (Intrinsic frame, Perks, Masterwork, Mods)
@@ -715,6 +728,228 @@ def _enrich_item(
     }
 
 
+_compendium_sets_cache: Optional[List[dict]] = None
+
+
+def _get_compendium_armor_sets() -> List[dict]:
+    global _compendium_sets_cache
+    if _compendium_sets_cache is not None:
+        return _compendium_sets_cache
+    comp_path = os.path.join(DATA_DIR, "compendium_db.json")
+    sets_list: List[dict] = []
+    if os.path.exists(comp_path):
+        try:
+            with open(comp_path, "r", encoding="utf-8") as f:
+                db = json.load(f)
+                sets_list = db.get("armor_sets", []) or []
+        except Exception:
+            sets_list = []
+    _compendium_sets_cache = sets_list
+    return _compendium_sets_cache
+
+
+def match_compendium_armor_set(item_name: str, item_desc: str = "") -> Optional[dict]:
+    sets = _get_compendium_armor_sets()
+    name_low = (item_name or "").lower()
+    desc_low = (item_desc or "").lower()
+
+    for s in sets:
+        s_name = s.get("name", "")
+        s_low = s_name.lower()
+        if s_low in name_low or s_low in desc_low:
+            return s
+        if s_name == "CODA" and "(coda)" in name_low:
+            return s
+        if s_name == "Crota's Memory" and any(k in name_low for k in ("deathsinger", "willbreaker", "oversoul", "crota")):
+            return s
+        if s_name == "Atheon's Memory" and any(k in name_low for k in ("kabr", "façade", "facade", "prime zealot", "hezen", "vault of glass", "atheon")):
+            return s
+        if s_name == "Oryx's Memory" and any(k in name_low for k in ("harrowed", "darkhollow", "warpriest", "mouth of ur", "oryx")):
+            return s
+        if s_name == "TM Custom" and "tm-" in name_low:
+            return s
+        if s_name == "Kentarch 3" and any(k in name_low for k in ("kentarch", "divisive")):
+            return s
+
+    return None
+
+
+def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int, dict], sockets_map: dict) -> dict:
+    super_info = None
+    aspects = []
+    fragments = []
+    melee_info = None
+    grenade_info = None
+    class_ability_info = None
+    movement_info = None
+
+    seen_hashes = set()
+    candidate_hashes: List[int] = []
+
+    for ph in plug_hashes or []:
+        if ph and int(ph) not in seen_hashes:
+            seen_hashes.add(int(ph))
+            candidate_hashes.append(int(ph))
+
+    if sub_iid:
+        for sk in sockets_map.get(sub_iid, {}).get("sockets", []):
+            sph = sk.get("plugHash")
+            if sph and int(sph) not in seen_hashes:
+                seen_hashes.add(int(sph))
+                candidate_hashes.append(int(sph))
+
+    for ph in candidate_hashes:
+        pdef = defs.get(ph)
+        if not pdef or not pdef.get("name"):
+            continue
+        pname = pdef["name"]
+        pname_low = pname.lower()
+        pcat = pdef.get("plugCategoryIdentifier", "").lower()
+        if "empty" in pname_low or "default ornament" in pname_low:
+            continue
+
+        item_repr = {
+            "name": pname,
+            "icon": pdef.get("icon", ""),
+            "description": pdef.get("description", ""),
+        }
+
+        if "supers" in pcat and not super_info:
+            super_info = item_repr
+        elif "aspects" in pcat:
+            if not any(a["name"] == pname for a in aspects):
+                aspects.append(item_repr)
+        elif "fragments" in pcat:
+            if not any(f["name"] == pname for f in fragments):
+                fragments.append(item_repr)
+        elif "melee" in pcat and not melee_info:
+            melee_info = item_repr
+        elif "grenades" in pcat and not grenade_info:
+            grenade_info = item_repr
+        elif "class_abilities" in pcat and not class_ability_info:
+            class_ability_info = item_repr
+        elif "movement" in pcat and not movement_info:
+            movement_info = item_repr
+
+    return {
+        "super": super_info,
+        "aspects": aspects,
+        "fragments": fragments,
+        "melee": melee_info,
+        "grenade": grenade_info,
+        "classAbility": class_ability_info,
+        "movement": movement_info,
+    }
+
+
+def _extract_armor_mods(armor_iid: str, plug_hashes: List[int], defs: Dict[int, dict], sockets_map: dict) -> List[dict]:
+    mods_list = []
+    seen_names = set()
+    candidate_hashes: List[int] = []
+
+    for ph in plug_hashes or []:
+        if ph:
+            candidate_hashes.append(int(ph))
+
+    if armor_iid:
+        for sk in sockets_map.get(armor_iid, {}).get("sockets", []):
+            sph = sk.get("plugHash")
+            if sph:
+                candidate_hashes.append(int(sph))
+
+    for ph in candidate_hashes:
+        pdef = defs.get(ph)
+        if not pdef or not pdef.get("name"):
+            continue
+        pname = pdef["name"]
+        pname_low = pname.lower()
+        pcat = pdef.get("plugCategoryIdentifier", "").lower()
+
+        if any(skip in pname_low for skip in ("empty", "default", "tier ", "upgrade armor")):
+            continue
+        if any(skip in pcat for skip in ("shader", "ornament", "tracker", "masterwork")):
+            continue
+        if pname in seen_names:
+            continue
+
+        if "armor" in pcat or "enhancement" in pcat or "stat." in pcat or "mod" in pcat or pdef.get("itemType") in (19, 20):
+            seen_names.add(pname)
+            mods_list.append({
+                "name": pname,
+                "icon": pdef.get("icon", ""),
+                "description": pdef.get("description", ""),
+            })
+
+    return mods_list
+
+
+def evaluate_armor_roll(item: dict) -> dict:
+    item_name = item.get("name", "")
+    total_stats = int(item.get("totalStats") or 0)
+    is_exotic = bool(item.get("isExotic"))
+    is_artifice = "artifice" in item_name.lower()
+
+    # Extract Health stat (0-200 scale)
+    stats_map = {s.get("name"): int(s.get("value", 0)) for s in (item.get("stats") or []) if s.get("name")}
+    health_stat = stats_map.get("Health", 0)
+
+    matched_set = match_compendium_armor_set(item_name, item.get("description", ""))
+
+    # Tier 5 Quality Check:
+    # Any Tier 5 armor is GOOD; anything under Tier 5 is TRASH.
+    # Total stats >= 64, or Exotic, or Artifice, or Compendium Set with stats >= 60 = Tier 5.
+    # Total stats < 60 and not Exotic = strictly Sub-Tier-5.
+    is_tier_5 = (total_stats >= 64) or is_exotic or is_artifice or (matched_set is not None and total_stats >= 60)
+    if total_stats < 60 and not is_exotic:
+        is_tier_5 = False
+
+    compendium_set_info = None
+    if matched_set:
+        compendium_set_info = {
+            "name": matched_set["name"],
+            "source": matched_set.get("source", ""),
+            "perk2pc": {
+                "name": matched_set.get("perk_2pc_name", ""),
+                "desc": matched_set.get("perk_2pc_desc", ""),
+            },
+            "perk4pc": {
+                "name": matched_set.get("perk_4pc_name", ""),
+                "desc": matched_set.get("perk_4pc_desc", ""),
+            },
+            "tags": matched_set.get("tags", []),
+        }
+
+    if not is_tier_5:
+        roll_type = "TRASH_DISMANTLE"
+        verdict_code = "TRASH_ARMOR"
+        verdict_label = "SAFE TO DISMANTLE (< Tier 5 Armor)"
+        explanation = f"Sub-Tier 5 armor ({total_stats} Total Stats). Inferior to endgame Tier 5 set standards—safe to dismantle."
+    else:
+        # Tier 5: Health classification
+        # Zero Health rule: Health <= 2 is PVE God Roll! Health > 2 is PVP God Roll!
+        if health_stat <= 2:
+            roll_type = "PVE_GOD_ROLL"
+            verdict_code = "PVE_GOD_ROLL"
+            verdict_label = "PVE GOD ROLL (Tier 5, Zero Health)"
+            explanation = "Zero Health stat waste—100% of armor stat budget concentrated in rapid ability cooldowns and lethal firepower (Grenade, Melee, Super, Weapons, Class)."
+        else:
+            roll_type = "PVP_GOD_ROLL"
+            verdict_code = "PVP_GOD_ROLL"
+            verdict_label = f"PVP GOD ROLL (Tier 5, {health_stat} Health)"
+            explanation = f"High Health stat ({health_stat}) provides maximum ADS flinch resistance and rapid shield recovery for Crucible duels."
+
+    return {
+        "isTier5": is_tier_5,
+        "healthStat": health_stat,
+        "totalStats": total_stats,
+        "rollType": roll_type,
+        "verdictCode": verdict_code,
+        "verdictLabel": verdict_label,
+        "explanation": explanation,
+        "compendiumSet": compendium_set_info,
+    }
+
+
 def fetch_guardian_inventory(access_token: str) -> dict:
     creds = get_bungie_credentials()
     if not creds["api_key"]:
@@ -725,7 +960,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     m_id = membership["destinyMembershipId"]
 
     profile = _bungie_get(
-        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,200,201,205,206,300,304,305,310",
+        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,104,200,201,205,206,300,304,305,310",
         creds["api_key"],
         access_token,
     )
@@ -735,14 +970,37 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     char_inv_raw = profile.get("characterInventories", {}).get("data", {})
     char_loadouts_raw = profile.get("characterLoadouts", {}).get("data", {})
     vault_raw = profile.get("profileInventory", {}).get("data", {}).get("items", [])
+    seasonal_raw = profile.get("profileProgression", {}).get("data", {}).get("seasonalArtifact", {})
 
     instances = profile.get("itemComponents", {}).get("instances", {}).get("data", {})
     stats_map = profile.get("itemComponents", {}).get("stats", {}).get("data", {})
     sockets_map = profile.get("itemComponents", {}).get("sockets", {}).get("data", {})
     reusable_map = profile.get("itemComponents", {}).get("reusablePlugs", {}).get("data", {})
 
-    # Gather every item hash and socket plug hash for 1-shot SQLite batch resolution
+    # Gather every item hash, socket plug hash, loadout plug hash, and artifact perk for 1-shot SQLite batch resolution
     all_hashes: Set[int] = set()
+
+    art_item_hash = int(seasonal_raw.get("artifactItemHash", 0)) if seasonal_raw else 0
+    art_power_bonus = int(seasonal_raw.get("powerBonus", 0)) if seasonal_raw else 0
+    art_points = int(seasonal_raw.get("pointsAcquired", 0)) if seasonal_raw else 0
+    active_perk_hashes: List[int] = []
+    if seasonal_raw:
+        for t in seasonal_raw.get("tiers", []):
+            for uph in t.get("unlockedPlugHashes", []):
+                if uph:
+                    u_int = int(uph)
+                    active_perk_hashes.append(u_int)
+                    all_hashes.add(u_int)
+    if art_item_hash:
+        all_hashes.add(art_item_hash)
+
+    # Collect all loadout plug hashes
+    for cid_k, lds_wrapper in char_loadouts_raw.items():
+        for ld_k in lds_wrapper.get("loadouts", []):
+            for li_k in ld_k.get("items", []):
+                for ph_k in li_k.get("plugItemHashes", []):
+                    if ph_k:
+                        all_hashes.add(int(ph_k))
 
     def _collect_item_hashes(items_list: List[dict]):
         for it in items_list:
@@ -787,24 +1045,71 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
         equipped_items = []
         equipped_subclass = None
+        equipped_artifact = None
+
         for raw_eq in char_equip_raw.get(cid, {}).get("items", []):
             ehash = int(raw_eq.get("itemHash", 0))
             edef = defs.get(ehash)
             if edef and int(edef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_eq.get("itemInstanceId", ""))
+                sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
                 equipped_subclass = {
                     "itemInstanceId": sub_iid,
                     "name": edef.get("name", ""),
                     "icon": edef.get("icon", ""),
+                    "element": DAMAGE_TYPE_MAP.get(int(edef.get("defaultDamageType", 1)), "Kinetic"),
+                    **sub_details,
                 }
                 if sub_iid:
                     subclass_by_instance[sub_iid] = equipped_subclass
                 continue
+
             enriched = _enrich_item(raw_eq, defs, instances, stats_map, sockets_map, reusable_map, "character", cid, True)
             if enriched:
+                if enriched.get("category") == "Artifact":
+                    art_perks = []
+                    for uph in active_perk_hashes:
+                        pdef = defs.get(uph)
+                        if pdef and pdef.get("name"):
+                            art_perks.append({
+                                "name": pdef["name"],
+                                "icon": pdef.get("icon", ""),
+                                "description": pdef.get("description", ""),
+                            })
+                    enriched["powerBonus"] = art_power_bonus
+                    enriched["pointsAcquired"] = art_points
+                    enriched["activePerks"] = art_perks
+                    equipped_artifact = enriched
+
                 equipped_items.append(enriched)
                 if enriched.get("itemInstanceId"):
                     gear_by_instance[enriched["itemInstanceId"]] = enriched
+
+        if not equipped_artifact and art_item_hash and art_item_hash in defs:
+            art_def = defs[art_item_hash]
+            art_perks = []
+            for uph in active_perk_hashes:
+                pdef = defs.get(uph)
+                if pdef and pdef.get("name"):
+                    art_perks.append({
+                        "name": pdef["name"],
+                        "icon": pdef.get("icon", ""),
+                        "description": pdef.get("description", ""),
+                    })
+            equipped_artifact = {
+                "itemInstanceId": "",
+                "itemHash": art_item_hash,
+                "name": art_def.get("name", "Seasonal Artifact"),
+                "icon": art_def.get("icon", ""),
+                "category": "Artifact",
+                "slot": "Artifact",
+                "typeName": "Seasonal Artifact",
+                "tierName": "Seasonal",
+                "powerBonus": art_power_bonus,
+                "pointsAcquired": art_points,
+                "activePerks": art_perks,
+                "isEquipped": True,
+            }
 
         bag_items = []
         postmaster_items = []
@@ -814,10 +1119,13 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             if idef and int(idef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_inv.get("itemInstanceId", ""))
                 if sub_iid:
+                    sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
                     subclass_by_instance[sub_iid] = {
                         "itemInstanceId": sub_iid,
                         "name": idef.get("name", ""),
                         "icon": idef.get("icon", ""),
+                        "element": DAMAGE_TYPE_MAP.get(int(idef.get("defaultDamageType", 1)), "Kinetic"),
+                        **sub_details,
                     }
                 continue
 
@@ -842,6 +1150,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "emblemColor": cinfo.get("emblemColor", {}),
             "dateLastPlayed": cinfo.get("dateLastPlayed", ""),
             "subclass": equipped_subclass,
+            "artifact": equipped_artifact,
             "stats": c_stats,
             "equipment": equipped_items,
             "inventory": bag_items,
@@ -896,8 +1205,11 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
             for li in active_refs:
                 iid = str(li.get("itemInstanceId", ""))
+                li_plugs = li.get("plugItemHashes", []) or []
                 if iid in subclass_by_instance:
-                    ld_subclass = subclass_by_instance[iid]
+                    sub_base = subclass_by_instance[iid]
+                    sub_custom = _parse_subclass_details(iid, li_plugs, defs, sockets_map) if li_plugs else sub_base
+                    ld_subclass = {**sub_base, **sub_custom}
                 elif iid in gear_by_instance:
                     g = gear_by_instance[iid]
                     slim_g = {
@@ -917,7 +1229,9 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                         ld_weapons.append(slim_g)
                         if g["isExotic"] and not exotic_weapon:
                             exotic_weapon = slim_g
-                    else:
+                    elif g["category"] == "Armor":
+                        armor_mods = _extract_armor_mods(iid, li_plugs, defs, sockets_map)
+                        slim_g["mods"] = armor_mods
                         ld_armor.append(slim_g)
                         if g["isExotic"] and not exotic_armor:
                             exotic_armor = slim_g
@@ -934,6 +1248,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                 "iconPath": ld_icon,
                 "colorPath": ld_color,
                 "subclass": ld_subclass,
+                "artifact": ch_obj.get("artifact"),
                 "exoticItem": exotic_armor or exotic_weapon,
                 "weapons": ld_weapons,
                 "armor": ld_armor,
@@ -1222,8 +1537,17 @@ def prepare_items_for_dismantle(
             "failed": [],
         }
 
-    # Probe live free bag slots (max 9 unequipped per weapon slot) if pulling to character
-    free_slots: Dict[str, int] = {"Kinetic": 9, "Energy": 9, "Heavy": 9}
+    # Probe live free bag slots (max 9 unequipped per weapon / armor slot) if pulling to character
+    free_slots: Dict[str, int] = {
+        "Kinetic": 9,
+        "Energy": 9,
+        "Heavy": 9,
+        "Helmet": 9,
+        "Gauntlets": 9,
+        "Chest Armor": 9,
+        "Leg Armor": 9,
+        "Class Armor": 9,
+    }
     if not unlock_only and target_character_id:
         membership = get_active_destiny_membership(api_key, access_token)
         m_id = membership["destinyMembershipId"]
@@ -1233,12 +1557,14 @@ def prepare_items_for_dismantle(
             access_token,
         )
         char_bag = inv_resp.get("characterInventories", {}).get("data", {}).get(str(target_character_id), {}).get("items", [])
-        counts = {"Kinetic": 0, "Energy": 0, "Heavy": 0}
+        counts: Dict[str, int] = {k: 0 for k in free_slots}
         for raw_it in char_bag:
             bhash = int(raw_it.get("bucketHash", 0))
             if bhash in WEAPON_BUCKETS:
                 counts[WEAPON_BUCKETS[bhash]] += 1
-        for s_name in ("Kinetic", "Energy", "Heavy"):
+            elif bhash in ARMOR_BUCKETS:
+                counts[ARMOR_BUCKETS[bhash]] += 1
+        for s_name in free_slots:
             free_slots[s_name] = max(0, 9 - counts[s_name])
 
     unlocked_ids: List[str] = []
@@ -2070,4 +2396,152 @@ def analyze_arsenal_duplicates_and_trash(inventory_data: dict, god_rolls: List[d
                 grc["dismantleLabel"] = "Bad Roll (0/2 Meta Perks)"
                 grc["dismantleReason"] = "Misses PVE & PVP God Roll trait synergy."
                 grc["dismantleAutoSelect"] = False
+
+    # =========================================================================
+    # ARMOR APPRAISAL: TIER 5 STANDARDS, ZERO-HEALTH PVE vs PVP, & COMPENDIUM SETS
+    # =========================================================================
+    all_armor: List[dict] = []
+    seen_armor_iids: Set[str] = set()
+
+    for ch in inventory_data.get("characters", []) or []:
+        for bucket_list in (ch.get("equipment", []), ch.get("inventory", []), ch.get("postmaster", [])):
+            for it in bucket_list or []:
+                if it.get("category") == "Armor":
+                    iid = str(it.get("itemInstanceId") or id(it))
+                    if iid not in seen_armor_iids:
+                        seen_armor_iids.add(iid)
+                        all_armor.append(it)
+
+    for it in (inventory_data.get("vault") or {}).get("items", []) or []:
+        if it.get("category") == "Armor":
+            iid = str(it.get("itemInstanceId") or id(it))
+            if iid not in seen_armor_iids:
+                seen_armor_iids.add(iid)
+                all_armor.append(it)
+
+    armor_families: Dict[str, List[dict]] = {}
+    for a in all_armor:
+        ev = evaluate_armor_roll(a)
+        in_ld = str(a.get("itemInstanceId", "")) in saved_loadout_ids
+        a["armorEvaluation"] = ev
+        if ev.get("compendiumSet"):
+            a["compendiumSet"] = ev["compendiumSet"]
+
+        verdict_code = ev["verdictCode"]
+        is_tier_5 = ev["isTier5"]
+        is_pve = (verdict_code == "PVE_GOD_ROLL")
+        is_pvp = (verdict_code == "PVP_GOD_ROLL")
+
+        fam_key = (
+            f"{a.get('classType')}_{a.get('slot')}_"
+            f"{ev.get('compendiumSet', {}).get('name') if ev.get('compendiumSet') else a.get('name')}"
+        )
+
+        a["godRollCheck"] = {
+            "weaponFamilyKey": fam_key,
+            "isAdeptVariant": "artifice" in a.get("name", "").lower(),
+            "inDatabase": bool(ev.get("compendiumSet")),
+            "matchSource": "compendium_sets" if ev.get("compendiumSet") else "armor_stat_matrix",
+            "verdictCode": verdict_code,
+            "verdictLabel": ev["verdictLabel"],
+            "pveTraitHits": 2 if is_pve else (0 if not is_tier_5 else 1),
+            "pvpTraitHits": 2 if is_pvp else (0 if not is_tier_5 else 1),
+            "pveScore": 95 if is_pve else (50 if is_tier_5 else 20),
+            "pvpScore": 95 if is_pvp else (50 if is_tier_5 else 20),
+            "bestScore": 95 if is_tier_5 else 20,
+            "pveSortScore": float(a.get("totalStats") or 0) - float(ev["healthStat"]) * 0.5,
+            "pvpSortScore": float(a.get("totalStats") or 0) + float(ev["healthStat"]) * 1.5,
+            "familyTotalCopies": 1,
+            "familyGodRollCount": 0,
+            "isBestGodRoll": is_tier_5,
+            "isBestPve": is_pve,
+            "isBestPvp": is_pvp,
+            "isOutclassedDuplicate": False,
+            "duplicateRank": 1 if is_tier_5 else 0,
+            "comparisonSummary": "",
+            "inSavedLoadout": in_ld,
+            "isHighestPowerInSlot": False,
+            "dismantleCandidate": False,
+            "dismantleTier": "",
+            "dismantleLabel": "",
+            "dismantleReason": "",
+            "dismantleAutoSelect": False,
+        }
+
+        # Sub-Tier 5 armor is immediately a dismantle candidate!
+        if not is_tier_5 and not in_ld and not a.get("isEquipped") and not a.get("isExotic") and a.get("location") != "postmaster":
+            grc = a["godRollCheck"]
+            grc["dismantleCandidate"] = True
+            grc["dismantleTier"] = "SUB_TIER_5_ARMOR"
+            grc["dismantleLabel"] = "Sub-Tier 5 Armor (<60 Stats)"
+            grc["dismantleReason"] = f"Under Tier 5 standard ({ev['totalStats']} Total Stats) — safe to dismantle."
+            grc["dismantleAutoSelect"] = not a.get("isLocked")
+
+        armor_families.setdefault(fam_key, []).append(a)
+
+    # Compare duplicates within each armor family
+    for fam_key, fam_items in armor_families.items():
+        total_copies = len(fam_items)
+        tier5_items = [it for it in fam_items if it["armorEvaluation"]["isTier5"]]
+        for it in fam_items:
+            it["godRollCheck"]["familyTotalCopies"] = total_copies
+            it["godRollCheck"]["familyGodRollCount"] = len(tier5_items)
+
+        if len(tier5_items) > 1:
+            pve_candidates = [it for it in tier5_items if it["armorEvaluation"]["rollType"] == "PVE_GOD_ROLL"]
+            pvp_candidates = [it for it in tier5_items if it["armorEvaluation"]["rollType"] == "PVP_GOD_ROLL"]
+
+            # Rank PVE: highest total stats, then lower health
+            pve_candidates.sort(
+                key=lambda x: (
+                    int(x.get("totalStats") or 0),
+                    -int(x["armorEvaluation"]["healthStat"]),
+                    int(x.get("power") or 0),
+                ),
+                reverse=True,
+            )
+            if pve_candidates:
+                pve_winner = pve_candidates[0]
+                pve_winner["godRollCheck"]["isBestPve"] = True
+                pve_winner["godRollCheck"]["isBestGodRoll"] = True
+                pve_winner["godRollCheck"]["duplicateRank"] = 1
+                for loser in pve_candidates[1:]:
+                    l_grc = loser["godRollCheck"]
+                    l_grc["isOutclassedDuplicate"] = True
+                    l_grc["comparisonSummary"] = (
+                        f"Outclassed by #1 PVE Roll ({pve_winner.get('totalStats')} vs {loser.get('totalStats')} stats)"
+                    )
+                    if not loser.get("isEquipped") and not l_grc["inSavedLoadout"] and not loser.get("isExotic"):
+                        l_grc["dismantleCandidate"] = True
+                        l_grc["dismantleTier"] = "OUTCLASSED_ARMOR"
+                        l_grc["dismantleLabel"] = "Outclassed Duplicate Armor"
+                        l_grc["dismantleReason"] = l_grc["comparisonSummary"]
+                        l_grc["dismantleAutoSelect"] = not loser.get("isLocked")
+
+            # Rank PVP: highest health stat, then total stats
+            pvp_candidates.sort(
+                key=lambda x: (
+                    int(x["armorEvaluation"]["healthStat"]),
+                    int(x.get("totalStats") or 0),
+                    int(x.get("power") or 0),
+                ),
+                reverse=True,
+            )
+            if pvp_candidates:
+                pvp_winner = pvp_candidates[0]
+                pvp_winner["godRollCheck"]["isBestPvp"] = True
+                pvp_winner["godRollCheck"]["isBestGodRoll"] = True
+                pvp_winner["godRollCheck"]["duplicateRank"] = 1
+                for loser in pvp_candidates[1:]:
+                    l_grc = loser["godRollCheck"]
+                    l_grc["isOutclassedDuplicate"] = True
+                    l_grc["comparisonSummary"] = (
+                        f"Outclassed by #1 PVP Roll ({pvp_winner['armorEvaluation']['healthStat']} vs {loser['armorEvaluation']['healthStat']} Health)"
+                    )
+                    if not loser.get("isEquipped") and not l_grc["inSavedLoadout"] and not loser.get("isExotic"):
+                        l_grc["dismantleCandidate"] = True
+                        l_grc["dismantleTier"] = "OUTCLASSED_ARMOR"
+                        l_grc["dismantleLabel"] = "Outclassed Duplicate Armor"
+                        l_grc["dismantleReason"] = l_grc["comparisonSummary"]
+                        l_grc["dismantleAutoSelect"] = not loser.get("isLocked")
 

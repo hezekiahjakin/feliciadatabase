@@ -1729,6 +1729,22 @@ function itemMatchesFilter(item) {
   const f = state.invFilter;
   if (f.slot === 'weapons' && item.category !== 'Weapon') return false;
   if (f.slot === 'armor' && item.category !== 'Armor') return false;
+  if (f.slot === 'Artifact' && item.category !== 'Artifact' && item.slot !== 'Artifact') return false;
+  if (f.slot === 'armor-pve') {
+    if (item.category !== 'Armor') return false;
+    const aev = item.armorEvaluation || {};
+    return aev.rollType === 'PVE_GOD_ROLL';
+  }
+  if (f.slot === 'armor-pvp') {
+    if (item.category !== 'Armor') return false;
+    const aev = item.armorEvaluation || {};
+    return aev.rollType === 'PVP_GOD_ROLL';
+  }
+  if (f.slot === 'armor-trash') {
+    if (item.category !== 'Armor') return false;
+    const aev = item.armorEvaluation || {};
+    return aev.rollType === 'TRASH_DISMANTLE' || Boolean(item.godRollCheck?.dismantleCandidate);
+  }
   if (['Kinetic', 'Energy', 'Heavy'].includes(f.slot) && item.slot !== f.slot) return false;
   if (f.slot === 'godroll') {
     const grc = item.godRollCheck;
@@ -1744,6 +1760,7 @@ function itemMatchesFilter(item) {
   if ((item.typeName || '').toLowerCase().includes(q)) return true;
   if ((item.element || '').toLowerCase().includes(q)) return true;
   if ((item.slot || '').toLowerCase().includes(q)) return true;
+  if ((item.compendiumSet?.name || '').toLowerCase().includes(q)) return true;
 
   for (const col of (item.perkColumns || [])) {
     for (const p of col) {
@@ -1756,7 +1773,7 @@ function itemMatchesFilter(item) {
 function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = false } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  const tierCls = item.isExotic ? 'tier-exotic' : 'tier-legendary';
+  const tierCls = item.isExotic ? 'tier-exotic' : (item.category === 'Artifact' ? 'tier-artifact' : 'tier-legendary');
   const mwCls = item.isMasterworked ? 'is-masterworked' : '';
   const eqCls = isEquippedCard ? 'equipped-card' : '';
   const defCls = deferOffscreen ? 'vault-item-deferred' : '';
@@ -1765,10 +1782,11 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
   const iconSrc = item.icon ? `https://www.bungie.net${item.icon}` : 'icon-192.png';
   const elemDot = item.category === 'Weapon'
     ? `<span class="elem-dot ${escapeHtml(item.element)}"></span>`
-    : '';
+    : (item.category === 'Artifact' ? `<span class="elem-dot Artifact"></span>` : '');
 
   const grc = item.godRollCheck || {};
   const vc = grc.verdictCode || '';
+  const aev = item.armorEvaluation || {};
   const hasMultipleGods = (grc.familyGodRollCount || 0) > 1;
   let godBadge = '';
   if (grc.isOutclassedDuplicate) {
@@ -1776,16 +1794,33 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
   } else if (vc === 'DUAL_GOD_ROLL') {
     godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE+PVP ROLL' : '★ PVE + PVP GOD ROLL'}</span>`;
   } else if (vc === 'PVE_GOD_ROLL') {
-    godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE GOD ROLL' : '★ PVE GOD ROLL'}</span>`;
+    if (item.category === 'Armor') {
+      godBadge = `<span class="godroll-mini-tag pve-god-armor">★ PVE TIER 5 (0 HEALTH)</span>`;
+    } else {
+      godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE GOD ROLL' : '★ PVE GOD ROLL'}</span>`;
+    }
   } else if (vc === 'PVP_GOD_ROLL') {
-    godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVP GOD ROLL' : '★ PVP GOD ROLL'}</span>`;
+    if (item.category === 'Armor') {
+      godBadge = `<span class="godroll-mini-tag pvp-god-armor">★ PVP TIER 5 (${aev.healthStat || 0} HP)</span>`;
+    } else {
+      godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVP GOD ROLL' : '★ PVP GOD ROLL'}</span>`;
+    }
+  } else if (vc === 'TRASH_ARMOR' || (item.category === 'Armor' && aev.isTier5 === false)) {
+    godBadge = `<span class="godroll-mini-tag armor-trash-tag">🗑️ &lt;TIER 5 (${item.totalStats || 0})</span>`;
   }
+
+  const setBadge = item.compendiumSet
+    ? `<span class="compendium-set-pill">⛊ ${escapeHtml(item.compendiumSet.name)}</span>`
+    : '';
 
   const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner">◈</span>` : '';
   const lockCorner = item.isLocked ? `<span class="gear-lock-pip" aria-label="Locked">🔒</span>` : '';
-  const subDetail = item.category === 'Armor' && item.totalStats
-    ? `${escapeHtml(item.slot)} • ${item.totalStats} Stat`
-    : escapeHtml(item.typeName || item.slot);
+  let subDetail = escapeHtml(item.typeName || item.slot);
+  if (item.category === 'Armor' && item.totalStats) {
+    subDetail = `${escapeHtml(item.slot)} • ${item.totalStats} Stat`;
+  } else if (item.category === 'Artifact') {
+    subDetail = item.powerBonus ? `+${item.powerBonus} Power • Artifact` : 'Seasonal Artifact';
+  }
 
   btn.innerHTML = `
     <div class="gear-icon-frame">
@@ -1797,9 +1832,10 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
       <div class="gear-name">${escapeHtml(item.name)}</div>
       <div class="gear-sub">
         ${elemDot}
-        <span class="gear-power">${item.power ? `✦ ${item.power}` : ''}</span>
+        <span class="gear-power">${item.power ? `✦ ${item.power}` : (item.powerBonus ? `+${item.powerBonus}` : '')}</span>
         <span>• ${subDetail}</span>
       </div>
+      ${setBadge}
       ${godBadge}
     </div>
   `;
@@ -1840,7 +1876,7 @@ function renderInventoryStage() {
     stage.appendChild(ribbon);
   }
 
-  // 2. Two-Column Character Gear Grid (Weapons + Armor)
+  // 2. Multi-Panel Character Gear Grid (Weapons, Armor & Seasonal Artifact)
   const cols = document.createElement('div');
   cols.className = 'char-loadout-columns';
 
@@ -1854,14 +1890,18 @@ function renderInventoryStage() {
 
     let anyRendered = false;
     slotNames.forEach(slotName => {
-      const eqItem = (ch.equipment || []).find(i => i.slot === slotName && itemMatchesFilter(i));
-      const bagItems = (ch.inventory || []).filter(i => i.slot === slotName && itemMatchesFilter(i));
+      let eqItem = (ch.equipment || []).find(i => (i.slot === slotName || (slotName === 'Artifact' && i.category === 'Artifact')) && itemMatchesFilter(i));
+      if (!eqItem && slotName === 'Artifact' && ch.artifact && itemMatchesFilter(ch.artifact)) {
+        eqItem = ch.artifact;
+      }
+      const bagItems = (ch.inventory || []).filter(i => (i.slot === slotName || (slotName === 'Artifact' && i.category === 'Artifact')) && itemMatchesFilter(i));
       if (!eqItem && bagItems.length === 0) return;
       anyRendered = true;
 
       const block = document.createElement('div');
       block.className = 'slot-group-block';
-      block.innerHTML = `<div class="slot-group-label">${escapeHtml(slotName)}</div>`;
+      const labelText = slotName === 'Artifact' ? 'Seasonal Artifact' : slotName;
+      block.innerHTML = `<div class="slot-group-label">${escapeHtml(labelText)}</div>`;
 
       const row = document.createElement('div');
       row.className = 'slot-items-row';
@@ -1893,11 +1933,18 @@ function renderInventoryStage() {
     return panel;
   };
 
-  if (state.invFilter.slot !== 'armor') {
+  const isArmorFilter = ['armor', 'armor-pve', 'armor-pvp', 'armor-trash'].includes(state.invFilter.slot);
+  const isWeaponFilter = ['weapons', 'Kinetic', 'Energy', 'Heavy'].includes(state.invFilter.slot);
+  const isArtifactFilter = state.invFilter.slot === 'Artifact';
+
+  if (!isArmorFilter && !isArtifactFilter) {
     cols.appendChild(buildColumnPanel('⚔️ WEAPONS ARSENAL (EQUIPPED & INVENTORY)', weaponSlots));
   }
-  if (!['weapons', 'Kinetic', 'Energy', 'Heavy', 'godroll'].includes(state.invFilter.slot)) {
+  if (!isWeaponFilter && !isArtifactFilter) {
     cols.appendChild(buildColumnPanel('🛡️ ARMOR RIG (EQUIPPED & INVENTORY)', armorSlots));
+  }
+  if (isArtifactFilter || (!isArmorFilter && !isWeaponFilter && state.invFilter.slot !== 'godroll')) {
+    cols.appendChild(buildColumnPanel('❖ SEASONAL ARTIFACT (EQUIPPED & CARRIED)', ['Artifact']));
   }
   stage.appendChild(cols);
 
@@ -1924,6 +1971,7 @@ function renderVaultView(stage, vaultItems) {
   const filtered = vaultItems.filter(itemMatchesFilter);
   const weapons = filtered.filter(i => i.category === 'Weapon');
   const armor = filtered.filter(i => i.category === 'Armor');
+  const artifacts = filtered.filter(i => i.category === 'Artifact' || i.slot === 'Artifact');
 
   if (filtered.length === 0) {
     stage.innerHTML = `
@@ -1972,6 +2020,25 @@ function renderVaultView(stage, vaultItems) {
     });
     aSec.appendChild(aGrid);
     stage.appendChild(aSec);
+  }
+
+  if (artifacts.length > 0) {
+    const artSec = document.createElement('div');
+    artSec.className = 'vault-section-block';
+    artSec.innerHTML = `
+      <div class="vault-section-header">
+        <span class="vault-section-title">❖ VAULT SEASONAL ARTIFACTS (${artifacts.length})</span>
+      </div>
+    `;
+    const artGrid = document.createElement('div');
+    artGrid.className = 'vault-grid';
+    artifacts.forEach(a => {
+      const defer = globalRenderIdx >= 36;
+      globalRenderIdx++;
+      artGrid.appendChild(createGearCardElement(a, { deferOffscreen: defer }));
+    });
+    artSec.appendChild(artGrid);
+    stage.appendChild(artSec);
   }
 }
 
@@ -2028,12 +2095,18 @@ function openItemInspectModal(item) {
 
   const sublineEl = document.getElementById('inspectSubline');
   if (sublineEl) {
-    const fName = item.frame?.name ? `${item.frame.name} • ` : '';
-    sublineEl.textContent = `${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
+    if (item.category === 'Artifact') {
+      sublineEl.textContent = `${item.powerBonus ? `+${item.powerBonus} Bonus Power • ` : ''}Seasonal Artifact`;
+    } else if (item.category === 'Armor' && item.armorEvaluation) {
+      sublineEl.textContent = `${item.armorEvaluation.verdictLabel} • ${item.slot} (${item.totalStats || 0} Total Stats)`;
+    } else {
+      const fName = item.frame?.name ? `${item.frame.name} • ` : '';
+      sublineEl.textContent = `${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
+    }
   }
 
   const powerEl = document.getElementById('inspectPowerVal');
-  if (powerEl) powerEl.textContent = item.power || '—';
+  if (powerEl) powerEl.textContent = item.power || (item.powerBonus ? `+${item.powerBonus}` : '—');
 
   // Hide previous feedback & appraisal panel until requested
   const feedbackEl = document.getElementById('inspectTransferFeedback');
@@ -2059,7 +2132,7 @@ function openItemInspectModal(item) {
         sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
         sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
         actionsGrid.appendChild(sendBtn);
-      } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className)) {
+      } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className || item.category === 'Artifact')) {
         const equipBtn = document.createElement('button');
         equipBtn.type = 'button';
         equipBtn.className = 'btn-item-action';
@@ -2105,10 +2178,26 @@ function openItemInspectModal(item) {
     actionsGrid.appendChild(askBtn);
   }
 
-  // Render Frame & Perk Columns
+  // Render Frame & Perk Columns (or Compendium Set Box for Armor)
   const frameBox = document.getElementById('inspectFrameBox');
   if (frameBox) {
-    if (item.frame && item.frame.name) {
+    if (item.compendiumSet) {
+      frameBox.classList.remove('hidden');
+      frameBox.innerHTML = `
+        <div style="width:100%;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+            <span style="font-family:var(--font-tactical); font-weight:700; color:#FDE047; font-size:13px;">⛊ ${escapeHtml(item.compendiumSet.name)} SET</span>
+            <span style="font-size:11px; color:#94A3B8;">${escapeHtml(item.compendiumSet.source || '')}</span>
+          </div>
+          <div style="font-size:12px; color:#CBD5E1; margin-bottom:5px; line-height:1.4;">
+            <strong style="color:#67E8F9;">2-Piece: ${escapeHtml(item.compendiumSet.perk2pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk2pc?.desc || '')}
+          </div>
+          <div style="font-size:12px; color:#CBD5E1; line-height:1.4;">
+            <strong style="color:#A78BFA;">4-Piece: ${escapeHtml(item.compendiumSet.perk4pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk4pc?.desc || '')}
+          </div>
+        </div>
+      `;
+    } else if (item.frame && item.frame.name) {
       frameBox.classList.remove('hidden');
       const fIcon = item.frame.icon ? `<img src="https://www.bungie.net${item.frame.icon}" alt="">` : '';
       frameBox.innerHTML = `
@@ -2126,7 +2215,24 @@ function openItemInspectModal(item) {
   const perkColsEl = document.getElementById('inspectPerkColumns');
   if (perkColsEl) {
     perkColsEl.innerHTML = '';
-    if ((item.perkColumns || []).length === 0) {
+    if (item.category === 'Artifact') {
+      const perksArr = item.activePerks || [];
+      if (perksArr.length > 0) {
+        const artWrap = document.createElement('div');
+        artWrap.className = 'artifact-perks-wrap';
+        perksArr.forEach(p => {
+          const pChip = document.createElement('div');
+          pChip.className = 'artifact-perk-chip';
+          pChip.title = p.description || p.name;
+          const pImg = p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : '';
+          pChip.innerHTML = `${pImg}<span>${escapeHtml(p.name)}</span>`;
+          artWrap.appendChild(pChip);
+        });
+        perkColsEl.appendChild(artWrap);
+      } else {
+        perkColsEl.innerHTML = `<div style="color:#C084FC; font-size:13px;">Equippable Seasonal Artifact</div>`;
+      }
+    } else if ((item.perkColumns || []).length === 0) {
       perkColsEl.innerHTML = `<div style="color:#64748B; font-size:13px;">Standard / Intrinsic Configuration</div>`;
     } else {
       item.perkColumns.forEach(col => {
@@ -2399,27 +2505,120 @@ function openSavedLoadoutModal(character, loadout) {
   if (container) {
     container.innerHTML = '';
 
-    // Subclass Banner
+    // 1. Subclass Configuration (Super, Aspects, Fragments, Abilities)
     if (loadout.subclass && loadout.subclass.name) {
-      const subBar = document.createElement('div');
-      subBar.className = 'saved-loadout-subclass-bar';
-      const sIcon = loadout.subclass.icon
-        ? `<img src="https://www.bungie.net${loadout.subclass.icon}" alt="" width="36" height="36">`
-        : '';
-      subBar.innerHTML = `
-        ${sIcon}
-        <div>
-          <div style="font-family:var(--font-tactical); font-size:11px; color:var(--arc-blue); font-weight:700; letter-spacing:0.8px;">SUBCLASS CONFIGURATION</div>
-          <div style="font-family:var(--font-display); font-size:15px; font-weight:700; color:#FFFFFF;">${escapeHtml(loadout.subclass.name)}</div>
+      const sub = loadout.subclass;
+      const subCard = document.createElement('div');
+      subCard.className = 'saved-loadout-subclass-card';
+      const sIcon = sub.icon ? `<img src="https://www.bungie.net${sub.icon}" alt="">` : '';
+
+      const superHtml = sub.super ? `
+        <div class="subclass-perk-group">
+          <div class="subclass-group-title">⚡ SUPER ABILITY</div>
+          <div class="subclass-chips-wrap">
+            <span class="subclass-chip super-chip" title="${escapeHtml(sub.super.description || '')}">
+              ${sub.super.icon ? `<img src="https://www.bungie.net${sub.super.icon}" alt="">` : ''}
+              <span>${escapeHtml(sub.super.name)}</span>
+            </span>
+          </div>
+        </div>
+      ` : '';
+
+      const aspectsHtml = (sub.aspects || []).length > 0 ? `
+        <div class="subclass-perk-group">
+          <div class="subclass-group-title">❖ ASPECTS (${sub.aspects.length})</div>
+          <div class="subclass-chips-wrap">
+            ${sub.aspects.map(a => `
+              <span class="subclass-chip aspect-chip" title="${escapeHtml(a.description || '')}">
+                ${a.icon ? `<img src="https://www.bungie.net${a.icon}" alt="">` : ''}
+                <span>${escapeHtml(a.name)}</span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      const fragmentsHtml = (sub.fragments || []).length > 0 ? `
+        <div class="subclass-perk-group" style="flex:2; min-width:260px;">
+          <div class="subclass-group-title">✦ FRAGMENTS (${sub.fragments.length})</div>
+          <div class="subclass-chips-wrap">
+            ${sub.fragments.map(f => `
+              <span class="subclass-chip fragment-chip" title="${escapeHtml(f.description || '')}">
+                ${f.icon ? `<img src="https://www.bungie.net${f.icon}" alt="">` : ''}
+                <span>${escapeHtml(f.name)}</span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      const abilitiesHtml = [sub.melee, sub.grenade, sub.classAbility].some(Boolean) ? `
+        <div class="subclass-perk-group">
+          <div class="subclass-group-title">🛡️ ABILITIES</div>
+          <div class="subclass-chips-wrap">
+            ${sub.melee ? `<span class="subclass-chip" title="Melee: ${escapeHtml(sub.melee.description || '')}">${sub.melee.icon ? `<img src="https://www.bungie.net${sub.melee.icon}" alt="">` : ''}<span>${escapeHtml(sub.melee.name)}</span></span>` : ''}
+            ${sub.grenade ? `<span class="subclass-chip" title="Grenade: ${escapeHtml(sub.grenade.description || '')}">${sub.grenade.icon ? `<img src="https://www.bungie.net${sub.grenade.icon}" alt="">` : ''}<span>${escapeHtml(sub.grenade.name)}</span></span>` : ''}
+            ${sub.classAbility ? `<span class="subclass-chip" title="Class Ability: ${escapeHtml(sub.classAbility.description || '')}">${sub.classAbility.icon ? `<img src="https://www.bungie.net${sub.classAbility.icon}" alt="">` : ''}<span>${escapeHtml(sub.classAbility.name)}</span></span>` : ''}
+          </div>
+        </div>
+      ` : '';
+
+      subCard.innerHTML = `
+        <div class="saved-loadout-subclass-header">
+          ${sIcon}
+          <div>
+            <div style="font-family:var(--font-tactical); font-size:11px; color:var(--arc-blue); font-weight:700; letter-spacing:0.8px;">SUBCLASS // ${escapeHtml((sub.element || '').toUpperCase())}</div>
+            <div style="font-family:var(--font-display); font-size:16px; font-weight:700; color:#FFFFFF;">${escapeHtml(sub.name)}</div>
+          </div>
+        </div>
+        <div class="saved-loadout-subclass-details">
+          ${superHtml}
+          ${aspectsHtml}
+          ${abilitiesHtml}
+          ${fragmentsHtml}
         </div>
       `;
-      container.appendChild(subBar);
+      container.appendChild(subCard);
     }
 
+    // 2. Equipped Seasonal Artifact & Active Perks
+    const artifactObj = loadout.artifact || character.artifact;
+    if (artifactObj && artifactObj.name) {
+      const artCard = document.createElement('div');
+      artCard.className = 'saved-loadout-artifact-card';
+      const aIcon = artifactObj.icon ? `<img src="https://www.bungie.net${artifactObj.icon}" alt="">` : '';
+      const bonusText = artifactObj.powerBonus ? `✦ +${artifactObj.powerBonus} Bonus Power` : 'Seasonal Artifact';
+      const perksArr = artifactObj.activePerks || [];
+
+      artCard.innerHTML = `
+        <div class="saved-loadout-artifact-header">
+          ${aIcon}
+          <div>
+            <div style="font-family:var(--font-tactical); font-size:11px; color:#C084FC; font-weight:700; letter-spacing:0.8px;">SEASONAL ARTIFACT</div>
+            <div style="font-family:var(--font-display); font-size:15px; font-weight:700; color:#FFFFFF;">
+              ${escapeHtml(artifactObj.name)} <span style="font-size:12px; color:#E9D5FF; margin-left:6px; font-weight:500;">(${bonusText})</span>
+            </div>
+          </div>
+        </div>
+        ${perksArr.length > 0 ? `
+          <div class="artifact-perks-wrap">
+            ${perksArr.map(p => `
+              <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
+                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : ''}
+                <span>${escapeHtml(p.name)}</span>
+              </span>
+            `).join('')}
+          </div>
+        ` : ''}
+      `;
+      container.appendChild(artCard);
+    }
+
+    // 3. Saved Weapons & Saved Armor Rig (with Socketed Mods)
     const cols = document.createElement('div');
     cols.className = 'saved-loadout-columns';
 
-    const buildLoadoutCol = (heading, itemsArr) => {
+    const buildLoadoutCol = (heading, itemsArr, isArmorGroup = false) => {
       const panel = document.createElement('div');
       panel.className = 'loadout-col-panel';
       panel.innerHTML = `<div class="loadout-col-header">${heading}</div>`;
@@ -2432,15 +2631,34 @@ function openSavedLoadoutModal(character, loadout) {
       } else {
         itemsArr.forEach(slimItem => {
           const fullItem = findLiveItemByInstanceId(slimItem.itemInstanceId) || slimItem;
-          const card = createGearCardElement(fullItem);
-          panel.appendChild(card);
+          if (isArmorGroup) {
+            const wrap = document.createElement('div');
+            wrap.className = 'loadout-armor-card-wrap';
+            wrap.appendChild(createGearCardElement(fullItem));
+            const modsArr = slimItem.mods || fullItem.mods || [];
+            if (modsArr.length > 0) {
+              const modsStrip = document.createElement('div');
+              modsStrip.className = 'loadout-armor-mods-strip';
+              modsArr.forEach(m => {
+                const mChip = document.createElement('span');
+                mChip.className = 'loadout-mod-chip';
+                mChip.title = m.description || m.name;
+                mChip.innerHTML = `${m.icon ? `<img src="https://www.bungie.net${m.icon}" alt="">` : ''}<span>${escapeHtml(m.name)}</span>`;
+                modsStrip.appendChild(mChip);
+              });
+              wrap.appendChild(modsStrip);
+            }
+            panel.appendChild(wrap);
+          } else {
+            panel.appendChild(createGearCardElement(fullItem));
+          }
         });
       }
       return panel;
     };
 
-    cols.appendChild(buildLoadoutCol('⚔️ SAVED WEAPONS', loadout.weapons || []));
-    cols.appendChild(buildLoadoutCol('🛡️ SAVED ARMOR RIG', loadout.armor || []));
+    cols.appendChild(buildLoadoutCol('⚔️ SAVED WEAPONS', loadout.weapons || [], false));
+    cols.appendChild(buildLoadoutCol('🛡️ SAVED ARMOR RIG (WITH SOCKETED MODS)', loadout.armor || [], true));
     container.appendChild(cols);
 
     if (loadout.missingCount > 0) {
@@ -2531,7 +2749,7 @@ function collectInventoryAndVaultGodRolls() {
 
   const inspectList = (itemsArr, locLabel, ownerCharId) => {
     (itemsArr || []).forEach(item => {
-      if (item.category !== 'Weapon') return;
+      if (item.category !== 'Weapon' && item.category !== 'Armor') return;
       const key = item.itemInstanceId || `${item.itemHash}_${locLabel}`;
       if (seenIds.has(key)) return;
       seenIds.add(key);
@@ -2738,30 +2956,49 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
     extraFlags.push(`<span class="scanner-loc-pill" style="color:#FDE047; border:1px solid rgba(250,204,21,0.35);">MY GOD ROLLS</span>`);
   }
 
-  // Perk chips (show matched PVE/PVP perks, or rolled active traits on bad rolls so user sees why it's trash)
+  // Perk chips (Weapons: matched PVE/PVP traits; Armor: Total stats, Health rating, & Compendium 2pc/4pc set)
   const perkTags = [];
-  if ((grc.pveMatchedPerks || []).length >= 2) {
-    perkTags.push(`<span class="scanner-perk-chip">⚔️ PVE: <strong>${escapeHtml(grc.pveMatchedPerks.join(' + '))}</strong></span>`);
-  }
-  if ((grc.pvpMatchedPerks || []).length >= 2) {
-    perkTags.push(`<span class="scanner-perk-chip">🎯 PVP: <strong>${escapeHtml(grc.pvpMatchedPerks.join(' + '))}</strong></span>`);
-  }
-  if (perkTags.length === 0) {
-    const tCols = (it.traitColIndexes || []).map(idx => it.perkColumns?.[idx]).filter(Boolean);
-    const fallbackCols = tCols.length >= 2 ? tCols : (it.perkColumns || []).slice(2, 4);
-    const rolledNames = fallbackCols
-      .map(col => (col.find(o => o.selected) || col[0])?.name)
-      .filter(Boolean);
-    if (rolledNames.length > 0) {
-      perkTags.push(`<span class="scanner-perk-chip">Perks: <strong>${escapeHtml(rolledNames.join(' + '))}</strong></span>`);
+  if (it.category === 'Armor') {
+    const aev = it.armorEvaluation || {};
+    perkTags.push(`<span class="scanner-perk-chip">✦ Total: <strong>${it.totalStats || 0} Stats</strong></span>`);
+    const hpStyle = (aev.healthStat || 0) <= 2 ? 'color:#6EE7B7; border-color:rgba(52,211,153,0.4);' : 'color:#FDA4AF; border-color:rgba(244,63,94,0.4);';
+    const hpText = (aev.healthStat || 0) <= 2 ? '0 Health (PVE God Roll)' : `${aev.healthStat} Health (PVP Spike)`;
+    perkTags.push(`<span class="scanner-perk-chip" style="${hpStyle}"><strong>${hpText}</strong></span>`);
+    if (it.compendiumSet) {
+      perkTags.push(`<span class="scanner-perk-chip" style="color:#FDE047; border-color:rgba(245,166,35,0.45);">⛊ <strong>${escapeHtml(it.compendiumSet.name)}</strong> (2pc: ${escapeHtml(it.compendiumSet.perk2pc?.name || '')})</span>`);
+    }
+  } else {
+    if ((grc.pveMatchedPerks || []).length >= 2) {
+      perkTags.push(`<span class="scanner-perk-chip">⚔️ PVE: <strong>${escapeHtml(grc.pveMatchedPerks.join(' + '))}</strong></span>`);
+    }
+    if ((grc.pvpMatchedPerks || []).length >= 2) {
+      perkTags.push(`<span class="scanner-perk-chip">🎯 PVP: <strong>${escapeHtml(grc.pvpMatchedPerks.join(' + '))}</strong></span>`);
+    }
+    if (perkTags.length === 0) {
+      const tCols = (it.traitColIndexes || []).map(idx => it.perkColumns?.[idx]).filter(Boolean);
+      const fallbackCols = tCols.length >= 2 ? tCols : (it.perkColumns || []).slice(2, 4);
+      const rolledNames = fallbackCols
+        .map(col => (col.find(o => o.selected) || col[0])?.name)
+        .filter(Boolean);
+      if (rolledNames.length > 0) {
+        perkTags.push(`<span class="scanner-perk-chip">Perks: <strong>${escapeHtml(rolledNames.join(' + '))}</strong></span>`);
+      }
     }
   }
 
-  // Barrel / Mag / Masterwork 5/5 breakdown strip
+  // Breakdown strip (Weapons: Barrel / Mag / MW; Armor: Key 0-200 Stats)
   const subParts = [];
-  if (grc.bestBarrel) subParts.push(`<span class="scanner-subpart-pill">Barrel: ${escapeHtml(grc.bestBarrel)}</span>`);
-  if (grc.bestMag) subParts.push(`<span class="scanner-subpart-pill">Mag: ${escapeHtml(grc.bestMag)}</span>`);
-  if (grc.masterworkName) subParts.push(`<span class="scanner-subpart-pill">MW: ${escapeHtml(grc.masterworkName)}</span>`);
+  if (it.category === 'Armor') {
+    (it.stats || []).forEach(st => {
+      if (st.value > 0) {
+        subParts.push(`<span class="scanner-subpart-pill">${escapeHtml(st.name)}: ${st.value}</span>`);
+      }
+    });
+  } else {
+    if (grc.bestBarrel) subParts.push(`<span class="scanner-subpart-pill">Barrel: ${escapeHtml(grc.bestBarrel)}</span>`);
+    if (grc.bestMag) subParts.push(`<span class="scanner-subpart-pill">Mag: ${escapeHtml(grc.bestMag)}</span>`);
+    if (grc.masterworkName) subParts.push(`<span class="scanner-subpart-pill">MW: ${escapeHtml(grc.masterworkName)}</span>`);
+  }
   const subPartsHtml = subParts.length > 0 ? `<div class="scanner-subparts-strip">${subParts.join('')}</div>` : '';
 
   // Comparison / Dismantle Reason Callout

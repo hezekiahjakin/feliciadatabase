@@ -1,19 +1,44 @@
 [
   {
+    "id": "roll-false-idols-0f03",
+    "name": "False Idols",
+    "slot": "Heavy",
+    "type": "Sword",
+    "element": "Solar",
+    "frame": "Vortex Frame",
+    "source": "The Pale Heart (Craftable)",
+    "pve": {
+      "barrel": "Enduring Blade",
+      "mag": "Heavy Guard",
+      "perk1": "Eager Edge",
+      "perk2": "Burning Ambition",
+      "masterwork": ".",
+      "notes": "**THIS SWORD IS RECOMMENDED FOR WELLSKATING, SHATTER SKATING, ETC** Eager Edge provides a massive lunge distance immediately after swapping, allowing you to traverse environments or close gaps on enemies with incredible speed. Enduring Blade and Heavy Guard maximize your sword ammo and defensive capabilities, ensuring you have enough reserves for Solar Vortex heavy spin attacks."
+    },
+    "pvp": {
+      "barrel": "Enduring Blade",
+      "mag": "Heavy Guard",
+      "perk1": "Eager Edge",
+      "perk2": "Burning Ambition",
+      "masterwork": ".",
+      "notes": "**THIS SWORD IS RECOMMENDED FOR WELLSKATING, SHATTER SKATING, ETC** Unsheathing the sword grants a brief window with significantly increased lunge range, allowing you to instantly close the distance and secure an elimination before opponents can react. Heavy Guard and Enduring Blade ensure you have maximum guard efficiency and ammo capacity to survive incoming fire while aggressively pushing."
+    }
+  },
+  {
     "id": "roll-hawkmoon-84ec",
     "name": "Hawkmoon",
     "slot": "Kinetic",
     "type": "Hand Cannon",
     "element": "Kinetic",
     "frame": "Paracausal Shot (140 RPM)",
-    "source": "Zur",
+    "source": "Xûr (at the Tower)",
     "pve": {
       "barrel": "Corkscrew Rifling",
       "mag": "Alloy Magazine",
       "perk1": "Killing Wind",
       "perk2": "Smooth Grip",
       "masterwork": ".",
-      "notes": "This setup capitalizes on Hawkmoon's Paracausal Shot loop for aggressively taking down high-health targets. Securing minor enemy kills to build your damage stacks activates Killing Wind, granting a surge of range, handling, and mobility to help you seamlessly chain consecutive precision hits. Once you unleash your max-stack final round, Alloy Magazine drastically speeds up your empty reload, allowing you to instantly reset the exotic perk loop and keep the damage flowing."
+      "notes": "Securing minor enemy kills builds Paracausal Charge stacks and activates Killing Wind, granting a surge of range and mobility to chain consecutive precision hits. Once you unleash your max-stack final round, Alloy Magazine drastically speeds up your empty reload so you can instantly reset the exotic loop."
     },
     "pvp": {
       "barrel": "Corkscrew Rifling",
@@ -21,7 +46,7 @@
       "perk1": "Opening Shot",
       "perk2": "Smooth Grip / Heavy Grip",
       "masterwork": ".",
-      "notes": "This roll is designed to maximize Hawkmoon's already incredible baseline stats for Crucible dueling. Opening Shot provides an immense boost to range and aim assist on your initial trigger pull, making it highly forgiving to land your first precision hit and start building Paracausal Charge stacks. Pairing this with a Range masterwork pushes your effective damage falloff even further, while Alloy Magazine ensures you recover quickly if you are forced to reload immediately after firing off your lethal final bullet."
+      "notes": "Opening Shot provides an immense boost to range and aim assist on your initial trigger pull, making it highly forgiving to start building your damage stacks. A Range masterwork pushes your effective damage falloff even further, while Alloy Magazine ensures a quick recovery if forced to reload immediately after firing your lethal final bullet."
     }
   },
   {
@@ -38,7 +63,7 @@
       "perk1": "Rewind Rounds",
       "perk2": "Kinetic Tremors",
       "masterwork": "Handling",
-      "notes": "This combination transforms the sniper into a sustained damage powerhouse against Champions and majors. Landing consecutive shots procs Kinetic Tremors to unleash heavy area-of-effect shockwaves, while Rewind Rounds automatically refills the magazine based on the number of hits you land. This synergy allows you to stay scoped in and continuously dish out punishment without breaking your aim to reload."
+      "notes": "Landing consecutive shots procs Kinetic Tremors to unleash heavy area-of-effect shockwaves against Champions and majors. Rewind Rounds automatically refills the magazine based on your hits, allowing you to sustain damage without breaking your aim to reload."
     },
     "pvp": {
       "barrel": "Arrowhead Brake",
@@ -46,7 +71,7 @@
       "perk1": "Moving Target",
       "perk2": "Snapshot Sights / Opening Shot",
       "masterwork": "Range / Handling",
-      "notes": "This setup is engineered for premium lane dueling and quick-scoping in the Crucible. Moving Target provides a crucial boost to aim assist and strafe speed while aiming down sights. You can pair it with Snapshot Sights for instantaneous ADS speeds during highly mobile engagements, or swap to Opening Shot to guarantee maximum accuracy and bullet magnetism on your initial peek."
+      "notes": "Moving Target provides a crucial boost to aim assist and strafe speed for premium lane dueling and quick-scoping. Pairing it with Snapshot Sights ensures instantaneous ADS speeds during highly mobile Crucible engagements."
     }
   },
   {
@@ -63,7 +88,7 @@
       "perk1": "Heal Clip",
       "perk2": "Incandescent",
       "masterwork": "Reload Speed / Range",
-      "notes": "This setup transforms the shotgun into a powerful close-quarters Solar utility engine. Securing eliminations with Incandescent spreads Scorch to nearby enemy groups, priming them for massive Ignitions. Following up with a quick reload triggers Heal Clip, granting Cure to keep you and your nearby fireteam members alive in the thick of the fight. Opting for a Reload Speed masterwork ensures you can activate this healing loop as quickly as possible."
+      "notes": "ecuring eliminations with Incandescent spreads Scorch to nearby enemy groups, priming them for devastating Ignitions. Following up with a quick reload triggers Heal Clip, granting Cure to keep you and your nearby fireteam members alive in close-quarters combat."
     },
     "pvp": {
       "barrel": "Barrel Shroud / Rifled Barrel",
@@ -71,7 +96,7 @@
       "perk1": "Slideshot / Threat Detector",
       "perk2": "Opening Shot",
       "masterwork": "Range",
-      "notes": "This roll focuses strictly on maximizing your one-hit elimination consistency and responsiveness. Accurized Rounds paired with Opening Shot guarantees a massive boost to range and accuracy on your initial trigger pull, pushing the weapon's lethal boundaries to the limit. You can utilize Slideshot to aggressively close the gap while auto-reloading, or swap to Threat Detector alongside Barrel Shroud for top-tier handling, enabling incredibly snappy weapon swaps during tight engagements."
+      "notes": "Accurized Rounds paired with Opening Shot guarantees a massive boost to range and accuracy on your initial trigger pull, maximizing one-hit elimination consistency. You can utilize Slideshot to aggressively close the gap, or swap to Threat Detector alongside Barrel Shroud for incredibly snappy weapon handling."
     }
   },
   {
@@ -88,7 +113,7 @@
       "perk1": "Explosive Payload",
       "perk2": "Incandescent",
       "masterwork": "Range",
-      "notes": "This is a top-tier Solar ad-clear setup. Explosive Payload provides a flat damage boost to every shot while mitigating damage falloff, making it highly effective for staggering combatants in higher-tier content. Pairing this with Incandescent spreads Scorch to grouped targets upon kills, feeding perfectly into Solar subclass synergies to chain massive Ignitions."
+      "notes": "Explosive Payload provides a flat damage boost to every shot while mitigating damage falloff against higher-tier combatants. Pairing this with Incandescent spreads Scorch to grouped targets upon kills, chaining massive Solar Ignitions."
     },
     "pvp": {
       "barrel": "Hammer Forged Rifling / Corkscrew Rifling",
@@ -96,7 +121,7 @@
       "perk1": "Slideshot / Opening Shot",
       "perk2": "Precision Instrument",
       "masterwork": "Range",
-      "notes": "This roll is built for maximum consistency and extending your engagement range. Opening Shot or Slideshot guarantees a massive boost to your accuracy and range for the opening volley. Following up with consecutive hits procs Precision Instrument, raising your critical damage just enough to push out your effective three-tap range and make dueling highly forgiving against high-resilience targets."
+      "notes": "Opening Shot or Slideshot guarantees a massive boost to your accuracy and range for the opening volley. Consecutive hits proc Precision Instrument, raising critical damage to push out your effective three-tap range against high-resilience targets."
     }
   },
   {
@@ -113,7 +138,7 @@
       "perk1": "Dragon Fly / Gear Shift",
       "perk2": "Voltshot / Jolting Feedback",
       "masterwork": "Reload Speed / Range",
-      "notes": "This roll is an absolute ad-clear monster. Combining Dragon Fly's precision explosions with Voltshot's chain lightning creates massive Arc area-of-effect damage, allowing you to wipe out grouped enemies instantly. Opting for the Reload Speed masterwork is highly recommended to ensure you can quickly proc Voltshot after a kill."
+      "notes": "Combining Dragon Fly's precision explosions with Voltshot's chain lightning creates massive Arc area-of-effect damage to wipe out grouped enemies instantly. A Reload Speed masterwork ensures you can quickly proc Voltshot after every kill."
     },
     "pvp": {
       "barrel": "Hammer Forged Rifling",
@@ -121,7 +146,7 @@
       "perk1": "Gear Shift",
       "perk2": "Kill Clip",
       "masterwork": "Range",
-      "notes": "This roll is built for extending your engagement distance and snowballing duels. Hammer Forged Rifling, Accurized Rounds, and a Range masterwork work together to push your damage falloff as far out as possible. After securing your first elimination, reloading activates Kill Clip, granting a lethal damage boost that provides a highly forgiving time-to-kill for your next gunfight. Used by Content Creator, Aztecross himself!"
+      "notes": "Hammer Forged Rifling, Accurized Rounds, and a Range masterwork work together to push your damage falloff as far out as possible. After securing your first elimination, reloading activates Kill Clip for a highly forgiving time-to-kill in your next gunfight."
     }
   },
   {
