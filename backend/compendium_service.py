@@ -1231,19 +1231,33 @@ def build_compendium_context(
                 + "\n".join(art_lines)
             )
 
-        # 2e. Modern Armor Mods & 0-200 Stat Curves
+        # 2e. Modern Armor Mods & 0-200 Stat Curves (Strict PVE Zero-Health vs PVP Health split)
         gm = db.get("game_mechanics", {})
         if gm.get("modern_stats"):
-            st_lines = [
-                f"  - {st['stat']} (0–200): {st['description'].replace(chr(10), ' ')[:260]}"
-                for st in gm["modern_stats"]
-            ]
-            sections.append(
-                "=== EXACT MODERN 0–200 STAT SCALING & ARMOR FONT MODS ===\n"
-                + "\n".join(st_lines)
-                + "\n  - Modern Armor Stat Font Mods (while Armor Charge is active, +20 | +40 | +50 stat): "
-                "Super Font (Helmet), Grenade Font & Melee Font (Arms), Health Font (Chest), Weapons Font & Weapon Surge (Legs), Class Font & Time Dilation & Reaper & Powerful Attraction (Class Item)."
-            )
+            is_pvp_mode = "pvp" in eff_act.lower() or any(k in ml for k in ["pvp", "crucible", "trials", "iron banner", "competitive"])
+            if is_pvp_mode:
+                st_lines = [
+                    f"  - {st['stat']} (0–200): {st['description'].replace(chr(10), ' ')[:260]}"
+                    for st in gm["modern_stats"]
+                ]
+                sections.append(
+                    "=== EXACT MODERN 0–200 PVP STAT SCALING & ARMOR MODS ===\n"
+                    "  • PVP STAT PRIORITY: Health IS highly valuable in PVP (ADS flinch resist & faster shield recharge between duels), alongside Weapons, Class, Grenade, Melee, and Super.\n"
+                    + "\n".join(st_lines)
+                    + "\n  - Armor Mods: Targeting / In-Flight Compensator (Helmet), Dexterity / Loader (Arms), Unflinching Aim / Health Font (Chest), Holster / Weapons Font (Legs), Reaper / Bomber / Outreach (Class Item)."
+                )
+            else:
+                st_lines = [
+                    f"  - {st['stat']} (0–200): {st['description'].replace(chr(10), ' ')[:260]}"
+                    for st in gm["modern_stats"]
+                    if st["stat"] != "Health"
+                ]
+                sections.append(
+                    "=== EXACT MODERN 0–200 PVE STAT SCALING & ARMOR FONT MODS ===\n"
+                    "  • STRICT PVE RULE: NEVER recommend investing in the Health stat or Health Font for ANY PVE build! Health is ONLY important in PVP and is a 0-investment dump stat in PVE. Allocate 100% of PVE stats into Grenade, Melee, Weapons, Super, and Class!\n"
+                    + "\n".join(st_lines)
+                    + "\n  - Modern PVE Armor Mods: Harmonic Siphon & Super Font (Helmet), Firepower / Heavy Handed & Grenade Font / Melee Font (Arms), Elemental Resistance & Charged Up / Ammo Generation (Chest), Weapon Surge & Weapons Font / Recuperation (Legs), Class Font & Time Dilation & Reaper & Powerful Attraction (Class Item)."
+                )
 
     return "\n\n".join(sections), intent
 
@@ -1453,6 +1467,28 @@ def build_compendium_fallback_reply(
             p_names = ", ".join(p["name"] for p in a0["recommended_perks"][:5])
             art_text = f"• **Equippable Artifact:** **{a0['name']}** — Key Perks: {p_names}\n"
 
+        is_pvp_mode = "pvp" in eff_act.lower() or any(k in ml for k in ["pvp", "crucible", "trials", "iron banner", "competitive"])
+        if is_pvp_mode:
+            mods_line = (
+                "• **Core PVP Armor Mods:** Targeting + Siphon (Helmet), Dexterity + Loader (Arms), "
+                "Unflinching Aim (Chest), Holster / Scavenger (Legs), Bomber / Outreach + Reaper (Class Item).\n"
+            )
+            stats_line = (
+                "• **PVP Stat Targets (0–200 System):** Push **Health** toward **150–200** (for ADS flinch resist and rapid shield recharge between duels), "
+                "pair with high **Weapons** and **Class**, and invest remaining points into **Grenade**, **Melee**, or **Super**.\n\n"
+            )
+        else:
+            mods_line = (
+                f"• **Core PVE Armor Mods:** Harmonic Siphon + Super Font (Helmet), Firepower/Heavy Handed + Grenade/Melee Font (Arms), "
+                f"Elemental Damage Resistance + Charged Up / Ammo Generation (Chest), 2x {eff_sub} Weapon Surge + Weapons Font / Recuperation (Legs), "
+                f"Reaper + Powerful Attraction + Time Dilation (Class Item).\n"
+            )
+            stats_line = (
+                "• **PVE Stat Targets (0–200 System):** Push **Grenade** (up to +65% grenade damage at 200) or **Melee** (up to +30% melee damage at 200) toward **150–200**, "
+                "dial **Weapons** (bonus Boss damage & ammo bricks) and **Super** (up to +45% Super damage) to **100–150+**, "
+                "and put remaining points into **Class** as needed. *(Leave **Health at 0**—Health is strictly a PVP stat and is not needed at all in PVE!)*\n\n"
+            )
+
         return (
             f"Right then, Guardian. Let us get down to business with an up-to-date **{eff_sub} {eff_class}** blueprint for **{eff_act}**:\n\n"
             f"### 1. Subclass & Ability Configuration\n"
@@ -1465,8 +1501,8 @@ def build_compendium_fallback_reply(
             f"*Run a full 4-piece set bonus or mix two 2-piece bonuses across your 4 legendary armor slots:*\n{set_text}\n\n"
             f"### 4. Artifact, Armor Mods & 0–200 Stat Targets\n"
             f"{art_text}"
-            f"• **Core Armor Mods:** Harmonic Siphon + Super Font (Helmet), Firepower/Heavy Handed + Grenade/Melee Font (Arms), Elemental Resistance + Health Font (Chest), 2x {eff_sub} Weapon Surge + Recuperation (Legs), Reaper + Powerful Attraction + Time Dilation (Class Item).\n"
-            f"• **Stat Targets (0–200 System):** Push **Grenade** (up to +65% grenade damage at 200) or **Melee** (up to +30% melee damage at 200) toward **150–200**, keep **Health** at **100+** (+70 HP per Orb pickup & up to +20 extra Shield HP / +50% faster shield recharge toward 200), and put remaining points into **Super** and **Weapons**.\n\n"
+            f"{mods_line}"
+            f"{stats_line}"
             f"Spot on setup, Guardian. Tell me which Exotic you have in your Vault and I will dial in the exact weapon rolls to pair with it!"
         )
 

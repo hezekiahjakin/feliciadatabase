@@ -155,21 +155,25 @@ EXPERTISE & DOMAIN KNOWLEDGE:
   * Weapons & Perks: Exotics, Catalysts ('↑' upgrades), Legendaries, Heat Weapons (Blasters), god rolls, Origin Traits, Tier 4/5 Enhanced Weapon Mods, and enhanced perks across Kinetic, Energy, and Heavy slots.
   * Modern Destiny 2 Stat System (CRITICAL INSTRUCTION):
     - Destiny 2 uses a modern 6-stat system: Health, Melee, Grenade, Super, Class, and Weapons on a **0 to 200** scale (0–100 base scaling + 100–200 ↑Enhanced Benefits):
-      • Health (0–200): Up to +70 HP per Orb pickup & 10% Flinch Resist at 100; 100–200 grants up to +20 extra Shield HP (150 Shield HP), 25% faster Shield Recharge start, and 50% faster Shield Recharge Rate at 200.
       • Melee (0–200): Cooldown & chunk energy gains up to 100; 100–200 grants up to +30% multiplicative Melee Damage (Unpowered, Powered, and Glaive melees) at 200.
       • Grenade (0–200): Cooldown & up to +211.5% Grenade energy gains at 100; 100–200 grants up to +65% increased Grenade Ability Damage at 200.
       • Super (0–200): Increased Super energy gains up to 100; 100–200 grants up to +45% Super Ability Damage (or +33% duration for Well of Radiance / Ward of Dawn) at 200.
       • Class (0–200): Cooldown & +90% Class energy gains at 100; 100–200 grants up to a 40 HP Overshield on Class Ability cast and up to +65% Class Ability Damage at 200.
       • Weapons (0–200): Faster Handling/Reload (0.9x) & up to +15% damage vs Rank-and-File/Elites at 100; 100–200 grants up to 100% bonus ammo brick chance, +15% Primary/Special Boss damage, and +10% Heavy Boss damage at 200.
-    - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "Resilience", "Strength", "Discipline", "Intellect", "Recovery", or "Mobility" as character stats. Refer ONLY to Health, Melee, Grenade, Super, Class, and Weapons (and modern Font mods: Super Font, Grenade Font, Melee Font, Health Font, Weapons Font, Class Font).
+      • Health (0–200) — **PVP-ONLY STAT (NEVER RECOMMEND FOR PVE!)**: Grants ADS Flinch Resist and faster Shield Recharge for Crucible/Trials duels.
+    - STRICT PVE ZERO-HEALTH RULE (MANDATORY):
+      * NEVER recommend investing points into the **Health** stat (or slotting `Health Font`) for ANY **PVE** build (Grandmasters, Raids, Dungeons, Nightfalls, Strikes, Solo/Fireteam Ops, etc.)!
+      * Health is **NOT important at all in PVE**—leave **Health at 0 / ignore completely** in PVE (survivability in PVE comes from innate 34.5% PVE combatant DR, Chest Resistance mods, and subclass verbs like Devour, Restoration, Frost Armor, Woven Mail, and Overshield). Put ALL PVE stat investment into **Grenade**, **Melee**, **Weapons**, **Super**, and **Class**!
+      * ONLY recommend investing in **Health** when the build or question is explicitly for **PVP (Crucible / Trials of Osiris / Iron Banner)**!
+    - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "Resilience", "Strength", "Discipline", "Intellect", "Recovery", or "Mobility" as character stats. Refer ONLY to Health, Melee, Grenade, Super, Class, and Weapons (and modern Font mods: Super Font, Grenade Font, Melee Font, Weapons Font, Class Font; only mention Health Font for PVP).
 
 RESPONSE GUIDELINES:
 - Whenever a Guardian asks for a build (e.g. "I'm on Warlock and need a good Void build"), deliver a complete, structured, high-impact blueprint grounded in the provided Compendium telemetry:
   1. **Subclass & Ability Configuration** (Super, Class Ability, Melee, Grenade, 2 Aspects, and 4–5 Fragments with why they click)
   2. **Exotic Armor Centerpiece** (Primary Exotic recommendation + 1–2 strong alternatives depending on what they own, citing exact mechanics)
   3. **2-Piece & 4-Piece Armor Set Bonuses** (Recommend the best 4-Piece Set AND/OR a 2-Piece + 2-Piece Set combo, naming the sets, their exact 2pc/4pc perks, and where to farm them!)
-  4. **Equippable Artifact & Armor Mods** (Best Equippable Artifact + key perks, plus Helmet, Arms, Chest, Legs, and Class Item mods)
-  5. **Weapons Synergy & 0–200 Stat Targets** (Kinetic/Energy/Heavy pairing + exact 0–200 targets across Health, Melee, Grenade, Super, Class, Weapons)
+  4. **Equippable Artifact & Armor Mods** (Best Equippable Artifact + key perks, plus Helmet, Arms, Chest, Legs, and Class Item mods—never use Health Font in PVE!)
+  5. **Weapons Synergy & 0–200 Stat Targets** (Kinetic/Energy/Heavy pairing + exact 0–200 targets: for PVE focus strictly on Grenade, Melee, Weapons, Super, and Class—NEVER recommend Health for PVE; only recommend Health for PVP!)
 - NEVER mention legacy stat names in parentheses or prose.
 - Ground your numbers, perk effects, and set bonuses strictly in the provided Compendium & Armory snippets.
 """
@@ -438,9 +442,13 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
     # 2b. Build or Loadout Review with Stats & Weapons
     if any(k in q_lower for k in ["build", "loadout", "review", "health", "stats", "weapons"]):
         advice_points = []
-        
-        # Stat analysis (0-200 scale, modern 6 stats, NO legacy parenthetical terms)
-        advice_points.append("✦ **Health:** Ensure your Health is dialed in at 100+ minimum for endgame activities, pushing towards 150–200 for maximum survivability against Grandmaster and Raid burst damage.")
+        is_pvp_query = "pvp" in (activity or "").lower() or any(k in q_lower for k in ["pvp", "crucible", "trials", "iron banner", "comp"])
+
+        # Stat analysis (0-200 scale, modern 6 stats, Health ONLY for PVP!)
+        if is_pvp_query:
+            advice_points.append("✦ **Health (PVP Priority):** Push Health toward 150–200 in Crucible/Trials for maximum ADS flinch resistance and rapid shield recharge between duels.")
+        else:
+            advice_points.append("✦ **Stat Allocation (PVE):** Ignore **Health** completely in PVE (0 investment / dump stat)—funnel all your armor stats into **Grenade**, **Melee**, **Weapons**, **Super**, and **Class**!")
 
         if "grenade" in q_lower:
             advice_points.append("✦ **Grenade:** High Grenade investment keeps your ability loops cycling rapidly. Pair with Firepower on your gauntlets to churn out Orbs of Power for the squad.")
@@ -1411,15 +1419,18 @@ def _local_item_appraisal_fallback(item: dict, gr_eval: dict) -> str:
         spike_desc = " & ".join(f"{s['name']} ({s['value']})" for s in top_stats) if top_stats else "Balanced"
         perks_txt = ", ".join(p["name"] for p in item.get("activePerks", [])) or "Standard Armor Frame"
 
+        has_health_spike = any(s.get("name") == "Health" for s in top_stats)
+        pvp_note = " *(Note: Health spikes are strictly for PVP Crucible/Trials—for PVE builds you want spikes in Grenade, Melee, Weapons, Super, or Class instead!)*" if has_health_spike else ""
+
         if item.get("isExotic"):
             verdict = "KEEP — EXOTIC ARMOR PIECE"
-            advice = f"Exotic armor piece with spikes in **{spike_desc}** ({total} total base/slotted stats). Keep if those spikes align with your 100–200 stat build targets!"
+            advice = f"Exotic armor piece with spikes in **{spike_desc}** ({total} total base/slotted stats). Keep if those spikes align with your 100–200 stat build targets!{pvp_note}"
         elif total >= 65:
-            verdict = "KEEP — HIGH-STAT ENDGAME ARMOR"
-            advice = f"Strong **{total}** total roll with primary spikes in **{spike_desc}**. Excellent candidate for pushing your primary stats toward the 150–200 ceiling."
+            verdict = "KEEP — HIGH-STAT PVP ARMOR" if has_health_spike else "KEEP — HIGH-STAT ENDGAME ARMOR"
+            advice = f"Strong **{total}** total roll with primary spikes in **{spike_desc}**. Excellent candidate for pushing your primary stats toward the 150–200 ceiling.{pvp_note}"
         elif total >= 60:
             verdict = "SOLID WORKHORSE ARMOR"
-            advice = f"Respectable **{total}** total roll peaking in **{spike_desc}**. Worth holding onto unless you already have higher spiky set pieces."
+            advice = f"Respectable **{total}** total roll peaking in **{spike_desc}**. Worth holding onto unless you already have higher spiky set pieces.{pvp_note}"
         else:
             verdict = "SAFE TO TRASH (SHARD IT)"
             advice = f"At **{total}** total stats, this piece is below endgame standards. Unless you desperately need its set bonus right now, dismantle it for materials."
@@ -1582,7 +1593,7 @@ async def appraise_bungie_item_endpoint(req: Request):
         f"1. **Verdict Header:** State clearly right away whether this roll is a **GOD ROLL (KEEP & LOCK)**, **SOLID KEEP**, or **TRASH / SAFE TO SHARD**.\n"
         f"2. **⚔️ PVE Breakdown:** How good is this specific roll (and its 2-Piece / 4-Piece Armor Set Bonus or Exotic perk if Armor!) for Grandmasters, Raids, Dungeons, or Ad Clear/Boss DPS?\n"
         f"3. **🎯 PVP Breakdown:** How good is this specific roll for Crucible / Trials of Osiris?\n"
-        f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
+        f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! (If inspecting Armor: remember Health spikes are ONLY valuable for PVP—for PVE builds, prioritize Grenade, Melee, Weapons, Super, and Class, NEVER Health!) Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
     )
 
     ai_reply = await run_in_threadpool(query_gemini_api, prompt, [], FELICIA_SYSTEM_PROMPT)
