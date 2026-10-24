@@ -1180,7 +1180,7 @@ function renderGodRollsGrid() {
       promptSecurityClearance(
         'edit_godroll',
         'RESTRICTED ARMORY ROLL EDIT',
-        `Enter Clan Authorization Code (3354242) to edit the verified god roll data for '${weapon.name}'.`
+        `Only authorized clan members may modify armory intel. Enter the Clan Authorization Code to edit '${weapon.name}'.`
       );
     });
 
@@ -3054,7 +3054,7 @@ document.addEventListener('DOMContentLoaded', () => {
       promptSecurityClearance(
         'edit_godroll',
         'RESTRICTED ARMORY DATA ENTRY',
-        'Enter Clan Authorization Code (3354242) to add a new verified god roll to the armory.'
+        'Only authorized clan members may contribute verified weapon rolls. Enter the Clan Authorization Code to proceed.'
       );
     });
   }
