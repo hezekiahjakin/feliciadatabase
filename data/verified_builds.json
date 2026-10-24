@@ -124,10 +124,10 @@
     "armor_mods": {
       "helmet": [
         "1x Harmonic Siphon",
-        "2x Font of Wisdom (Super Fonts)"
+        "2x Super Font"
       ],
       "gloves": [
-        "2x Font of Discipline (Grenade Fonts)",
+        "2x Grenade Font",
         "1x Bolstering Detonation"
       ],
       "chest": [
@@ -191,7 +191,7 @@
     },
     "armor_set": {
       "name": "Seventh Seraph Set (Cosmodrome Public Events / Master Lost Sectors for easy T5) OR Exodus Down Set (Nessus Public Events / Master Lost Sectors for easy T5)",
-      "bonus_4pc": "High Tier-5 armor set providing maximum stat allocation and resilience thresholds."
+      "bonus_4pc": "High Tier-5 armor set providing maximum stat allocation and survivability thresholds."
     },
     "exotic_armor": {
       "name": "Icefall Mantle",
@@ -438,7 +438,7 @@
       "name": "Fortune's Favor",
       "slot": "Chest Armor",
       "description": "After landing a final blow while at full health, or when out of combat for an extended duration, your shields will slowly recharge into an overshield. When you have an overshield, your weapons gain increased accuracy, stability, handling, and damage against combatants, and final blows will grant a short period of increased mobility once the overshield is depleted.",
-      "community_insight": "\u2022 While at Full HP, scoring a Weapon Kill or not taking damage for 4.5 [PVP: 15] seconds continuously generates 6.6 [PVP: 1.1] Void Overshield HP per second until taking damage again.\n\u2022 Grants the following while ANY Overshield is active:\n  - 15% increased weapon damage against Combatants (20% for Heat-Based weapons)\n  - +25 Stability\n  - +25 Handling\n  - 5% Decreased Accuracy Cone Size (Damage bonus stacks with other Empowering buffs)\n\u2022 While any Overshield is active, scoring a kill enables 'Hasty Escape' (activates upon Overshield depletion, granting +30 Mobility for 5 seconds)."
+      "community_insight": "\u2022 While at Full HP, scoring a Weapon Kill or not taking damage for 4.5 [PVP: 15] seconds continuously generates 6.6 [PVP: 1.1] Void Overshield HP per second until taking damage again.\n\u2022 Grants the following while ANY Overshield is active:\n  - 15% increased weapon damage against Combatants (20% for Heat-Based weapons)\n  - +25 Stability\n  - +25 Handling\n  - 5% Decreased Accuracy Cone Size (Damage bonus stacks with other Empowering buffs)\n\u2022 While any Overshield is active, scoring a kill enables 'Hasty Escape' (activates upon Overshield depletion, granting enhanced strafe/walk speed for 5 seconds)."
     },
     "armor_mods": {
       "helmet": [

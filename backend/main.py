@@ -46,6 +46,25 @@ except ImportError:
         analyze_arsenal_duplicates_and_trash,
     )
 
+try:
+    from backend.compendium_service import (
+        get_compendium_db,
+        get_compendium_wiki_entries,
+        sync_compendium_from_google_sheet,
+        build_compendium_context,
+        build_item_compendium_context,
+        build_compendium_fallback_reply,
+    )
+except ImportError:
+    from compendium_service import (
+        get_compendium_db,
+        get_compendium_wiki_entries,
+        sync_compendium_from_google_sheet,
+        build_compendium_context,
+        build_item_compendium_context,
+        build_compendium_fallback_reply,
+    )
+
 # Base directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -94,8 +113,9 @@ def get_config() -> dict:
 
 def get_all_wiki_data() -> List[dict]:
     starter = load_json(STARTER_WIKI_PATH, [])
+    compendium_entries = get_compendium_wiki_entries()
     user_data = load_json(USER_WIKI_PATH, [])
-    return starter + user_data
+    return starter + compendium_entries + user_data
 
 def get_all_god_rolls() -> List[dict]:
     rolls = load_json(GOD_ROLLS_PATH, None)
@@ -127,28 +147,31 @@ VOICE, GRAMMAR & STYLE GUIDELINES (VERY IMPORTANT):
 - You treat the Guardian like a respected fireteam comrade, giving them grounded advice and high-competence tactical support.
 
 EXPERTISE & DOMAIN KNOWLEDGE:
-- You are a walking encyclopedia of Destiny 2:
-  * Weapons: Exotics, Legendaries, god rolls, weapon crafting, enhanced perks, frame archetypes across Kinetic, Energy, and Heavy weapon slots.
-  * Catalysts ('catties'): How to acquire them, quest steps (e.g. Witherhoard's Filthy Lucre), completion objectives, and exact perk upgrades (e.g. Auto-Loading Holster on Witherhoard, +2 rockets on Gjallarhorn).
-  * Subclasses: Solar 3.0, Arc 3.0, Void 3.0, Stasis, Strand, and Prismatic combinations (Aspects, Fragments, Supers, Melees, Grenades).
+- You are synced directly with the live, up-to-date Destiny 2 Data Compendium:
+  * 2-Piece & 4-Piece Armor Set Bonuses (56 Sets): You know every current Armor Set Bonus (e.g., CODA, AION Renewal, AION Adapter, Atheon's Memory, Crota's Memory, Collective Psyche, Bushido, Exodus Down, Eutechnology, Ferropotent, Luminopotent, First Ascent, Smoke Jumper, Techsec, Spacewalk, Veritas, Apostate's Blade, Swordmaster, etc.) and where to farm them. Note that Guardians wear 1 Exotic Armor piece + 4 Legendary Armor pieces, allowing either a full **4-Piece Armor Set Bonus** OR a **2-Piece + 2-Piece hybrid Set Bonus**!
+  * Subclasses & Newest Aspects: Full mastery of Void, Solar, Arc, Stasis, Strand, and Prismatic across Warlock, Titan, and Hunter—including newest Aspects (such as Void Warlock's Soul Siphon & two-charge Chaos Accelerant, Void Hunter's On The Prowl, Arc Warlock's Ionic Sentry, Arc Titan's Storm's Keep w/ Bolt Charge, Solar Hunter's Crackshot, Solar Titan's Shieldburst), Fragments with exact stat modifiers, Supers, Melees, Grenades, and Elemental Verbs.
+  * Exotic Armors & Exotic Class Items: Exact numbers for all 138 Exotic Armors plus Prismatic Exotic Class Item Spirits (Solipsism, Stoicism, Relativism).
+  * Equippable Seasonal Artifacts: Past and current Seasonal Artifacts are equippable (Encrypted Data Disk, Implement of Curiosity, Tablet of Ruin, Slayer Baron Apothecary Satchel, Queensfoil Censer, NPA Repulsion Regulator, Hunter's Journal). Always recommend the highest-synergy Equippable Artifact and its key perks for builds!
+  * Weapons & Perks: Exotics, Catalysts ('↑' upgrades), Legendaries, Heat Weapons (Blasters), god rolls, Origin Traits, Tier 4/5 Enhanced Weapon Mods, and enhanced perks across Kinetic, Energy, and Heavy slots.
   * Modern Destiny 2 Stat System (CRITICAL INSTRUCTION):
-    - Destiny 2 uses a modern 6-stat system: Health, Melee, Grenade, Super, Class, and Weapons.
-    - Stats scale from 0 to 200 (NOT capped at 100). 100+ is a solid baseline for endgame, while primary focus stats push to 150+ or the 200 maximum.
-    - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "(Resilience)", "(Strength)", "(Discipline)", "(Intellect)", "(Recovery)", or "(Mobility)". Refer ONLY to the modern stat names: Health, Melee, Grenade, Super, Class, Weapons.
-    - Health: Governs maximum health pool and damage resistance in PVE/Grandmasters. 100+ is mandatory for endgame survivability, pushing towards 150-200 for peak tankiness.
-    - Melee: Governs melee damage and melee ability cooldown. Essential for melee builds (e.g. Synthoceps, Combination Blow, Consecration).
-    - Grenade: Governs grenade damage and grenade ability cooldown for ability-loop builds.
-    - Super: Governs super ability damage and super regeneration rate.
-    - Class: Governs class ability cooldown (Barricade, Rift, Dodge) and class-specific benefits.
-    - Weapons: Governs weapon handling, reload speed, stability, and firearm combat effectiveness.
-  * Endgame Fireteam Tactics: Grandmaster Nightfalls, Raids, Dungeons, Champion counters (Anti-Barrier, Overload, Unstoppable verbs and weapons), boss DPS rotations, and survivability loops.
+    - Destiny 2 uses a modern 6-stat system: Health, Melee, Grenade, Super, Class, and Weapons on a **0 to 200** scale (0–100 base scaling + 100–200 ↑Enhanced Benefits):
+      • Health (0–200): Up to +70 HP per Orb pickup & 10% Flinch Resist at 100; 100–200 grants up to +20 extra Shield HP (150 Shield HP), 25% faster Shield Recharge start, and 50% faster Shield Recharge Rate at 200.
+      • Melee (0–200): Cooldown & chunk energy gains up to 100; 100–200 grants up to +30% multiplicative Melee Damage (Unpowered, Powered, and Glaive melees) at 200.
+      • Grenade (0–200): Cooldown & up to +211.5% Grenade energy gains at 100; 100–200 grants up to +65% increased Grenade Ability Damage at 200.
+      • Super (0–200): Increased Super energy gains up to 100; 100–200 grants up to +45% Super Ability Damage (or +33% duration for Well of Radiance / Ward of Dawn) at 200.
+      • Class (0–200): Cooldown & +90% Class energy gains at 100; 100–200 grants up to a 40 HP Overshield on Class Ability cast and up to +65% Class Ability Damage at 200.
+      • Weapons (0–200): Faster Handling/Reload (0.9x) & up to +15% damage vs Rank-and-File/Elites at 100; 100–200 grants up to 100% bonus ammo brick chance, +15% Primary/Special Boss damage, and +10% Heavy Boss damage at 200.
+    - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "Resilience", "Strength", "Discipline", "Intellect", "Recovery", or "Mobility" as character stats. Refer ONLY to Health, Melee, Grenade, Super, Class, and Weapons (and modern Font mods: Super Font, Grenade Font, Melee Font, Health Font, Weapons Font, Class Font).
 
 RESPONSE GUIDELINES:
-- When evaluating or crafting builds, always assess the 6 core stats (Health, Melee, Grenade, Super, Class, Weapons) on the 0-200 scale and the 3 weapon slots (Kinetic, Energy, Heavy).
-- NEVER mention legacy stat names in parentheses.
-- When asked for builds or catalyst advice, give structured, clear, and actionable steps with bullet points.
-- If the user asks about an exotic catalyst ('catty'), explain: 1) Where to get it, 2) Objectives to master it (with efficient farm locations like Shuro Chi or Grasp loot cave), and 3) The exact perks it grants.
-- Ground your answers in the provided knowledge base snippets whenever available.
+- Whenever a Guardian asks for a build (e.g. "I'm on Warlock and need a good Void build"), deliver a complete, structured, high-impact blueprint grounded in the provided Compendium telemetry:
+  1. **Subclass & Ability Configuration** (Super, Class Ability, Melee, Grenade, 2 Aspects, and 4–5 Fragments with why they click)
+  2. **Exotic Armor Centerpiece** (Primary Exotic recommendation + 1–2 strong alternatives depending on what they own, citing exact mechanics)
+  3. **2-Piece & 4-Piece Armor Set Bonuses** (Recommend the best 4-Piece Set AND/OR a 2-Piece + 2-Piece Set combo, naming the sets, their exact 2pc/4pc perks, and where to farm them!)
+  4. **Equippable Artifact & Armor Mods** (Best Equippable Artifact + key perks, plus Helmet, Arms, Chest, Legs, and Class Item mods)
+  5. **Weapons Synergy & 0–200 Stat Targets** (Kinetic/Energy/Heavy pairing + exact 0–200 targets across Health, Melee, Grenade, Super, Class, Weapons)
+- NEVER mention legacy stat names in parentheses or prose.
+- Ground your numbers, perk effects, and set bonuses strictly in the provided Compendium & Armory snippets.
 """
 
 app = FastAPI(title="F.E.L.I.C.I.A. - Tactical Fireteam AI")
@@ -239,8 +262,8 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
             "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 2048,
+            "temperature": 0.65,
+            "maxOutputTokens": 3072,
         }
     }
 
@@ -401,7 +424,18 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
                 f"Craftable or farmed, this roll will do serious work for you. Let me know if you want to pair this with an endgame subclass build!"
             )
 
-    # 2. Build or Loadout Review with Stats & Weapons
+    # 2. Data Compendium Build / Exotic / Armor Set / Perk fallback
+    compendium_reply = build_compendium_fallback_reply(
+        query,
+        guardian_class=guardian_class,
+        subclass=subclass,
+        activity=activity,
+        tactical_inquiry=tactical_inquiry,
+    )
+    if compendium_reply:
+        return compendium_reply
+
+    # 2b. Build or Loadout Review with Stats & Weapons
     if any(k in q_lower for k in ["build", "loadout", "review", "health", "stats", "weapons"]):
         advice_points = []
         
@@ -501,6 +535,18 @@ def health_endpoint():
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
+    # Assemble live Destiny 2 Data Compendium telemetry & detect explicit class/subclass from message first
+    compendium_raw, intent = build_compendium_context(
+        req.message,
+        guardian_class=req.guardian_class or "Warlock",
+        subclass=req.subclass or "Solar",
+        activity=req.activity or "Grandmaster+",
+        tactical_inquiry=req.tactical_inquiry or "Ability Focused",
+    )
+    eff_class = intent["effective_class"]
+    eff_subclass = intent["effective_subclass"]
+    eff_activity = intent["effective_activity"]
+
     # Retrieve relevant wiki knowledge
     all_wikis = get_all_wiki_data()
     msg_lower = req.message.lower()
@@ -526,7 +572,7 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             matched_snippets.append((score, item))
             
     matched_snippets.sort(key=lambda x: x[0], reverse=True)
-    top_snippets = [s[1] for s in matched_snippets[:3]]
+    top_snippets = [s[1] for s in matched_snippets[:4]]
     
     knowledge_context = ""
     if top_snippets:
@@ -535,15 +581,21 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             knowledge_context += f"--- Entry {idx}: {snip.get('title')} ({snip.get('category')}) ---\n"
             knowledge_context += f"{snip.get('content')}\n"
     
-    # Check for exact verified clan build match
-    verified_build = find_verified_build(req.subclass, req.guardian_class, req.activity, req.tactical_inquiry or "")
+    # Check for exact verified clan build match using the effective class & subclass
+    verified_build = None
+    if intent["is_build_query"]:
+        verified_build = find_verified_build(eff_subclass, eff_class, eff_activity, req.tactical_inquiry or "")
     verified_blueprint_context = ""
     if verified_build:
         verified_blueprint_context = (
             f"\n\n★ OFFICIAL CLAN VERIFIED BLUEPRINT MATCHED ({verified_build['title']}):\n"
             f"{format_verified_build_response(verified_build)}\n\n"
-            f"CRITICAL INSTRUCTION: The Guardian has selected this exact verified setup! You MUST deliver this complete, battle-tested blueprint with all its aspects, fragments, weapons, artifact perks, armor set bonuses, armor mods, community insights, stat priorities, and ghost mod. Deliver it with your authentic Scottish Vanguard authority and dry tactical wit!"
+            f"NOTE: Use this battle-tested clan blueprint as a baseline if it fits the Guardian's exact request, and enrich it with any newer 2-Piece / 4-Piece Armor Set Bonuses or Compendium details below!"
         )
+
+    compendium_block = ""
+    if compendium_raw:
+        compendium_block = f"\n\n★ LIVE DESTINY 2 DATA COMPENDIUM TELEMETRY (UP-TO-DATE):\n{compendium_raw}\n"
 
     # Check for weapon god roll match in database
     matched_weapons = []
@@ -568,22 +620,22 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
                 f"  PVP God Roll: Barrel: {pvp.get('barrel')}, Mag: {pvp.get('mag')}, Perk 1: {pvp.get('perk1')}, Perk 2: {pvp.get('perk2')}, MW: {pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
             )
 
-    subclass_name = (req.subclass or "Solar").capitalize()
     enhanced_prompt = (
         f"TACTICAL PROFILE:\n"
-        f"• Guardian Class: {req.guardian_class}\n"
-        f"• Subclass Element: {subclass_name}\n"
-        f"• Operational Activity: {req.activity}\n"
+        f"• Guardian Class: {eff_class}\n"
+        f"• Subclass Element: {eff_subclass}\n"
+        f"• Operational Activity: {eff_activity}\n"
         f"• Tactical Inquiry Focus: {req.tactical_inquiry or 'General'}\n"
-        f"{verified_blueprint_context}\n"
-        f"{knowledge_context}\n"
+        f"{verified_blueprint_context}"
+        f"{compendium_block}"
+        f"{knowledge_context}"
         f"{godroll_context}\n\n"
         f"Guardian Transmission: {req.message}"
     )
     
     reply = await run_in_threadpool(query_gemini_api, enhanced_prompt, req.history or [], FELICIA_SYSTEM_PROMPT)
     if reply.startswith("ERROR_FALLBACK"):
-        reply = local_tactical_fallback(req.message, req.guardian_class, req.activity, top_snippets, subclass_name, req.tactical_inquiry or "General")
+        reply = local_tactical_fallback(req.message, eff_class, eff_activity, top_snippets, eff_subclass, req.tactical_inquiry or "General")
     
     # Save to chat history
     history = load_json(HISTORY_PATH, [])
@@ -591,8 +643,8 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
         "id": str(uuid.uuid4()),
         "user": req.message,
         "felicia": reply,
-        "guardian_class": req.guardian_class,
-        "activity": req.activity,
+        "guardian_class": eff_class,
+        "activity": eff_activity,
         "timestamp": os.path.getmtime(HISTORY_PATH) if os.path.exists(HISTORY_PATH) else 0
     })
     # Keep last 50
@@ -604,12 +656,39 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
     
     return {
         "reply": reply,
+        "effective_class": eff_class,
+        "effective_subclass": eff_subclass,
+        "compendium_active": bool(compendium_raw),
         "snippets_used": [s.get("title") for s in top_snippets]
     }
 
+@app.get("/api/compendium/status")
+def get_compendium_status_endpoint():
+    db = get_compendium_db()
+    meta = db.get("meta", {}) if db else {}
+    return {
+        "loaded": bool(db),
+        "title": meta.get("title", "Destiny 2 Data Compendium"),
+        "source_url": meta.get("source_url", ""),
+        "synced_at": meta.get("synced_at", ""),
+        "counts": meta.get("counts", {}),
+    }
+
+@app.post("/api/compendium/sync")
+async def post_compendium_sync_endpoint():
+    try:
+        db = await run_in_threadpool(sync_compendium_from_google_sheet)
+        return {
+            "status": "success",
+            "synced_at": db.get("meta", {}).get("synced_at", ""),
+            "counts": db.get("meta", {}).get("counts", {}),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync Compendium sheet: {e}")
+
 @app.get("/api/wiki")
 def get_wiki_endpoint():
-    starter = load_json(STARTER_WIKI_PATH, [])
+    starter = load_json(STARTER_WIKI_PATH, []) + get_compendium_wiki_entries()
     user_data = load_json(USER_WIKI_PATH, [])
     return {
         "starter": starter,
@@ -1486,6 +1565,8 @@ async def appraise_bungie_item_endpoint(req: Request):
             f"and THIS copy is their #1 BEST ({client_grc.get('comparisonSummary')}). Tell them to lock THIS copy and dismantle the weaker duplicates!\n"
         )
 
+    compendium_item_section = build_item_compendium_context(item)
+
     prompt = (
         f"GUARDIAN LIVE INVENTORY ITEM INSPECTION REQUEST ('Ask F.E.L.I.C.I.A.'):\n"
         f"• Item Name: {item.get('name')}\n"
@@ -1495,11 +1576,11 @@ async def appraise_bungie_item_endpoint(req: Request):
         f"• Masterwork: {mw_name} | Crafted: {item.get('isCrafted')} | Masterworked: {item.get('isMasterworked')}\n"
         f"• Stats: {stats_text}" + (f" (Total Armor Stats: {item.get('totalStats')})" if item.get("category") == "Armor" else "") + "\n"
         f"• Rolled Sockets / Perks:\n" + ("\n".join(cols_text) if cols_text else "  - Fixed / Intrinsic") + "\n"
-        f"{db_section}{dup_note}\n"
+        f"{db_section}{compendium_item_section}{dup_note}\n"
         f"TASK FOR F.E.L.I.C.I.A.:\n"
         f"Give a concise, high-impact Destiny 2 roll review in your grounded Scottish Vanguard voice:\n"
         f"1. **Verdict Header:** State clearly right away whether this roll is a **GOD ROLL (KEEP & LOCK)**, **SOLID KEEP**, or **TRASH / SAFE TO SHARD**.\n"
-        f"2. **⚔️ PVE Breakdown:** How good is this specific roll for Grandmasters, Raids, Dungeons, or Ad Clear/Boss DPS?\n"
+        f"2. **⚔️ PVE Breakdown:** How good is this specific roll (and its 2-Piece / 4-Piece Armor Set Bonus or Exotic perk if Armor!) for Grandmasters, Raids, Dungeons, or Ad Clear/Boss DPS?\n"
         f"3. **🎯 PVP Breakdown:** How good is this specific roll for Crucible / Trials of Osiris?\n"
         f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
     )
