@@ -24,7 +24,7 @@ import {
 
 // Application State
 const state = {
-  currentTab: 'tab-comms',
+  currentTab: 'tab-inventory',
   guardianClass: 'Warlock',
   subclass: 'solar',          // 'stasis', 'void', 'arc', 'solar', 'strand', 'prismatic'
   activity: 'Grandmaster+',   // 'Grandmaster+', 'Dungeon / Raid', 'PVP'
@@ -46,7 +46,13 @@ const state = {
   isSpeaking: false,
   cursor: { x: 0, y: 0, targetX: 0, targetY: 0 },
   currentUser: null,
-  emailAuthMode: 'signin' // 'signin' | 'signup'
+  emailAuthMode: 'signin', // 'signin' | 'signup'
+  bungieSession: null,
+  bungieData: null,
+  activeInventoryView: null, // characterId or 'vault'
+  invFilter: { search: '', slot: 'all' },
+  inspectedItem: null,
+  lastAppraisalReply: ''
 };
 
 // Subclass Palettes & Tactical Profiles (Solar replaces Amber with true orange; Stasis added)
@@ -1373,6 +1379,820 @@ function initSpeechRecognition() {
 }
 
 /* ==========================================================================
+   BUNGIE.NET INVENTORY, VAULT & "ASK F.E.L.I.C.I.A." ENGINE
+   ========================================================================== */
+const BUNGIE_STORAGE_KEY = 'felicia_bungie_session';
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function classGlyph(className) {
+  const c = (className || '').toLowerCase();
+  if (c === 'hunter') return '◆';
+  if (c === 'warlock') return '▲';
+  if (c === 'titan') return '■';
+  return '❖';
+}
+
+function loadSavedBungieSession() {
+  // Check URL hash bounce (#bungie_session=...) from cross-origin OAuth callback
+  if (window.location.hash && window.location.hash.startsWith('#bungie_session=')) {
+    try {
+      const b64 = window.location.hash.slice('#bungie_session='.length);
+      const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+      const jsonStr = atob(pad.replace(/-/g, '+').replace(/_/g, '/'));
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && parsed.access_token) {
+        localStorage.setItem(BUNGIE_STORAGE_KEY, JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.error('[Bungie Session Hash Parse]', e);
+    }
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  try {
+    const raw = localStorage.getItem(BUNGIE_STORAGE_KEY);
+    if (!raw) return null;
+    const sess = JSON.parse(raw);
+    if (sess && sess.access_token) return sess;
+  } catch (e) {}
+  return null;
+}
+
+function saveBungieSession(sess) {
+  state.bungieSession = sess;
+  try {
+    if (sess) {
+      localStorage.setItem(BUNGIE_STORAGE_KEY, JSON.stringify(sess));
+    } else {
+      localStorage.removeItem(BUNGIE_STORAGE_KEY);
+    }
+  } catch (e) {}
+}
+
+function startBungieLogin() {
+  sfx.playTransmit();
+  const origin = encodeURIComponent(window.location.origin);
+  window.location.href = `/api/auth/bungie/login?origin=${origin}`;
+}
+
+function disconnectBungieAccount() {
+  sfx.playChirp();
+  saveBungieSession(null);
+  state.bungieData = null;
+  state.activeInventoryView = null;
+  updateBungieAuthUI();
+}
+
+function updateBungieAuthUI() {
+  const hero = document.getElementById('bungieSignInHero');
+  const workspace = document.getElementById('inventoryWorkspace');
+  const headerPill = document.getElementById('bungieHeaderBadge');
+  const headerText = document.getElementById('bungieHeaderText');
+
+  if (state.bungieSession && state.bungieSession.access_token) {
+    if (hero) hero.classList.add('hidden');
+    if (workspace) workspace.classList.remove('hidden');
+    if (headerPill) headerPill.classList.add('linked');
+    const gName = state.bungieData?.player?.fullBungieName || 'Bungie Linked';
+    if (headerText) headerText.textContent = gName;
+  } else {
+    if (hero) hero.classList.remove('hidden');
+    if (workspace) workspace.classList.add('hidden');
+    if (headerPill) headerPill.classList.remove('linked');
+    if (headerText) headerText.textContent = 'Sign In with Bungie';
+  }
+}
+
+async function fetchBungieServerConfigStatus() {
+  try {
+    const res = await fetch('/api/auth/bungie/status');
+    const data = await res.json();
+    const badge = document.getElementById('badgeBungieConfigStatus');
+    const cidInput = document.getElementById('inputBungieClientId');
+    if (cidInput && data.client_id) cidInput.value = data.client_id;
+    if (badge) {
+      if (data.configured && data.has_secret) {
+        badge.textContent = `ACTIVE // ID ${data.client_id}`;
+      } else if (data.configured) {
+        badge.textContent = 'MISSING SECRET';
+      } else {
+        badge.textContent = 'NEEDS KEYS';
+      }
+    }
+  } catch (e) {}
+}
+
+async function loadBungieInventory(silent = false) {
+  if (!state.bungieSession || !state.bungieSession.access_token) {
+    updateBungieAuthUI();
+    return;
+  }
+
+  updateBungieAuthUI();
+  const loadingEl = document.getElementById('invLoadingState');
+  const stageEl = document.getElementById('invStage');
+
+  if (!silent) {
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (stageEl) stageEl.innerHTML = '';
+  }
+
+  try {
+    const res = await fetch('/api/bungie/inventory', {
+      headers: {
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      }
+    });
+
+    if (res.status === 401) {
+      disconnectBungieAccount();
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Could not load Bungie inventory.');
+    }
+
+    if (data.refreshed_session) {
+      saveBungieSession(data.refreshed_session);
+    }
+
+    state.bungieData = data;
+    if (!state.activeInventoryView) {
+      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+    } else if (
+      state.activeInventoryView !== 'vault' &&
+      !(data.characters || []).some(c => c.characterId === state.activeInventoryView)
+    ) {
+      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+    }
+
+    updateBungieAuthUI();
+    renderInventoryHeaderAndSwitcher();
+    renderInventoryStage();
+  } catch (err) {
+    console.error('[Bungie Inventory Error]', err);
+    if (stageEl) {
+      stageEl.innerHTML = `
+        <div class="vault-section-block" style="text-align:center; padding:34px;">
+          <h3 style="font-family:var(--font-display); color:#F87171; margin-bottom:8px;">TELEMETRY SYNC INTERRUPTED</h3>
+          <p style="color:#CBD5E1; margin-bottom:14px;">${escapeHtml(err.message)}</p>
+          <button type="button" class="btn-tactical btn-primary" id="btnRetryInvSync">Retry Sync</button>
+        </div>
+      `;
+      document.getElementById('btnRetryInvSync')?.addEventListener('click', () => loadBungieInventory(false));
+    }
+  } finally {
+    if (loadingEl) loadingEl.classList.add('hidden');
+  }
+}
+
+function renderInventoryHeaderAndSwitcher() {
+  const data = state.bungieData;
+  if (!data) return;
+
+  const bNameEl = document.getElementById('invBungieName');
+  const platEl = document.getElementById('invPlatformTag');
+  if (bNameEl) bNameEl.textContent = data.player?.fullBungieName || 'Guardian';
+  if (platEl) platEl.textContent = data.player?.platformName || 'Destiny 2';
+
+  const switcher = document.getElementById('charVaultSwitcher');
+  if (!switcher) return;
+  switcher.innerHTML = '';
+
+  // 1. Character Cards (Hunter, Warlock, Titan)
+  (data.characters || []).forEach(ch => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `switcher-card ${state.activeInventoryView === ch.characterId ? 'active' : ''}`;
+    if (ch.emblemBackgroundPath) {
+      btn.style.backgroundImage = `url("https://www.bungie.net${ch.emblemBackgroundPath}")`;
+    }
+    const subName = ch.subclass?.name || 'Active Loadout';
+    btn.innerHTML = `
+      <div class="switcher-info">
+        <span class="switcher-class">${classGlyph(ch.className)} ${escapeHtml(ch.className)}</span>
+        <span class="switcher-sub">${escapeHtml(subName)}</span>
+      </div>
+      <div class="switcher-light">✦ ${ch.light || ''}</div>
+    `;
+    btn.addEventListener('click', () => {
+      sfx.playChirp();
+      state.activeInventoryView = ch.characterId;
+      renderInventoryHeaderAndSwitcher();
+      renderInventoryStage();
+    });
+    switcher.appendChild(btn);
+  });
+
+  // 2. Vault Card
+  const vaultBtn = document.createElement('button');
+  vaultBtn.type = 'button';
+  vaultBtn.className = `switcher-card vault-card ${state.activeInventoryView === 'vault' ? 'active' : ''}`;
+  const vCount = data.vault?.gearCount ?? 0;
+  const vTotal = data.vault?.count ?? vCount;
+  const vCap = data.vault?.capacity ?? 700;
+  vaultBtn.innerHTML = `
+    <div class="switcher-info">
+      <span class="switcher-class">🏛️ THE VAULT</span>
+      <span class="switcher-sub">${vCount} Weapons &amp; Armor Stored</span>
+    </div>
+    <div class="vault-cap-badge">${vTotal} / ${vCap}</div>
+  `;
+  vaultBtn.addEventListener('click', () => {
+    sfx.playChirp();
+    state.activeInventoryView = 'vault';
+    renderInventoryHeaderAndSwitcher();
+    renderInventoryStage();
+  });
+  switcher.appendChild(vaultBtn);
+}
+
+function itemMatchesFilter(item) {
+  const f = state.invFilter;
+  if (f.slot === 'weapons' && item.category !== 'Weapon') return false;
+  if (f.slot === 'armor' && item.category !== 'Armor') return false;
+  if (['Kinetic', 'Energy', 'Heavy'].includes(f.slot) && item.slot !== f.slot) return false;
+  if (f.slot === 'godroll') {
+    const vc = item.godRollCheck?.verdictCode || '';
+    if (!['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc)) return false;
+  }
+
+  const q = (f.search || '').trim().toLowerCase();
+  if (!q) return true;
+
+  if ((item.name || '').toLowerCase().includes(q)) return true;
+  if ((item.typeName || '').toLowerCase().includes(q)) return true;
+  if ((item.element || '').toLowerCase().includes(q)) return true;
+  if ((item.slot || '').toLowerCase().includes(q)) return true;
+
+  for (const col of (item.perkColumns || [])) {
+    for (const p of col) {
+      if ((p.name || '').toLowerCase().includes(q)) return true;
+    }
+  }
+  return false;
+}
+
+function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = false } = {}) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  const tierCls = item.isExotic ? 'tier-exotic' : 'tier-legendary';
+  const mwCls = item.isMasterworked ? 'is-masterworked' : '';
+  const eqCls = isEquippedCard ? 'equipped-card' : '';
+  const defCls = deferOffscreen ? 'vault-item-deferred' : '';
+  btn.className = `gear-card ${tierCls} ${mwCls} ${eqCls} ${defCls}`.trim();
+
+  const iconSrc = item.icon ? `https://www.bungie.net${item.icon}` : 'icon-192.png';
+  const elemDot = item.category === 'Weapon'
+    ? `<span class="elem-dot ${escapeHtml(item.element)}"></span>`
+    : '';
+
+  const vc = item.godRollCheck?.verdictCode || '';
+  let godBadge = '';
+  if (vc === 'DUAL_GOD_ROLL') {
+    godBadge = `<span class="godroll-mini-tag">★ PVE + PVP GOD ROLL</span>`;
+  } else if (vc === 'PVE_GOD_ROLL') {
+    godBadge = `<span class="godroll-mini-tag">★ PVE GOD ROLL</span>`;
+  } else if (vc === 'PVP_GOD_ROLL') {
+    godBadge = `<span class="godroll-mini-tag">★ PVP GOD ROLL</span>`;
+  }
+
+  const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner" title="Crafted">◈</span>` : '';
+  const subDetail = item.category === 'Armor' && item.totalStats
+    ? `${escapeHtml(item.slot)} • ${item.totalStats} Stat`
+    : escapeHtml(item.typeName || item.slot);
+
+  btn.innerHTML = `
+    <div class="gear-icon-frame">
+      <img src="${iconSrc}" alt="${escapeHtml(item.name)}" loading="lazy">
+      ${craftedCorner}
+    </div>
+    <div class="gear-meta">
+      <div class="gear-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+      <div class="gear-sub">
+        ${elemDot}
+        <span class="gear-power">${item.power ? `✦ ${item.power}` : ''}</span>
+        <span>• ${subDetail}</span>
+      </div>
+      ${godBadge}
+    </div>
+  `;
+
+  btn.addEventListener('click', () => openItemInspectModal(item));
+  return btn;
+}
+
+function renderInventoryStage() {
+  const stage = document.getElementById('invStage');
+  const data = state.bungieData;
+  if (!stage || !data) return;
+  stage.innerHTML = '';
+
+  if (state.activeInventoryView === 'vault') {
+    renderVaultView(stage, data.vault?.items || []);
+    return;
+  }
+
+  const ch = (data.characters || []).find(c => c.characterId === state.activeInventoryView);
+  if (!ch) {
+    renderVaultView(stage, data.vault?.items || []);
+    return;
+  }
+
+  // 1. Modern 0-200 6-Stat Ribbon for Active Character
+  const statEntries = Object.entries(ch.stats || {});
+  if (statEntries.length > 0) {
+    const ribbon = document.createElement('div');
+    ribbon.className = 'char-stats-ribbon';
+    ribbon.innerHTML = `<span style="font-family:var(--font-display); font-size:12px; color:var(--vanguard-amber); font-weight:700; margin-right:4px;">${classGlyph(ch.className)} ${escapeHtml(ch.className.toUpperCase())} STATS (0–200):</span>`;
+    statEntries.forEach(([sName, sVal]) => {
+      const chip = document.createElement('div');
+      chip.className = `char-stat-chip ${sVal >= 100 ? 'high-stat' : ''}`;
+      chip.innerHTML = `<span class="s-lbl">${escapeHtml(sName)}:</span><span class="s-val">${sVal}</span>`;
+      ribbon.appendChild(chip);
+    });
+    stage.appendChild(ribbon);
+  }
+
+  // 2. Two-Column Character Gear Grid (Weapons + Armor)
+  const cols = document.createElement('div');
+  cols.className = 'char-loadout-columns';
+
+  const weaponSlots = ['Kinetic', 'Energy', 'Heavy'];
+  const armorSlots = ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+
+  const buildColumnPanel = (title, slotNames) => {
+    const panel = document.createElement('div');
+    panel.className = 'loadout-col-panel';
+    panel.innerHTML = `<div class="loadout-col-header">${title}</div>`;
+
+    let anyRendered = false;
+    slotNames.forEach(slotName => {
+      const eqItem = (ch.equipment || []).find(i => i.slot === slotName && itemMatchesFilter(i));
+      const bagItems = (ch.inventory || []).filter(i => i.slot === slotName && itemMatchesFilter(i));
+      if (!eqItem && bagItems.length === 0) return;
+      anyRendered = true;
+
+      const block = document.createElement('div');
+      block.className = 'slot-group-block';
+      block.innerHTML = `<div class="slot-group-label">${escapeHtml(slotName)}</div>`;
+
+      const row = document.createElement('div');
+      row.className = 'slot-items-row';
+
+      if (eqItem) {
+        const eqWrap = document.createElement('div');
+        eqWrap.className = 'slot-equipped-holder';
+        eqWrap.appendChild(createGearCardElement(eqItem, { isEquippedCard: true }));
+        row.appendChild(eqWrap);
+      }
+
+      const bagGrid = document.createElement('div');
+      bagGrid.className = 'slot-bag-grid';
+      bagItems.forEach(bi => {
+        bagGrid.appendChild(createGearCardElement(bi));
+      });
+      row.appendChild(bagGrid);
+
+      block.appendChild(row);
+      panel.appendChild(block);
+    });
+
+    if (!anyRendered) {
+      const empty = document.createElement('p');
+      empty.style.cssText = 'color:#64748B; font-size:13px; padding:12px 0;';
+      empty.textContent = 'No matching items in this section for current filter.';
+      panel.appendChild(empty);
+    }
+    return panel;
+  };
+
+  if (state.invFilter.slot !== 'armor') {
+    cols.appendChild(buildColumnPanel('⚔️ WEAPONS ARSENAL (EQUIPPED & INVENTORY)', weaponSlots));
+  }
+  if (!['weapons', 'Kinetic', 'Energy', 'Heavy', 'godroll'].includes(state.invFilter.slot)) {
+    cols.appendChild(buildColumnPanel('🛡️ ARMOR RIG (EQUIPPED & INVENTORY)', armorSlots));
+  }
+  stage.appendChild(cols);
+
+  // 3. Postmaster Strip (if character has Postmaster items)
+  const pmFiltered = (ch.postmaster || []).filter(itemMatchesFilter);
+  if (pmFiltered.length > 0) {
+    const pmBlock = document.createElement('div');
+    pmBlock.className = 'vault-section-block';
+    pmBlock.style.marginTop = '16px';
+    pmBlock.innerHTML = `
+      <div class="vault-section-header">
+        <span class="vault-section-title">📬 POSTMASTER (${pmFiltered.length})</span>
+      </div>
+    `;
+    const pmGrid = document.createElement('div');
+    pmGrid.className = 'vault-grid';
+    pmFiltered.forEach(it => pmGrid.appendChild(createGearCardElement(it)));
+    pmBlock.appendChild(pmGrid);
+    stage.appendChild(pmBlock);
+  }
+}
+
+function renderVaultView(stage, vaultItems) {
+  const filtered = vaultItems.filter(itemMatchesFilter);
+  const weapons = filtered.filter(i => i.category === 'Weapon');
+  const armor = filtered.filter(i => i.category === 'Armor');
+
+  if (filtered.length === 0) {
+    stage.innerHTML = `
+      <div class="vault-section-block" style="text-align:center; padding:42px; color:#94A3B8;">
+        No Vault items match your current search or filter.
+      </div>
+    `;
+    return;
+  }
+
+  let globalRenderIdx = 0;
+
+  if (weapons.length > 0) {
+    const wSec = document.createElement('div');
+    wSec.className = 'vault-section-block';
+    wSec.innerHTML = `
+      <div class="vault-section-header">
+        <span class="vault-section-title">⚔️ VAULT WEAPONS (${weapons.length})</span>
+      </div>
+    `;
+    const wGrid = document.createElement('div');
+    wGrid.className = 'vault-grid';
+    weapons.forEach(w => {
+      const defer = globalRenderIdx >= 36;
+      globalRenderIdx++;
+      wGrid.appendChild(createGearCardElement(w, { deferOffscreen: defer }));
+    });
+    wSec.appendChild(wGrid);
+    stage.appendChild(wSec);
+  }
+
+  if (armor.length > 0) {
+    const aSec = document.createElement('div');
+    aSec.className = 'vault-section-block';
+    aSec.innerHTML = `
+      <div class="vault-section-header">
+        <span class="vault-section-title">🛡️ VAULT ARMOR (${armor.length})</span>
+      </div>
+    `;
+    const aGrid = document.createElement('div');
+    aGrid.className = 'vault-grid';
+    armor.forEach(a => {
+      const defer = globalRenderIdx >= 36;
+      globalRenderIdx++;
+      aGrid.appendChild(createGearCardElement(a, { deferOffscreen: defer }));
+    });
+    aSec.appendChild(aGrid);
+    stage.appendChild(aSec);
+  }
+}
+
+function findFallbackEquipId(characterId, slotName, excludeInstanceId) {
+  const ch = (state.bungieData?.characters || []).find(c => c.characterId === characterId);
+  if (!ch) return '';
+  const candidates = (ch.inventory || []).filter(
+    i => i.slot === slotName && i.itemInstanceId !== excludeInstanceId && !i.isExotic
+  );
+  candidates.sort((a, b) => (b.power || 0) - (a.power || 0));
+  return candidates[0]?.itemInstanceId || '';
+}
+
+function openItemInspectModal(item) {
+  sfx.playChirp();
+  state.inspectedItem = item;
+  state.lastAppraisalReply = '';
+
+  const modal = document.getElementById('modalInspectItem');
+  if (!modal) return;
+
+  const banner = document.getElementById('inspectBanner');
+  if (banner) {
+    banner.className = `inspect-banner ${item.isExotic ? 'tier-exotic' : 'tier-legendary'}`;
+  }
+
+  const iconEl = document.getElementById('inspectItemIcon');
+  if (iconEl) iconEl.src = item.icon ? `https://www.bungie.net${item.icon}` : 'icon-192.png';
+
+  const pipEl = document.getElementById('inspectCraftedPip');
+  if (pipEl) pipEl.classList.toggle('hidden', !item.isCrafted);
+
+  const tierBadge = document.getElementById('inspectTierBadge');
+  if (tierBadge) tierBadge.textContent = item.tierName || 'Legendary';
+
+  const elemBadge = document.getElementById('inspectElemBadge');
+  if (elemBadge) {
+    elemBadge.textContent = item.category === 'Weapon' ? item.element : `${item.classRestriction !== 'Any' ? item.classRestriction + ' ' : ''}Armor`;
+  }
+
+  const locBadge = document.getElementById('inspectLocBadge');
+  if (locBadge) {
+    if (item.location === 'vault') {
+      locBadge.textContent = 'IN VAULT';
+    } else {
+      const ownerChar = (state.bungieData?.characters || []).find(c => c.characterId === item.characterId);
+      const cName = ownerChar ? ownerChar.className.toUpperCase() : 'CHARACTER';
+      locBadge.textContent = item.isEquipped ? `EQUIPPED • ${cName}` : `${item.location === 'postmaster' ? 'POSTMASTER' : 'INVENTORY'} • ${cName}`;
+    }
+  }
+
+  const nameEl = document.getElementById('inspectItemName');
+  if (nameEl) nameEl.textContent = item.name;
+
+  const sublineEl = document.getElementById('inspectSubline');
+  if (sublineEl) {
+    const fName = item.frame?.name ? `${item.frame.name} • ` : '';
+    sublineEl.textContent = `${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
+  }
+
+  const powerEl = document.getElementById('inspectPowerVal');
+  if (powerEl) powerEl.textContent = item.power || '—';
+
+  // Hide previous feedback & appraisal panel until requested
+  const feedbackEl = document.getElementById('inspectTransferFeedback');
+  if (feedbackEl) {
+    feedbackEl.classList.add('hidden');
+    feedbackEl.classList.remove('error');
+  }
+  const feliciaPanel = document.getElementById('inspectFeliciaPanel');
+  if (feliciaPanel) feliciaPanel.classList.add('hidden');
+
+  // Populate Action Buttons: Send to Hunter / Warlock / Titan / Vault + 4th "Ask F.E.L.I.C.I.A."
+  const actionsGrid = document.getElementById('inspectActionsGrid');
+  if (actionsGrid) {
+    actionsGrid.innerHTML = '';
+    const chars = state.bungieData?.characters || [];
+
+    chars.forEach(ch => {
+      const isAlreadyOnThisChar = item.location === 'character' && item.characterId === ch.characterId;
+      if (!isAlreadyOnThisChar) {
+        const sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.className = 'btn-item-action';
+        sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
+        sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
+        actionsGrid.appendChild(sendBtn);
+      } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className)) {
+        const equipBtn = document.createElement('button');
+        equipBtn.type = 'button';
+        equipBtn.className = 'btn-item-action';
+        equipBtn.innerHTML = `<span>⚡</span> Equip on ${escapeHtml(ch.className)}`;
+        equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', ch.characterId, ch.className));
+        actionsGrid.appendChild(equipBtn);
+      }
+    });
+
+    if (item.location !== 'vault') {
+      const vaultBtn = document.createElement('button');
+      vaultBtn.type = 'button';
+      vaultBtn.className = 'btn-item-action';
+      vaultBtn.innerHTML = `<span>🏛️</span> Send to Vault`;
+      vaultBtn.addEventListener('click', () => executeItemTransfer(item, 'vault', '', 'Vault'));
+      actionsGrid.appendChild(vaultBtn);
+    }
+
+    // Signature Action: Ask F.E.L.I.C.I.A.
+    const askBtn = document.createElement('button');
+    askBtn.type = 'button';
+    askBtn.className = 'btn-item-action btn-ask-felicia';
+    askBtn.id = 'btnTriggerAskFelicia';
+    askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
+    askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
+    actionsGrid.appendChild(askBtn);
+  }
+
+  // Render Frame & Perk Columns
+  const frameBox = document.getElementById('inspectFrameBox');
+  if (frameBox) {
+    if (item.frame && item.frame.name) {
+      frameBox.classList.remove('hidden');
+      const fIcon = item.frame.icon ? `<img src="https://www.bungie.net${item.frame.icon}" alt="">` : '';
+      frameBox.innerHTML = `
+        ${fIcon}
+        <div>
+          <div style="font-family:var(--font-tactical); font-weight:700; color:#F8FAFC; font-size:13.5px;">${escapeHtml(item.frame.name)}</div>
+          <div style="font-size:12px; color:#94A3B8;">${escapeHtml(item.frame.description || '')}</div>
+        </div>
+      `;
+    } else {
+      frameBox.classList.add('hidden');
+    }
+  }
+
+  const perkColsEl = document.getElementById('inspectPerkColumns');
+  if (perkColsEl) {
+    perkColsEl.innerHTML = '';
+    if ((item.perkColumns || []).length === 0) {
+      perkColsEl.innerHTML = `<div style="color:#64748B; font-size:13px;">Standard / Intrinsic Configuration</div>`;
+    } else {
+      item.perkColumns.forEach(col => {
+        const stack = document.createElement('div');
+        stack.className = 'perk-col-stack';
+        col.forEach(opt => {
+          const chip = document.createElement('div');
+          chip.className = `perk-chip ${opt.selected ? 'active' : ''}`;
+          chip.title = opt.description || opt.name;
+          const pImg = opt.icon ? `<img src="https://www.bungie.net${opt.icon}" alt="">` : '';
+          chip.innerHTML = `${pImg}<span>${escapeHtml(opt.name)}</span>`;
+          stack.appendChild(chip);
+        });
+        perkColsEl.appendChild(stack);
+      });
+    }
+  }
+
+  const mwRow = document.getElementById('inspectMwRow');
+  if (mwRow) {
+    if (item.masterwork && item.masterwork.name) {
+      mwRow.classList.remove('hidden');
+      const mIcon = item.masterwork.icon ? `<img src="https://www.bungie.net${item.masterwork.icon}" alt="">` : '';
+      mwRow.innerHTML = `${mIcon}<span><strong>Masterwork:</strong> ${escapeHtml(item.masterwork.name)}</span>`;
+    } else {
+      mwRow.classList.add('hidden');
+    }
+  }
+
+  // Render Stat Bars
+  const statsListEl = document.getElementById('inspectStatsList');
+  if (statsListEl) {
+    statsListEl.innerHTML = '';
+    const maxScale = item.category === 'Armor' ? 45 : 100;
+    (item.stats || []).forEach(st => {
+      const noBarStats = ['RPM', 'Magazine', 'Charge Time', 'Draw Time', 'Recoil Direction'];
+      const row = document.createElement('div');
+      row.className = 'inspect-stat-row';
+      if (noBarStats.includes(st.name)) {
+        row.innerHTML = `
+          <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
+          <span style="color:#64748B; font-size:11px;">————</span>
+          <span class="inspect-stat-val">${st.value}</span>
+        `;
+      } else {
+        const pct = Math.max(0, Math.min(100, Math.round((st.value / maxScale) * 100)));
+        row.innerHTML = `
+          <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
+          <div class="inspect-stat-bar-bg"><div class="inspect-stat-bar-fill" style="width:${pct}%"></div></div>
+          <span class="inspect-stat-val">${st.value}</span>
+        `;
+      }
+      statsListEl.appendChild(row);
+    });
+
+    if (item.category === 'Armor' && item.totalStats) {
+      const totalRow = document.createElement('div');
+      totalRow.className = 'inspect-stat-row';
+      totalRow.style.marginTop = '6px';
+      totalRow.style.paddingTop = '6px';
+      totalRow.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+      totalRow.innerHTML = `
+        <span class="inspect-stat-name" style="color:var(--vanguard-amber); font-weight:700;">Total Stats</span>
+        <span></span>
+        <span class="inspect-stat-val" style="color:var(--vanguard-amber); font-size:15px;">${item.totalStats}</span>
+      `;
+      statsListEl.appendChild(totalRow);
+    }
+  }
+
+  modal.showModal();
+}
+
+async function executeItemTransfer(item, targetType, targetCharacterId, targetLabel) {
+  const feedbackEl = document.getElementById('inspectTransferFeedback');
+  const actionBtns = document.querySelectorAll('#inspectActionsGrid .btn-item-action');
+  actionBtns.forEach(b => { b.disabled = true; });
+
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = `Transmitting ${item.name} to ${targetLabel}...`;
+  }
+  sfx.playTransmit();
+
+  const fallbackId = item.isEquipped
+    ? findFallbackEquipId(item.characterId, item.slot, item.itemInstanceId)
+    : '';
+
+  try {
+    const res = await fetch('/api/bungie/transfer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        itemInstanceId: item.itemInstanceId,
+        itemHash: item.itemHash,
+        sourceLocation: item.location,
+        sourceCharacterId: item.characterId || '',
+        targetType,
+        targetCharacterId,
+        isEquipped: Boolean(item.isEquipped),
+        fallbackEquipInstanceId: fallbackId
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Bungie rejected the transfer.');
+    }
+
+    if (data.refreshed_session) {
+      saveBungieSession(data.refreshed_session);
+    }
+
+    sfx.playReceive();
+    if (feedbackEl) {
+      feedbackEl.textContent = `✓ ${item.name} ${targetType === 'equip' ? 'equipped on' : 'transferred to'} ${targetLabel}!`;
+    }
+
+    // Refresh inventory in background and close modal smoothly
+    await loadBungieInventory(true);
+    setTimeout(() => {
+      document.getElementById('modalInspectItem')?.close();
+    }, 650);
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+    actionBtns.forEach(b => { b.disabled = false; });
+  }
+}
+
+async function triggerAskFeliciaOnItem(item) {
+  sfx.playTransmit();
+  const panel = document.getElementById('inspectFeliciaPanel');
+  const bodyEl = document.getElementById('inspectFeliciaBody');
+  const pillEl = document.getElementById('inspectVerdictPill');
+  const askBtn = document.getElementById('btnTriggerAskFelicia');
+
+  if (!panel || !bodyEl) return;
+  panel.classList.remove('hidden');
+  if (pillEl) pillEl.classList.add('hidden');
+  if (askBtn) askBtn.disabled = true;
+
+  bodyEl.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px; color:var(--vanguard-amber); font-family:var(--font-tactical);">
+      <div class="inv-spinner" style="width:20px; height:20px; border-width:2px;"></div>
+      <span>F.E.L.I.C.I.A. is scanning rolled sockets &amp; Clan God Roll archives for <strong>${escapeHtml(item.name)}</strong>...</span>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/api/bungie/appraise', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Appraisal request failed.');
+
+    state.lastAppraisalReply = data.reply || '';
+    sfx.playReceive();
+    bodyEl.innerHTML = renderMarkdown(state.lastAppraisalReply);
+
+    if (pillEl && data.godRollMatch) {
+      const vc = data.godRollMatch.verdictCode;
+      pillEl.classList.remove('hidden', 'godroll', 'keep', 'shard');
+      if (['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc)) {
+        pillEl.classList.add('godroll');
+        pillEl.textContent = vc.replace(/_/g, ' ');
+      } else if (vc === 'SHARD_CANDIDATE') {
+        pillEl.classList.add('shard');
+        pillEl.textContent = 'SAFE TO TRASH';
+      } else {
+        pillEl.classList.add('keep');
+        pillEl.textContent = vc === 'SOLID_KEEP' ? 'SOLID KEEP' : 'EVALUATED';
+      }
+    }
+
+    if (state.autoSpeak && state.lastAppraisalReply) {
+      voice.speak(state.lastAppraisalReply);
+    }
+  } catch (err) {
+    sfx.playAlert();
+    bodyEl.innerHTML = `<p style="color:#FCA5A5;">Could not reach F.E.L.I.C.I.A.: ${escapeHtml(err.message)}</p>`;
+  } finally {
+    if (askBtn) askBtn.disabled = false;
+  }
+}
+
+/* ==========================================================================
    INITIALIZATION & EVENT LISTENERS
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
@@ -2402,10 +3222,180 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLockAdmin.addEventListener('click', () => {
       sessionStorage.removeItem('felicia_clan_auth');
       try { sfx.playAlert(); } catch(e) {}
-      switchTabDirect('tab-comms');
+      switchTabDirect('tab-inventory');
       alert('Clan Administrator Mode locked. Security passcode required to re-enter Admin Settings.');
     });
   }
+
+  // =========================================================================
+  // BUNGIE INVENTORY, VAULT & ITEM INSPECTION WIRING
+  // =========================================================================
+  const btnBungieLoginHero = document.getElementById('btnBungieLoginHero');
+  const bungieHeaderBadge = document.getElementById('bungieHeaderBadge');
+  const btnRefreshInventory = document.getElementById('btnRefreshInventory');
+  const btnDisconnectBungie = document.getElementById('btnDisconnectBungie');
+  const invSearchInput = document.getElementById('invSearchInput');
+  const btnClearInvSearch = document.getElementById('btnClearInvSearch');
+  const modalInspectItem = document.getElementById('modalInspectItem');
+  const btnCloseInspectItem = document.getElementById('btnCloseInspectItem');
+  const btnSpeakAppraisal = document.getElementById('btnSpeakAppraisal');
+  const btnOpenInComms = document.getElementById('btnOpenInComms');
+  const btnSaveBungieConfig = document.getElementById('btnSaveBungieConfig');
+
+  if (btnBungieLoginHero) {
+    btnBungieLoginHero.addEventListener('click', startBungieLogin);
+  }
+
+  if (bungieHeaderBadge) {
+    bungieHeaderBadge.addEventListener('click', () => {
+      if (state.bungieSession && state.bungieSession.access_token) {
+        switchTabDirect('tab-inventory');
+      } else {
+        startBungieLogin();
+      }
+    });
+  }
+
+  if (btnRefreshInventory) {
+    btnRefreshInventory.addEventListener('click', () => {
+      sfx.playChirp();
+      loadBungieInventory(false);
+    });
+  }
+
+  if (btnDisconnectBungie) {
+    btnDisconnectBungie.addEventListener('click', () => {
+      if (confirm('Disconnect your Bungie.net account from this browser?')) {
+        disconnectBungieAccount();
+      }
+    });
+  }
+
+  if (invSearchInput) {
+    invSearchInput.addEventListener('input', (e) => {
+      state.invFilter.search = e.target.value;
+      if (btnClearInvSearch) {
+        btnClearInvSearch.classList.toggle('hidden', !e.target.value);
+      }
+      renderInventoryStage();
+    });
+  }
+
+  if (btnClearInvSearch && invSearchInput) {
+    btnClearInvSearch.addEventListener('click', () => {
+      invSearchInput.value = '';
+      state.invFilter.search = '';
+      btnClearInvSearch.classList.add('hidden');
+      invSearchInput.focus();
+      renderInventoryStage();
+    });
+  }
+
+  document.querySelectorAll('#invFilterPills .inv-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      sfx.playChirp();
+      document.querySelectorAll('#invFilterPills .inv-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.invFilter.slot = pill.dataset.invfilter || 'all';
+      renderInventoryStage();
+    });
+  });
+
+  if (modalInspectItem) {
+    if (btnCloseInspectItem) {
+      btnCloseInspectItem.addEventListener('click', () => modalInspectItem.close());
+    }
+    // Fallback for browsers without native <dialog closedby="any"> support
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      modalInspectItem.addEventListener('click', (event) => {
+        if (event.target !== modalInspectItem) return;
+        const rect = modalInspectItem.getBoundingClientRect();
+        const isDialogContent = (
+          rect.top <= event.clientY &&
+          event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX &&
+          event.clientX <= rect.left + rect.width
+        );
+        if (isDialogContent) return;
+        modalInspectItem.close();
+      });
+    }
+  }
+
+  if (btnSpeakAppraisal) {
+    btnSpeakAppraisal.addEventListener('click', () => {
+      sfx.playChirp();
+      if (state.lastAppraisalReply) voice.speak(state.lastAppraisalReply);
+    });
+  }
+
+  if (btnOpenInComms) {
+    btnOpenInComms.addEventListener('click', () => {
+      if (!state.inspectedItem) return;
+      const it = state.inspectedItem;
+      const perksSummary = (it.perkColumns || [])
+        .map(col => col.filter(o => o.selected).map(o => o.name).join('/'))
+        .filter(Boolean)
+        .join(', ');
+      modalInspectItem?.close();
+      switchTabDirect('tab-comms');
+      if (state.lastAppraisalReply) {
+        appendMessage('user', 'GUARDIAN', `Evaluate my ${it.name} (${perksSummary || it.typeName})`);
+        appendMessage('felicia', 'F.E.L.I.C.I.A.', state.lastAppraisalReply);
+        state.chatHistory.push({ role: 'user', content: `Evaluate my ${it.name} (${perksSummary || it.typeName})` });
+        state.chatHistory.push({ role: 'model', content: state.lastAppraisalReply });
+      }
+    });
+  }
+
+  if (btnSaveBungieConfig) {
+    btnSaveBungieConfig.addEventListener('click', async () => {
+      const apiKey = document.getElementById('inputBungieApiKey')?.value.trim() || '';
+      const clientId = document.getElementById('inputBungieClientId')?.value.trim() || '56157';
+      const clientSecret = document.getElementById('inputBungieClientSecret')?.value.trim() || '';
+
+      btnSaveBungieConfig.disabled = true;
+      btnSaveBungieConfig.textContent = 'Saving...';
+      try {
+        const res = await fetch('/api/auth/bungie/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bungie_api_key: apiKey,
+            bungie_client_id: clientId,
+            bungie_client_secret: clientSecret
+          })
+        });
+        if (!res.ok) throw new Error('Failed to save Bungie credentials.');
+        sfx.playReceive();
+        if (document.getElementById('inputBungieApiKey')) document.getElementById('inputBungieApiKey').value = '';
+        if (document.getElementById('inputBungieClientSecret')) document.getElementById('inputBungieClientSecret').value = '';
+        await fetchBungieServerConfigStatus();
+        alert('Bungie.net API & OAuth credentials saved to server!');
+      } catch (err) {
+        alert('Error saving Bungie config: ' + err.message);
+      } finally {
+        btnSaveBungieConfig.disabled = false;
+        btnSaveBungieConfig.textContent = 'Save Bungie Credentials';
+      }
+    });
+  }
+
+  window.addEventListener('message', (ev) => {
+    if (ev.data && ev.data.type === 'BUNGIE_AUTH_SUCCESS' && ev.data.session) {
+      saveBungieSession(ev.data.session);
+      sfx.playReceive();
+      switchTabDirect('tab-inventory');
+      loadBungieInventory(false);
+    }
+  });
+
+  state.bungieSession = loadSavedBungieSession();
+  updateBungieAuthUI();
+  if (state.bungieSession) {
+    loadBungieInventory(false);
+  }
+  fetchBungieServerConfigStatus();
 
   initSpeechRecognition();
   loadWikiData();

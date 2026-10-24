@@ -10,10 +10,33 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Bac
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 import requests
 import re
+
+try:
+    from backend.bungie_service import (
+        get_bungie_credentials,
+        save_bungie_credentials,
+        build_authorize_url,
+        exchange_code_for_tokens,
+        refresh_bungie_tokens,
+        fetch_guardian_inventory,
+        transfer_guardian_item,
+        evaluate_item_against_godrolls,
+    )
+except ImportError:
+    from bungie_service import (
+        get_bungie_credentials,
+        save_bungie_credentials,
+        build_authorize_url,
+        exchange_code_for_tokens,
+        refresh_bungie_tokens,
+        fetch_guardian_inventory,
+        transfer_guardian_item,
+        evaluate_item_against_godrolls,
+    )
 
 # Base directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -902,6 +925,454 @@ def get_network_info():
         "public_url": public_url,
         "qr_code": qr_data_uri
     }
+
+# =========================================================================
+# BUNGIE.NET OAUTH, GUARDIAN INVENTORY, VAULT & "ASK F.E.L.I.C.I.A."
+# =========================================================================
+
+def _is_trusted_return_origin(origin: str) -> bool:
+    if not origin:
+        return False
+    return bool(
+        re.match(
+            r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|[a-z0-9-]+\.trycloudflare\.com|[a-z0-9-]+\.onrender\.com)(:\d+)?$",
+            origin.strip(),
+            re.IGNORECASE,
+        )
+    )
+
+
+@app.get("/api/auth/bungie/status")
+def bungie_auth_status():
+    creds = get_bungie_credentials()
+    ak = creds["api_key"]
+    masked_ak = (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else ("Set" if ak else "Not Set")
+    return {
+        "configured": bool(creds["api_key"] and creds["client_id"]),
+        "has_secret": bool(creds["client_secret"]),
+        "client_id": creds["client_id"] or "56157",
+        "api_key_masked": masked_ak,
+    }
+
+
+@app.post("/api/auth/bungie/config")
+async def update_bungie_config_endpoint(req: Request):
+    body = await req.json()
+    updated = save_bungie_credentials(
+        api_key=body.get("bungie_api_key", ""),
+        client_id=body.get("bungie_client_id", ""),
+        client_secret=body.get("bungie_client_secret", ""),
+    )
+    ak = updated["api_key"]
+    return {
+        "status": "updated",
+        "configured": bool(updated["api_key"] and updated["client_id"]),
+        "has_secret": bool(updated["client_secret"]),
+        "client_id": updated["client_id"],
+        "api_key_masked": (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else "Not Set",
+    }
+
+
+@app.get("/api/auth/bungie/login")
+def bungie_login_redirect(origin: Optional[str] = None, mode: Optional[str] = None):
+    state_payload = {"nonce": uuid.uuid4().hex[:10]}
+    if origin and _is_trusted_return_origin(origin):
+        state_payload["origin"] = origin.rstrip("/")
+    state_b64 = base64.urlsafe_b64encode(json.dumps(state_payload).encode("utf-8")).decode("ascii").rstrip("=")
+    auth_url = build_authorize_url(state_b64)
+    if mode == "json":
+        return {"url": auth_url}
+    return RedirectResponse(url=auth_url)
+
+
+@app.get("/api/auth/bungie/callback")
+async def bungie_oauth_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error or not code:
+        err_msg = error or "Authorization cancelled or missing authorization code."
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html><html><body style="background:#0B0E14;color:#F8FAFC;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
+            <div><h2 style="color:#EF4444;">Bungie Authorization Cancelled</h2><p>{err_msg}</p>
+            <a href="/" style="color:#F5A623;">Return to F.E.L.I.C.I.A.</a></div></body></html>""",
+            status_code=400,
+        )
+
+    return_origin = ""
+    if state:
+        try:
+            padded = state + "=" * (-len(state) % 4)
+            parsed_state = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+            cand = parsed_state.get("origin", "")
+            if _is_trusted_return_origin(cand):
+                return_origin = cand.rstrip("/")
+        except Exception:
+            return_origin = ""
+
+    creds = get_bungie_credentials()
+    req_origin = f"{request.url.scheme}://{request.url.netloc}".rstrip("/")
+
+    # If redirected to Render while developing locally and Render doesn't have secret set yet, forward code to local origin
+    if not creds["client_secret"] and return_origin and return_origin != req_origin:
+        return RedirectResponse(url=f"{return_origin}/api/auth/bungie/callback?code={code}")
+
+    try:
+        tokens = await run_in_threadpool(exchange_code_for_tokens, code)
+    except Exception as e:
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html><html><body style="background:#0B0E14;color:#F8FAFC;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px;">
+            <div style="max-width:520px;border:1px solid rgba(239,68,68,0.4);padding:28px;border-radius:12px;background:#111622;">
+              <h2 style="color:#F5A623;margin-top:0;">Bungie Handshake Incomplete</h2>
+              <p style="color:#CBD5E1;line-height:1.5;">{str(e)}</p>
+              <p style="color:#94A3B8;font-size:13px;">Clan Admin: Open <strong>Admin Settings (⚙️)</strong> or Render Environment Variables and ensure your <code>BUNGIE_API_KEY</code> and <code>BUNGIE_CLIENT_SECRET</code> are saved.</p>
+              <a href="/" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#F5A623;color:#0B0E14;text-decoration:none;font-weight:bold;border-radius:6px;">Return to Home</a>
+            </div></body></html>""",
+            status_code=500,
+        )
+
+    # If user started login from another trusted origin (e.g. localhost or Cloudflare tunnel), bounce session back via URL hash
+    if return_origin and return_origin != req_origin:
+        sess_b64 = base64.urlsafe_b64encode(json.dumps(tokens).encode("utf-8")).decode("ascii").rstrip("=")
+        return RedirectResponse(url=f"{return_origin}/#bungie_session={sess_b64}")
+
+    tokens_json = json.dumps(tokens)
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>F.E.L.I.C.I.A. // Bungie Link Established</title>
+</head>
+<body style="background:#0B0E14;color:#F8FAFC;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="text-align:center;">
+    <div style="font-size:36px;color:#F5A623;margin-bottom:10px;">❖</div>
+    <h2 style="letter-spacing:2px;margin:0 0 8px 0;">GUARDIAN TELEMETRY LINKED</h2>
+    <p style="color:#94A3B8;">Synchronizing Characters &amp; Vault with F.E.L.I.C.I.A....</p>
+  </div>
+  <script>
+    (function() {{
+      const sessionData = {tokens_json};
+      try {{
+        localStorage.setItem('felicia_bungie_session', JSON.stringify(sessionData));
+      }} catch (e) {{}}
+      if (window.opener && !window.opener.closed) {{
+        try {{
+          window.opener.postMessage({{ type: 'BUNGIE_AUTH_SUCCESS', session: sessionData }}, '*');
+          window.close();
+          return;
+        }} catch (e) {{}}
+      }}
+      window.location.replace('/');
+    }})();
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+@app.post("/api/auth/bungie/refresh")
+async def bungie_refresh_endpoint(req: Request):
+    body = await req.json()
+    rt = body.get("refresh_token", "")
+    if not rt:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+    try:
+        new_tokens = await run_in_threadpool(refresh_bungie_tokens, rt)
+        return {"status": "ok", "session": new_tokens}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+def _extract_bungie_tokens(req: Request) -> tuple[str, str]:
+    auth_header = req.headers.get("Authorization", "")
+    access_token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else ""
+    refresh_token = req.headers.get("X-Bungie-Refresh", "").strip()
+    return access_token, refresh_token
+
+
+@app.get("/api/bungie/inventory")
+async def get_bungie_inventory_endpoint(req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    try:
+        data = await run_in_threadpool(fetch_guardian_inventory, access_token)
+    except PermissionError:
+        if refresh_token:
+            try:
+                refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+                data = await run_in_threadpool(fetch_guardian_inventory, refreshed_session["access_token"])
+            except Exception as re_err:
+                raise HTTPException(status_code=401, detail=f"Bungie session expired. Please reconnect ({re_err}).")
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please reconnect your Bungie account.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Tag every weapon against our Clan God Roll Finder database in <5ms
+    god_rolls = get_all_god_rolls()
+
+    def _tag_items(items_list: List[dict]):
+        for it in items_list:
+            if it.get("category") == "Weapon":
+                ev = evaluate_item_against_godrolls(it, god_rolls)
+                it["godRollCheck"] = {
+                    "inDatabase": ev["in_database"],
+                    "verdictCode": ev["verdict_code"],
+                    "pveTraitHits": ev.get("pve_trait_hits", 0),
+                    "pvpTraitHits": ev.get("pvp_trait_hits", 0),
+                }
+
+    for ch in data.get("characters", []):
+        _tag_items(ch.get("equipment", []))
+        _tag_items(ch.get("inventory", []))
+        _tag_items(ch.get("postmaster", []))
+    _tag_items(data.get("vault", {}).get("items", []))
+
+    if refreshed_session:
+        data["refreshed_session"] = refreshed_session
+
+    return data
+
+
+class BungieTransferRequest(BaseModel):
+    membershipType: int
+    itemInstanceId: str
+    itemHash: int
+    sourceLocation: str
+    sourceCharacterId: Optional[str] = ""
+    targetType: str  # 'vault' | 'character' | 'equip'
+    targetCharacterId: Optional[str] = ""
+    isEquipped: Optional[bool] = False
+    fallbackEquipInstanceId: Optional[str] = ""
+
+
+@app.post("/api/bungie/transfer")
+async def post_bungie_transfer_endpoint(body: BungieTransferRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+
+    def _do_transfer(token: str):
+        return transfer_guardian_item(
+            access_token=token,
+            membership_type=body.membershipType,
+            item_instance_id=body.itemInstanceId,
+            item_hash=body.itemHash,
+            source_location=body.sourceLocation,
+            source_character_id=body.sourceCharacterId or "",
+            target_type=body.targetType,
+            target_character_id=body.targetCharacterId or "",
+            is_equipped=bool(body.isEquipped),
+            fallback_equip_instance_id=body.fallbackEquipInstanceId or "",
+        )
+
+    try:
+        res = await run_in_threadpool(_do_transfer, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_transfer, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+def _local_item_appraisal_fallback(item: dict, gr_eval: dict) -> str:
+    name = item.get("name", "Unknown Gear")
+    category = item.get("category", "Weapon")
+    tier = item.get("tierName", "Legendary")
+    slot = item.get("slot", "")
+    type_name = item.get("typeName", "")
+    element = item.get("element", "")
+
+    if category == "Armor":
+        total = item.get("totalStats", 0)
+        stats_lines = [f"• **{s['name']}:** {s['value']}" for s in item.get("stats", [])]
+        top_stats = sorted(item.get("stats", []), key=lambda x: x.get("value", 0), reverse=True)[:2]
+        spike_desc = " & ".join(f"{s['name']} ({s['value']})" for s in top_stats) if top_stats else "Balanced"
+        perks_txt = ", ".join(p["name"] for p in item.get("activePerks", [])) or "Standard Armor Frame"
+
+        if item.get("isExotic"):
+            verdict = "KEEP — EXOTIC ARMOR PIECE"
+            advice = f"Exotic armor piece with spikes in **{spike_desc}** ({total} total base/slotted stats). Keep if those spikes align with your 100–200 stat build targets!"
+        elif total >= 65:
+            verdict = "KEEP — HIGH-STAT ENDGAME ARMOR"
+            advice = f"Strong **{total}** total roll with primary spikes in **{spike_desc}**. Excellent candidate for pushing your primary stats toward the 150–200 ceiling."
+        elif total >= 60:
+            verdict = "SOLID WORKHORSE ARMOR"
+            advice = f"Respectable **{total}** total roll peaking in **{spike_desc}**. Worth holding onto unless you already have higher spiky set pieces."
+        else:
+            verdict = "SAFE TO TRASH (SHARD IT)"
+            advice = f"At **{total}** total stats, this piece is below endgame standards. Unless you desperately need its set bonus right now, dismantle it for materials."
+
+        return (
+            f"Right then, Guardian. Let us inspect your **{name}** ({tier} {slot}).\n\n"
+            f"**TACTICAL VERDICT:** `{verdict}`\n\n"
+            f"### Stat Distribution (0–200 System)\n"
+            + ("\n".join(stats_lines) if stats_lines else "• Standard stat package")
+            + f"\n• **Armor Perks / Intrinsic:** {perks_txt}\n\n"
+            f"### F.E.L.I.C.I.A.'s Call\n{advice}"
+        )
+
+    # Weapon fallback appraisal
+    cols_summary = []
+    for i, col in enumerate(item.get("perkColumns", []), 1):
+        names = [f"{o['name']}{' (Selected)' if o.get('selected') else ''}" for o in col]
+        cols_summary.append(f"Column {i}: {' / '.join(names)}")
+    mw = (item.get("masterwork") or {}).get("name", "None")
+
+    if item.get("isExotic"):
+        return (
+            f"All right, Guardian. You are holding **{name}** ({element} Exotic {type_name}).\n\n"
+            f"**TACTICAL VERDICT:** `EXOTIC ARSENAL — KEEP`\n\n"
+            f"• **Intrinsic:** {(item.get('frame') or {}).get('name', 'Exotic Intrinsic')}\n"
+            f"• **Perks:** {', '.join(p['name'] for p in item.get('activePerks', []))}\n\n"
+            f"Exotics can always be pulled from Collections or shaped at the Enclave if craftable, so keep this copy if you actively run it at **{item.get('power')} Power** or have kill-tracker progress on it!"
+        )
+
+    if gr_eval.get("in_database"):
+        entry = gr_eval["entry"]
+        pve = entry.get("pve", {})
+        pvp = entry.get("pvp", {})
+        vc = gr_eval["verdict_code"]
+        label_map = {
+            "DUAL_GOD_ROLL": "S-TIER PVE & PVP GOD ROLL — LOCK IT NOW!",
+            "PVE_GOD_ROLL": "S-TIER PVE GOD ROLL — LOCK & KEEP!",
+            "PVP_GOD_ROLL": "S-TIER PVP GOD ROLL — CRUCIBLE MONSTER!",
+            "SOLID_KEEP": "SOLID ROLL (1/2 GOD ROLL TRAITS) — KEEP UNTIL UPGRADED",
+            "SHARD_CANDIDATE": "SAFE TO TRASH — MISSES CLAN GOD ROLL TRAITS",
+        }
+        headline = label_map.get(vc, "EVALUATED ROLL")
+        return (
+            f"Right then, Guardian. I cross-checked your **{name}** directly against our **Clan God Roll Finder** archives.\n\n"
+            f"**TACTICAL VERDICT:** `{headline}`\n\n"
+            f"### Your Rolled Perks\n• " + "\n• ".join(cols_summary) + f"\n• **Masterwork:** {mw}\n\n"
+            f"### ⚔️ PVE Assessment ({gr_eval['pve_trait_hits']}/2 Core Traits Matched)\n"
+            f"• **Clan PVE Target:** {pve.get('perk1')} + {pve.get('perk2')} ({pve.get('barrel')} / {pve.get('mag')})\n"
+            f"• **Matched on Yours:** {', '.join(gr_eval['pve_matches']) if gr_eval['pve_matches'] else 'None of the primary PVE traits matched.'}\n"
+            f"• **Intel:** {pve.get('notes', '')}\n\n"
+            f"### 🎯 PVP Assessment ({gr_eval['pvp_trait_hits']}/2 Core Traits Matched)\n"
+            f"• **Clan PVP Target:** {pvp.get('perk1')} + {pvp.get('perk2')} ({pvp.get('barrel')} / {pvp.get('mag')})\n"
+            f"• **Matched on Yours:** {', '.join(gr_eval['pvp_matches']) if gr_eval['pvp_matches'] else 'None of the primary PVP traits matched.'}\n"
+            f"• **Intel:** {pvp.get('notes', '')}\n\n"
+            f"### 🛡️ Final Call\n"
+            + (
+                "Lock this weapon immediately in Destiny 2—spot on roll, Guardian!"
+                if vc in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL")
+                else (
+                    "Decent transitional roll with one top-tier trait. Keep it if you don't have a better copy yet, otherwise keep farming."
+                    if vc == "SOLID_KEEP"
+                    else "Let us be realistic here—neither column hits what makes this gun shine in PVE or PVP. Safe to dismantle!"
+                )
+            )
+        )
+
+    # Generic elite Destiny perk heuristic when weapon isn't in God Roll Finder yet
+    elite_pve = {"incandescent", "voltshot", "destabilizingrounds", "headstone", "hatchling", "kineticdtremors", "kinetictremors", "baitandswitch", "enviousassassin", "reconstruction", "explosivepayload", "frenzy", "firefly", "repulsorbrace", "healclip", "subsistence", "rewindrounds", "chillclip", "eageredge", "whirlwindblade", "surrounded", "oneforall", "statsforall", "leadfromgold", "autoloadingholster", "demolitionist"}
+    elite_pvp = {"openingshot", "slideshot", "lonewolf", "keepaway", "eyeofthestorm", "precisioninstrument", "zenmoment", "headseeker", "killclip", "desperado", "rapidhit", "perpetualmotion", "dynamicsswayreduction", "dynamicswayreduction", "tapthetrigger", "targetlock", "movingtarget", "rangefinder", "closingtime"}
+
+    rolled_norms = set()
+    for col in item.get("perkColumns", []):
+        for o in col:
+            rolled_norms.add(re.sub(r"[^a-z0-9]", "", o.get("name", "").lower().replace("enhanced ", "")))
+
+    pve_hits = [p for p in rolled_norms if p in elite_pve]
+    pvp_hits = [p for p in rolled_norms if p in elite_pvp]
+
+    if len(pve_hits) >= 2:
+        verdict = "STRONG PVE SYNERGY — KEEP!"
+    elif len(pvp_hits) >= 2:
+        verdict = "STRONG PVP DUELIST — KEEP!"
+    elif pve_hits or pvp_hits:
+        verdict = "DECENT UTILITY ROLL — SITUATIONAL KEEP"
+    else:
+        verdict = "UNDERWHELMING ROLL — SAFE TO TRASH"
+
+    return (
+        f"All right, Guardian. **{name}** ({element} {type_name}) isn't manually logged in our Clan God Roll Finder yet, so I have run a direct perk telemetry scan on your roll:\n\n"
+        f"**TACTICAL VERDICT:** `{verdict}`\n\n"
+        f"### Rolled Perks\n• " + ("\n• ".join(cols_summary) if cols_summary else "Fixed / Standard Perks") + f"\n• **Masterwork:** {mw}\n\n"
+        f"• **⚔️ PVE Outlook:** {'Strong endgame perk presence detected!' if pve_hits else 'Lacks top-tier reload/damage/verb perks for endgame PVE.'}\n"
+        f"• **🎯 PVP Outlook:** {'Has competitive Crucible consistency/dueling traits!' if pvp_hits else 'Lacks premier Crucible dueling or range-pushing perks.'}\n"
+    )
+
+
+@app.post("/api/bungie/appraise")
+async def appraise_bungie_item_endpoint(req: Request):
+    body = await req.json()
+    item = body.get("item")
+    if not item:
+        raise HTTPException(status_code=400, detail="Missing item payload.")
+
+    god_rolls = get_all_god_rolls()
+    gr_eval = evaluate_item_against_godrolls(item, god_rolls) if item.get("category") == "Weapon" else {"in_database": False, "verdict_code": "ARMOR"}
+
+    # Build detailed item telemetry for Gemini
+    cols_text = []
+    for idx, col in enumerate(item.get("perkColumns", []), 1):
+        opts = [f"{o.get('name')}{' [ACTIVE]' if o.get('selected') else ' [SELECTABLE]'}" for o in col]
+        cols_text.append(f"  - Column {idx}: {' | '.join(opts)}")
+
+    stats_text = ", ".join(f"{s['name']}: {s['value']}" for s in item.get("stats", []))
+    mw_name = (item.get("masterwork") or {}).get("name", "None")
+    frame_name = (item.get("frame") or {}).get("name", "Standard")
+    frame_desc = (item.get("frame") or {}).get("description", "")
+
+    db_section = ""
+    if gr_eval.get("in_database") and gr_eval.get("entry"):
+        e = gr_eval["entry"]
+        pve = e.get("pve", {})
+        pvp = e.get("pvp", {})
+        db_section = (
+            f"\n★ CLAN GOD ROLL FINDER DATABASE MATCH FOUND FOR {e.get('name')}:\n"
+            f"- Automated Trait Match Score: PVE = {gr_eval['pve_trait_hits']}/2 core traits ({', '.join(gr_eval['pve_matches']) or 'None'}), "
+            f"PVP = {gr_eval['pvp_trait_hits']}/2 core traits ({', '.join(gr_eval['pvp_matches']) or 'None'})\n"
+            f"- Verified Clan PVE God Roll: Barrel={pve.get('barrel')}, Mag={pve.get('mag')}, Perk 1={pve.get('perk1')}, Perk 2={pve.get('perk2')}, MW={pve.get('masterwork')}. Notes: {pve.get('notes')}\n"
+            f"- Verified Clan PVP God Roll: Barrel={pvp.get('barrel')}, Mag={pvp.get('mag')}, Perk 1={pvp.get('perk1')}, Perk 2={pvp.get('perk2')}, MW={pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
+            f"IMPORTANT: Judge this weapon directly against our Clan God Roll Finder entry above! Note if a god-roll perk is sitting [SELECTABLE] in a multi-perk column so the Guardian knows to click it!\n"
+        )
+
+    prompt = (
+        f"GUARDIAN LIVE INVENTORY ITEM INSPECTION REQUEST ('Ask F.E.L.I.C.I.A.'):\n"
+        f"• Item Name: {item.get('name')}\n"
+        f"• Category: {item.get('tierName')} {item.get('element')} {item.get('typeName')} ({item.get('slot')} Slot)\n"
+        f"• Power Level: {item.get('power')}\n"
+        f"• Intrinsic / Frame: {frame_name} ({frame_desc})\n"
+        f"• Masterwork: {mw_name} | Crafted: {item.get('isCrafted')} | Masterworked: {item.get('isMasterworked')}\n"
+        f"• Stats: {stats_text}" + (f" (Total Armor Stats: {item.get('totalStats')})" if item.get("category") == "Armor" else "") + "\n"
+        f"• Rolled Sockets / Perks:\n" + ("\n".join(cols_text) if cols_text else "  - Fixed / Intrinsic") + "\n"
+        f"{db_section}\n"
+        f"TASK FOR F.E.L.I.C.I.A.:\n"
+        f"Give a concise, high-impact Destiny 2 roll review in your grounded Scottish Vanguard voice:\n"
+        f"1. **Verdict Header:** State clearly right away whether this roll is a **GOD ROLL (KEEP & LOCK)**, **SOLID KEEP**, or **TRASH / SAFE TO SHARD**.\n"
+        f"2. **⚔️ PVE Breakdown:** How good is this specific roll for Grandmasters, Raids, Dungeons, or Ad Clear/Boss DPS?\n"
+        f"3. **🎯 PVP Breakdown:** How good is this specific roll for Crucible / Trials of Osiris?\n"
+        f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
+    )
+
+    ai_reply = await run_in_threadpool(query_gemini_api, prompt, [], FELICIA_SYSTEM_PROMPT)
+    if ai_reply.startswith("ERROR_FALLBACK"):
+        ai_reply = _local_item_appraisal_fallback(item, gr_eval)
+
+    return {
+        "reply": ai_reply,
+        "godRollMatch": {
+            "inDatabase": gr_eval.get("in_database", False),
+            "verdictCode": gr_eval.get("verdict_code", "AI_EVAL"),
+            "pveTraitHits": gr_eval.get("pve_trait_hits", 0),
+            "pvpTraitHits": gr_eval.get("pvp_trait_hits", 0),
+            "pveMatches": gr_eval.get("pve_matches", []),
+            "pvpMatches": gr_eval.get("pvp_matches", []),
+        },
+    }
+
 
 # Mount frontend directory for static assets
 if os.path.exists(FRONTEND_DIR):

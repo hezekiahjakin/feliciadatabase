@@ -3,5 +3,8 @@ __pycache__/
 node_modules/
 .venv/
 env/
+.env
 bin/cloudflared.exe
 .DS_Store
+data/bungie_secrets.json
+data/bungie_manifest*

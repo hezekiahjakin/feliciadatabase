@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261023_v11">
+  <link rel="stylesheet" href="styles.css?v=20261024_v12">
 </head>
 <body class="theme-vanguard">
 
@@ -35,6 +35,11 @@
         <span class="status-label">CALIBRATED // ACTIVE</span>
       </div>
 
+      <button type="button" class="bungie-header-pill" id="bungieHeaderBadge" title="Bungie.net Guardian Link">
+        <span class="bungie-pill-dot" id="bungiePillDot"></span>
+        <span class="bungie-pill-text" id="bungieHeaderText">Sign In with Bungie</span>
+      </button>
+
       <div class="firebase-status-badge auth-badge" id="authBadge" title="Firebase Authentication & Profile">
         <span class="auth-icon" id="authIcon">🔑</span>
         <span class="auth-text" id="authStatusText">Sign In</span>
@@ -56,7 +61,11 @@
 
     <!-- Left / Top Navigation Rail -->
     <nav class="hud-nav" id="hudNav">
-      <button class="nav-tab active" data-tab="tab-comms">
+      <button class="nav-tab active" data-tab="tab-inventory">
+        <span class="nav-icon">🎒</span>
+        <span class="nav-title">Inventory</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-comms">
         <span class="nav-icon">📡</span>
         <span class="nav-title">AI Chat</span>
       </button>
@@ -74,8 +83,113 @@
       </button>
     </nav>
 
+    <!-- TAB 0 (NEW HOME PAGE): GUARDIAN INVENTORY & VAULT MANAGER -->
+    <section class="tab-pane active" id="tab-inventory">
+      <div class="inventory-page-shell">
+
+        <!-- STATE A: INSTANT BUNGIE SIGN-IN HERO (SHOWN WHEN NOT AUTHENTICATED) -->
+        <div class="bungie-signin-hero" id="bungieSignInHero">
+          <div class="signin-hero-glow"></div>
+          <div class="signin-hero-card">
+            <div class="signin-crest-ring">
+              <span class="signin-crest-symbol">❖</span>
+            </div>
+            <div class="signin-eyebrow">VANGUARD ORBITAL TELEMETRY // BUNGIE.NET LINK</div>
+            <h2 class="signin-title">CONNECT YOUR GUARDIAN INVENTORY &amp; VAULT</h2>
+            <p class="signin-subtitle">
+              Sign in through Bungie.net to inspect all 3 of your characters, move weapons and armor seamlessly to and from your Vault, and let <strong>F.E.L.I.C.I.A.</strong> evaluate any drop for PVE &amp; PVP God Rolls.
+            </p>
+
+            <div class="signin-cta-wrap">
+              <button type="button" class="btn-bungie-connect-xl" id="btnBungieLoginHero">
+                <span class="btn-bungie-bolt">⚡</span>
+                <span>SIGN IN WITH BUNGIE.NET</span>
+              </button>
+              <span class="signin-security-note">Official Bungie OAuth 2.0 • PlayStation, Xbox, Steam &amp; Epic Supported • 90-Day Session</span>
+            </div>
+
+            <div class="signin-feature-trio">
+              <div class="signin-feat-box">
+                <div class="feat-icon">🛡️</div>
+                <h4>3 Characters Live</h4>
+                <p>View your Hunter, Warlock, and Titan loadouts, character pockets, Postmaster, and 0–200 stats.</p>
+              </div>
+              <div class="signin-feat-box">
+                <div class="feat-icon">🏛️</div>
+                <h4>1-Click Vault Transfers</h4>
+                <p>Send any weapon or armor piece directly between characters or your 700-slot Vault in seconds.</p>
+              </div>
+              <div class="signin-feat-box highlight">
+                <div class="feat-icon">❖</div>
+                <h4>Ask F.E.L.I.C.I.A.</h4>
+                <p>Click any gun to scan its perks against our Clan God Roll Finder—know instantly whether to lock or shard it.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE B: AUTHENTICATED GUARDIAN INVENTORY & VAULT WORKSPACE -->
+        <div class="inventory-workspace hidden" id="inventoryWorkspace">
+
+          <!-- Top Guardian Bar + Character / Vault Switcher -->
+          <div class="inv-command-bar">
+            <div class="inv-account-row">
+              <div class="inv-guardian-identity">
+                <span class="inv-online-dot"></span>
+                <span class="inv-bungie-name" id="invBungieName">Guardian#0000</span>
+                <span class="inv-platform-tag" id="invPlatformTag">Destiny 2</span>
+              </div>
+              <div class="inv-account-actions">
+                <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnRefreshInventory" title="Sync latest gear from Bungie">
+                  <span id="refreshSpinIcon">🔄</span> Sync Gear
+                </button>
+                <button type="button" class="btn-tactical btn-secondary btn-sm btn-disconnect-bungie" id="btnDisconnectBungie" title="Sign out of Bungie.net">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+
+            <!-- 3 Characters + Vault Selector Cards -->
+            <div class="char-vault-switcher" id="charVaultSwitcher">
+              <!-- Populated dynamically with Character Emblem Banners + Vault Card -->
+            </div>
+          </div>
+
+          <!-- Search & Slot Filter Toolbar -->
+          <div class="inv-toolbar">
+            <div class="inv-search-box">
+              <span class="inv-search-icon">🔍</span>
+              <input type="text" id="invSearchInput" class="inv-search-input" placeholder="Search weapons, armor, perks (e.g. Incandescent, Slideshot), or type...">
+              <button type="button" class="inv-clear-btn hidden" id="btnClearInvSearch" aria-label="Clear inventory search">&times;</button>
+            </div>
+            <div class="inv-filter-pills" id="invFilterPills">
+              <button type="button" class="inv-pill active" data-invfilter="all">All Gear</button>
+              <button type="button" class="inv-pill" data-invfilter="weapons">Weapons</button>
+              <button type="button" class="inv-pill" data-invfilter="Kinetic">Kinetic</button>
+              <button type="button" class="inv-pill" data-invfilter="Energy">Energy</button>
+              <button type="button" class="inv-pill" data-invfilter="Heavy">Heavy</button>
+              <button type="button" class="inv-pill" data-invfilter="armor">Armor</button>
+              <button type="button" class="inv-pill inv-pill-godroll" data-invfilter="godroll">★ Clan God Rolls</button>
+            </div>
+          </div>
+
+          <!-- Loading Skeleton / Status -->
+          <div class="inv-loading-state hidden" id="invLoadingState">
+            <div class="inv-spinner"></div>
+            <p id="invLoadingText">Synchronizing Guardian Telemetry &amp; Manifest...</p>
+          </div>
+
+          <!-- Dynamic Inventory / Vault Content Container -->
+          <div class="inv-stage" id="invStage">
+            <!-- Renders either Selected Character Loadout (Weapons + Armor + Postmaster) OR Full Vault Grid -->
+          </div>
+
+        </div>
+      </div>
+    </section>
+
     <!-- TAB 1: COMMS & AI INTERACTION -->
-    <section class="tab-pane active" id="tab-comms">
+    <section class="tab-pane" id="tab-comms">
       <div class="comms-layout">
         
         <!-- Tactical Construct Visualizer & HUD Card -->
@@ -453,6 +567,34 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           </div>
 
           <button class="btn-tactical btn-primary" id="btnSaveGeminiKey">Update API Key</button>
+        </div>
+
+        <!-- Bungie.net OAuth & API Engine -->
+        <div class="settings-card">
+          <div class="flex-between">
+            <h3 class="card-title">✦ BUNGIE.NET INVENTORY &amp; OAUTH ENGINE</h3>
+            <span class="badge-cat" id="badgeBungieConfigStatus">CHECKING...</span>
+          </div>
+          <p class="card-desc">Powers Clan Guardian sign-in, 3-Character loadout viewing, 700-slot Vault transfers, and live perk reading for <strong>Ask F.E.L.I.C.I.A.</strong></p>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>BUNGIE API KEY (X-API-KEY)</label>
+              <input type="password" id="inputBungieApiKey" class="input-tactical" placeholder="Enter Bungie API Key (leave blank to keep existing)">
+            </div>
+            <div class="form-group flex-1">
+              <label>OAUTH CLIENT ID</label>
+              <input type="text" id="inputBungieClientId" class="input-tactical" value="56157" placeholder="56157">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>OAUTH CLIENT SECRET (CONFIDENTIAL APP)</label>
+            <input type="password" id="inputBungieClientSecret" class="input-tactical" placeholder="Enter Confidential Client Secret (leave blank to keep existing)">
+            <span class="field-hint" id="bungieConfigHint">Redirect URL: <code>https://feliciadatabase.onrender.com/api/auth/bungie/callback</code></span>
+          </div>
+
+          <button type="button" class="btn-tactical btn-primary" id="btnSaveBungieConfig">Save Bungie Credentials</button>
         </div>
 
       </div>
@@ -1080,6 +1222,78 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261023_v11"></script>
+  <!-- MODAL: ITEM INSPECTION, TRANSFERS & ASK F.E.L.I.C.I.A. -->
+  <dialog class="hud-modal modal-inspect-item" id="modalInspectItem" closedby="any" aria-labelledby="inspectItemName">
+    <div class="modal-content inspect-modal-content">
+      <div class="inspect-banner" id="inspectBanner">
+        <div class="inspect-icon-wrap" id="inspectIconWrap">
+          <img id="inspectItemIcon" src="" alt="" class="inspect-item-img">
+          <span class="inspect-crafted-pip hidden" id="inspectCraftedPip" title="Shaped / Crafted Weapon">◈</span>
+        </div>
+        <div class="inspect-title-block">
+          <div class="inspect-meta-top">
+            <span class="inspect-tier-badge" id="inspectTierBadge">LEGENDARY</span>
+            <span class="inspect-elem-badge" id="inspectElemBadge">SOLAR</span>
+            <span class="inspect-loc-badge" id="inspectLocBadge">VAULT</span>
+          </div>
+          <h3 class="inspect-item-name" id="inspectItemName">WEAPON NAME</h3>
+          <div class="inspect-subline" id="inspectSubline">Adaptive Frame • Hand Cannon</div>
+        </div>
+        <div class="inspect-power-box">
+          <span class="power-bolt">✦</span>
+          <span class="inspect-power-val" id="inspectPowerVal">2010</span>
+        </div>
+        <button type="button" class="btn-modal-close inspect-close-btn" id="btnCloseInspectItem" aria-label="Close inspection dialog">&times;</button>
+      </div>
+
+      <div class="modal-body inspect-modal-body">
+
+        <!-- ACTION BAR: SEND TO HUNTER / WARLOCK / TITAN / VAULT + 4TH BUTTON: ASK F.E.L.I.C.I.A. -->
+        <div class="inspect-actions-section">
+          <div class="inspect-section-label">TRANSFER &amp; TACTICAL ACTIONS</div>
+          <div class="inspect-actions-grid" id="inspectActionsGrid">
+            <!-- Dynamically populated: Character transfer buttons, Vault button, Equip button, and "Ask F.E.L.I.C.I.A." -->
+          </div>
+          <div class="inspect-transfer-feedback hidden" id="inspectTransferFeedback"></div>
+        </div>
+
+        <!-- F.E.L.I.C.I.A. LIVE ROLL REVIEW PANEL (REVEALED ON CLICKING "ASK F.E.L.I.C.I.A.") -->
+        <div class="inspect-felicia-panel hidden" id="inspectFeliciaPanel">
+          <div class="felicia-review-header">
+            <div class="felicia-review-title">
+              <span class="felicia-orb-dot">❖</span>
+              <span>F.E.L.I.C.I.A. // ROLL &amp; GEAR EVALUATION</span>
+            </div>
+            <div class="felicia-review-controls">
+              <span class="godroll-verdict-pill hidden" id="inspectVerdictPill">EVALUATING</span>
+              <button type="button" class="btn-mini-action" id="btnSpeakAppraisal" title="Hear F.E.L.I.C.I.A. read this review">🔊 Speak</button>
+              <button type="button" class="btn-mini-action" id="btnOpenInComms" title="Continue discussion in AI Chat">💬 Open in Chat</button>
+            </div>
+          </div>
+          <div class="felicia-review-body" id="inspectFeliciaBody">
+            <!-- Populated with markdown-formatted PVE / PVP / Shard verdict -->
+          </div>
+        </div>
+
+        <!-- PERKS & STATS TWO-COLUMN LAYOUT -->
+        <div class="inspect-details-grid">
+          <div class="inspect-perks-col">
+            <div class="inspect-section-label" id="inspectPerksHeading">ROLLED SOCKETS &amp; TRAITS</div>
+            <div class="inspect-frame-box hidden" id="inspectFrameBox"></div>
+            <div class="inspect-perk-columns" id="inspectPerkColumns"></div>
+            <div class="inspect-mw-row hidden" id="inspectMwRow"></div>
+          </div>
+
+          <div class="inspect-stats-col">
+            <div class="inspect-section-label" id="inspectStatsHeading">COMBAT TELEMETRY STATS</div>
+            <div class="inspect-stats-list" id="inspectStatsList"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=20261024_v12"></script>
 </body>
 </html>

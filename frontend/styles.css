@@ -2835,3 +2835,1212 @@ input:checked + .toggle-slider:before {
 .pve-section .form-section-title { color: #38BDF8; }
 .pvp-section .form-section-title { color: #F87171; }
 
+
+/* ==========================================================================
+   GUARDIAN INVENTORY, VAULT & "ASK F.E.L.I.C.I.A." HOME PAGE
+   ========================================================================== */
+
+/* Top Header Bungie Link Pill */
+.bungie-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.4);
+  color: var(--vanguard-amber);
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bungie-header-pill:hover {
+  background: rgba(245, 166, 35, 0.2);
+  box-shadow: 0 0 14px rgba(245, 166, 35, 0.28);
+}
+
+.bungie-header-pill.linked {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #34D399;
+}
+
+.bungie-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vanguard-amber);
+  box-shadow: 0 0 8px var(--vanguard-amber);
+}
+
+.bungie-header-pill.linked .bungie-pill-dot {
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+/* Inventory Shell */
+.inventory-page-shell {
+  width: 100%;
+  max-width: 1460px;
+  margin: 0 auto;
+  padding: 8px 4px 36px;
+}
+
+/* State A: Instant Bungie Sign-In Hero */
+.bungie-signin-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 170px);
+  padding: 20px 12px;
+}
+
+.signin-hero-glow {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 166, 35, 0.14) 0%, rgba(56, 189, 248, 0.06) 45%, transparent 72%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.signin-hero-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 880px;
+  background: linear-gradient(165deg, rgba(16, 23, 36, 0.94) 0%, rgba(9, 13, 21, 0.97) 100%);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-radius: 16px;
+  padding: 42px 36px;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.signin-crest-ring {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(245, 166, 35, 0.24) 0%, rgba(245, 166, 35, 0.03) 75%);
+  border: 1.5px solid rgba(245, 166, 35, 0.55);
+  box-shadow: 0 0 28px rgba(245, 166, 35, 0.25);
+}
+
+.signin-crest-symbol {
+  font-size: 32px;
+  color: var(--vanguard-amber);
+}
+
+.signin-eyebrow {
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2.2px;
+  color: var(--arc-blue);
+  margin-bottom: 8px;
+}
+
+.signin-title {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3vw, 31px);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #FFFFFF;
+  margin-bottom: 12px;
+}
+
+.signin-subtitle {
+  max-width: 640px;
+  margin: 0 auto 28px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.signin-cta-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 34px;
+}
+
+.btn-bungie-connect-xl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 15px 34px;
+  border-radius: 8px;
+  border: 1px solid #FBBF24;
+  background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%);
+  color: #070A0F;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(245, 166, 35, 0.38);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.btn-bungie-connect-xl:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 34px rgba(245, 166, 35, 0.55);
+}
+
+.btn-bungie-bolt {
+  font-size: 18px;
+}
+
+.signin-security-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-tactical);
+  letter-spacing: 0.4px;
+}
+
+.signin-feature-trio {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  text-align: left;
+}
+
+.signin-feat-box {
+  background: rgba(7, 10, 15, 0.65);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.signin-feat-box.highlight {
+  border-color: rgba(245, 166, 35, 0.4);
+  background: linear-gradient(180deg, rgba(245, 166, 35, 0.08) 0%, rgba(7, 10, 15, 0.7) 100%);
+}
+
+.signin-feat-box .feat-icon {
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: var(--vanguard-amber);
+}
+
+.signin-feat-box h4 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: #F8FAFC;
+  margin-bottom: 4px;
+}
+
+.signin-feat-box p {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* State B: Authenticated Inventory Workspace */
+.inventory-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inv-command-bar {
+  background: rgba(13, 18, 27, 0.9);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inv-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inv-guardian-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inv-online-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 10px #10B981;
+}
+
+.inv-bungie-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: 0.5px;
+}
+
+.inv-platform-tag {
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--arc-blue);
+  text-transform: uppercase;
+}
+
+.inv-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 3 Characters + Vault Selector Grid */
+.char-vault-switcher {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 10px;
+}
+
+.switcher-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 70px;
+  border-radius: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background-color: #111827;
+  background-size: cover;
+  background-position: left center;
+  padding: 10px 14px 10px 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+  color: #FFFFFF;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.switcher-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(7, 10, 15, 0.25) 0%, rgba(7, 10, 15, 0.78) 60%, rgba(7, 10, 15, 0.92) 100%);
+  z-index: 0;
+}
+
+.switcher-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(245, 166, 35, 0.6);
+}
+
+.switcher-card.active {
+  border-color: var(--vanguard-amber);
+  box-shadow: 0 0 0 1px var(--vanguard-amber), 0 8px 22px rgba(245, 166, 35, 0.25);
+}
+
+.switcher-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.switcher-card.vault-card {
+  padding-left: 16px;
+  background: linear-gradient(135deg, #131C2E 0%, #0B101B 100%);
+}
+
+.switcher-card.vault-card::before {
+  display: none;
+}
+
+.switcher-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.switcher-class {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.switcher-sub {
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  color: #CBD5E1;
+}
+
+.switcher-light {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  color: #FACC15;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+}
+
+.vault-cap-badge {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--arc-blue);
+}
+
+/* Search & Filter Toolbar */
+.inv-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(13, 18, 27, 0.82);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.inv-search-box {
+  position: relative;
+  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+}
+
+.inv-search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 14px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.inv-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 32px 0 36px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(7, 10, 15, 0.85);
+  color: #F8FAFC;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+}
+
+.inv-search-input:focus {
+  outline: none;
+  border-color: var(--vanguard-amber);
+  box-shadow: 0 0 10px rgba(245, 166, 35, 0.2);
+}
+
+.inv-clear-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.inv-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inv-pill {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(19, 26, 39, 0.75);
+  color: var(--text-secondary);
+  font-family: var(--font-tactical);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inv-pill:hover {
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.inv-pill.active {
+  background: var(--vanguard-amber);
+  border-color: var(--vanguard-amber);
+  color: #070A0F;
+}
+
+.inv-pill-godroll {
+  border-color: rgba(250, 204, 21, 0.4);
+  color: #FDE047;
+}
+
+/* Loading State */
+.inv-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 20px;
+  gap: 14px;
+  color: var(--text-secondary);
+  font-family: var(--font-tactical);
+  font-size: 15px;
+  letter-spacing: 0.6px;
+}
+
+.inv-spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid rgba(245, 166, 35, 0.2);
+  border-top-color: var(--vanguard-amber);
+  animation: invSpin 0.8s linear infinite;
+}
+
+@keyframes invSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Character Stats Strip (Modern 0-200 6-Stat System) */
+.char-stats-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(13, 18, 27, 0.85);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.char-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-tactical);
+  font-size: 13px;
+}
+
+.char-stat-chip .s-lbl {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.char-stat-chip .s-val {
+  color: #F8FAFC;
+  font-weight: 700;
+}
+
+.char-stat-chip.high-stat {
+  border-color: rgba(245, 166, 35, 0.45);
+  background: rgba(245, 166, 35, 0.08);
+}
+
+.char-stat-chip.high-stat .s-val {
+  color: var(--vanguard-amber);
+}
+
+/* Character Loadout Two-Column Layout (Weapons + Armor) */
+.char-loadout-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.loadout-col-panel {
+  background: rgba(13, 18, 27, 0.82);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.loadout-col-header {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--vanguard-amber);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.slot-group-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slot-group-label {
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.slot-items-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.slot-equipped-holder {
+  flex: 0 0 auto;
+}
+
+.slot-bag-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 8px;
+}
+
+/* Modern Gear Card / Tile (Used in Character Slots & Vault Grid) */
+.gear-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(18, 25, 38, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  width: 100%;
+}
+
+.gear-card:hover {
+  transform: translateY(-2px);
+  background: rgba(26, 36, 54, 0.98);
+  border-color: rgba(245, 166, 35, 0.65);
+}
+
+.gear-card.equipped-card {
+  width: 215px;
+  background: linear-gradient(145deg, rgba(28, 38, 58, 0.96), rgba(14, 20, 32, 0.96));
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.gear-card.tier-exotic {
+  border-left: 3px solid #FACC15;
+}
+
+.gear-card.tier-legendary {
+  border-left: 3px solid #A855F7;
+}
+
+.gear-card.is-masterworked .gear-icon-frame {
+  border-color: #FACC15;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.35);
+}
+
+.gear-icon-frame {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: #090D14;
+}
+
+.gear-icon-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gear-crafted-corner {
+  position: absolute;
+  bottom: 1px;
+  left: 2px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(185, 28, 28, 0.92);
+  color: #FCA5A5;
+  font-weight: 700;
+}
+
+.gear-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gear-name {
+  font-family: var(--font-tactical);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #F8FAFC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gear-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-family: var(--font-tactical);
+}
+
+.gear-power {
+  color: #FDE047;
+  font-weight: 700;
+}
+
+.elem-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.elem-dot.Solar { background: #F97316; box-shadow: 0 0 5px #F97316; }
+.elem-dot.Arc { background: #38BDF8; box-shadow: 0 0 5px #38BDF8; }
+.elem-dot.Void { background: #A855F7; box-shadow: 0 0 5px #A855F7; }
+.elem-dot.Stasis { background: #3B82F6; box-shadow: 0 0 5px #3B82F6; }
+.elem-dot.Strand { background: #10B981; box-shadow: 0 0 5px #10B981; }
+.elem-dot.Kinetic { background: #E2E8F0; }
+
+.godroll-mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-tactical);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  background: rgba(250, 204, 21, 0.16);
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  color: #FDE047;
+}
+
+/* Vault Full Grid & Off-screen Rendering Optimization */
+.vault-section-block {
+  background: rgba(13, 18, 27, 0.84);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.vault-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vault-section-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--vanguard-amber);
+}
+
+.vault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+/* Apply content-visibility ONLY to off-screen below-the-fold vault items */
+.vault-item-deferred {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 74px;
+}
+
+/* ==========================================================================
+   MODAL: ITEM INSPECTION, TRANSFERS & "ASK F.E.L.I.C.I.A."
+   ========================================================================== */
+dialog.modal-inspect-item {
+  width: min(94vw, 820px);
+  max-width: 820px;
+  border: 1px solid rgba(245, 166, 35, 0.45);
+  border-radius: 14px;
+  background: #0B101A;
+  color: var(--text-primary);
+  padding: 0;
+  margin: auto;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.85);
+}
+
+dialog.modal-inspect-item::backdrop {
+  background-color: rgba(4, 7, 13, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.inspect-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+
+.inspect-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(11, 16, 26, 0.98) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.inspect-banner.tier-exotic {
+  background: linear-gradient(135deg, rgba(113, 63, 18, 0.72) 0%, rgba(15, 20, 32, 0.98) 75%);
+  border-bottom-color: rgba(250, 204, 21, 0.45);
+}
+
+.inspect-banner.tier-legendary {
+  background: linear-gradient(135deg, rgba(76, 29, 149, 0.52) 0%, rgba(15, 20, 32, 0.98) 75%);
+  border-bottom-color: rgba(168, 85, 247, 0.4);
+}
+
+.inspect-icon-wrap {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  background: #070A0F;
+}
+
+.inspect-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inspect-crafted-pip {
+  position: absolute;
+  bottom: 2px;
+  left: 3px;
+  background: #B91C1C;
+  color: #FEE2E2;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.inspect-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspect-meta-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.inspect-tier-badge,
+.inspect-elem-badge,
+.inspect-loc-badge {
+  font-family: var(--font-tactical);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.inspect-item-name {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.inspect-subline {
+  font-family: var(--font-tactical);
+  font-size: 13.5px;
+  color: #CBD5E1;
+  margin-top: 2px;
+}
+
+.inspect-power-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: #FACC15;
+  margin-right: 26px;
+}
+
+.inspect-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+}
+
+.inspect-modal-body {
+  padding: 18px 22px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.inspect-section-label {
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* Action Buttons Bar: Send to Hunter/Warlock/Titan/Vault + Ask F.E.L.I.C.I.A. */
+.inspect-actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-item-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(22, 31, 48, 0.92);
+  color: #F8FAFC;
+  font-family: var(--font-tactical);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-item-action:hover:not(:disabled) {
+  border-color: var(--arc-blue);
+  background: rgba(56, 189, 248, 0.16);
+  transform: translateY(-1px);
+}
+
+.btn-item-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-item-action.btn-ask-felicia {
+  background: linear-gradient(135deg, #F5A623 0%, #D97706 100%);
+  border-color: #FDE047;
+  color: #070A0F;
+  font-family: var(--font-display);
+  box-shadow: 0 4px 18px rgba(245, 166, 35, 0.35);
+}
+
+.btn-item-action.btn-ask-felicia:hover:not(:disabled) {
+  background: linear-gradient(135deg, #FBBF24 0%, #EA580C 100%);
+  box-shadow: 0 6px 24px rgba(245, 166, 35, 0.55);
+  color: #070A0F;
+}
+
+.inspect-transfer-feedback {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6EE7B7;
+}
+
+.inspect-transfer-feedback.error {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #FCA5A5;
+}
+
+/* F.E.L.I.C.I.A. Roll Review Panel */
+.inspect-felicia-panel {
+  border-radius: 10px;
+  border: 1px solid rgba(245, 166, 35, 0.45);
+  background: linear-gradient(180deg, rgba(245, 166, 35, 0.08) 0%, rgba(13, 18, 28, 0.95) 100%);
+  padding: 14px 16px;
+}
+
+.felicia-review-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(245, 166, 35, 0.2);
+}
+
+.felicia-review-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--vanguard-amber);
+}
+
+.felicia-review-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-mini-action {
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.8);
+  color: #E2E8F0;
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-mini-action:hover {
+  border-color: var(--vanguard-amber);
+  color: var(--vanguard-amber);
+}
+
+.godroll-verdict-pill {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.6px;
+}
+
+.godroll-verdict-pill.godroll {
+  background: rgba(250, 204, 21, 0.2);
+  border: 1px solid #FACC15;
+  color: #FDE047;
+}
+
+.godroll-verdict-pill.keep {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid #10B981;
+  color: #6EE7B7;
+}
+
+.godroll-verdict-pill.shard {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid #EF4444;
+  color: #FCA5A5;
+}
+
+.felicia-review-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #E2E8F0;
+}
+
+.felicia-review-body h3,
+.felicia-review-body h4 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--arc-blue);
+  margin: 12px 0 4px;
+}
+
+.felicia-review-body p {
+  margin-bottom: 8px;
+}
+
+/* Perks & Stats Grid */
+.inspect-details-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 18px;
+}
+
+.inspect-frame-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.inspect-frame-box img,
+.perk-chip img,
+.inspect-mw-row img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #0F172A;
+  flex-shrink: 0;
+}
+
+.inspect-perk-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.perk-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perk-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-tactical);
+  font-size: 12.5px;
+  color: #CBD5E1;
+}
+
+.perk-chip.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #FFFFFF;
+  font-weight: 700;
+}
+
+.inspect-mw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  color: #FDE047;
+}
+
+.inspect-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspect-stat-row {
+  display: grid;
+  grid-template-columns: 105px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+}
+
+.inspect-stat-name {
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.inspect-stat-bar-bg {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.inspect-stat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--arc-blue), #F8FAFC);
+  border-radius: 4px;
+}
+
+.inspect-stat-val {
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+@media (max-width: 900px) {
+  .signin-feature-trio,
+  .char-loadout-columns,
+  .inspect-details-grid {
+    grid-template-columns: 1fr;
+  }
+  .signin-hero-card {
+    padding: 28px 18px;
+  }
+  .slot-items-row {
+    flex-direction: column;
+  }
+  .gear-card.equipped-card {
+    width: 100%;
+  }
+}
