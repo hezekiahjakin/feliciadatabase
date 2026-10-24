@@ -549,6 +549,8 @@ def _enrich_item(
     # Parse sockets (Intrinsic frame, Perks, Masterwork, Mods)
     frame_info = None
     perk_columns: List[List[dict]] = []
+    barrel_col_index: Optional[int] = None
+    mag_col_index: Optional[int] = None
     trait_col_indexes: List[int] = []
     active_perks: List[dict] = []
     masterwork_info = None
@@ -620,8 +622,17 @@ def _enrich_item(
 
                     col_idx_now = len(perk_columns)
                     perk_columns.append(col_options)
-                    if sc_hash in SOCKET_CAT_WEAPON_PERKS and "frames" in pcat and "origin" not in pcat:
-                        trait_col_indexes.append(col_idx_now)
+                    if sc_hash in SOCKET_CAT_WEAPON_PERKS:
+                        if barrel_col_index is None and any(
+                            k in pcat for k in ("barrels", "scopes", "blades", "bowstrings", "hafts", "rails", "tubes", "sights")
+                        ):
+                            barrel_col_index = col_idx_now
+                        elif mag_col_index is None and any(
+                            k in pcat for k in ("magazines", "arrows", "guards", "batteries")
+                        ):
+                            mag_col_index = col_idx_now
+                        elif "frames" in pcat and "origin" not in pcat and "crafting.plugs" not in pcat:
+                            trait_col_indexes.append(col_idx_now)
                     active_perks.append({
                         "name": active_def["name"],
                         "description": active_def.get("description", ""),
@@ -693,6 +704,8 @@ def _enrich_item(
         "transferStatus": int(raw_item.get("transferStatus", 0)),
         "frame": frame_info,
         "perkColumns": perk_columns,
+        "barrelColIndex": barrel_col_index,
+        "magColIndex": mag_col_index,
         "traitColIndexes": trait_col_indexes,
         "activePerks": active_perks,
         "masterwork": masterwork_info,
@@ -1186,10 +1199,142 @@ def equip_guardian_loadout(
     return {"status": "equipped", "characterId": str(character_id), "loadoutIndex": int(loadout_index)}
 
 
+def prepare_items_for_dismantle(
+    access_token: str,
+    membership_type: int,
+    default_character_id: str,
+    items_to_prep: List[dict],
+    target_character_id: str = "",
+    unlock_only: bool = False,
+) -> dict:
+    """Unlocks selected weaker duplicates / trash rolls and optionally pulls them to a character's open weapon slots for fast in-game dismantling."""
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+    if not items_to_prep:
+        return {
+            "status": "ok",
+            "unlockedIds": [],
+            "pulledIds": [],
+            "alreadyOnCharIds": [],
+            "skippedFullSlotIds": [],
+            "failed": [],
+        }
+
+    # Probe live free bag slots (max 9 unequipped per weapon slot) if pulling to character
+    free_slots: Dict[str, int] = {"Kinetic": 9, "Energy": 9, "Heavy": 9}
+    if not unlock_only and target_character_id:
+        membership = get_active_destiny_membership(api_key, access_token)
+        m_id = membership["destinyMembershipId"]
+        inv_resp = _bungie_get(
+            f"/Destiny2/{int(membership_type)}/Profile/{m_id}/?components=201",
+            api_key,
+            access_token,
+        )
+        char_bag = inv_resp.get("characterInventories", {}).get("data", {}).get(str(target_character_id), {}).get("items", [])
+        counts = {"Kinetic": 0, "Energy": 0, "Heavy": 0}
+        for raw_it in char_bag:
+            bhash = int(raw_it.get("bucketHash", 0))
+            if bhash in WEAPON_BUCKETS:
+                counts[WEAPON_BUCKETS[bhash]] += 1
+        for s_name in ("Kinetic", "Energy", "Heavy"):
+            free_slots[s_name] = max(0, 9 - counts[s_name])
+
+    unlocked_ids: List[str] = []
+    pulled_ids: List[str] = []
+    already_on_char_ids: List[str] = []
+    skipped_full_ids: List[str] = []
+    failed: List[dict] = []
+
+    for idx, entry in enumerate(items_to_prep):
+        iid = str(entry.get("itemInstanceId", ""))
+        ihash = int(entry.get("itemHash", 0))
+        src_loc = str(entry.get("sourceLocation", "vault"))
+        src_cid = str(entry.get("sourceCharacterId") or "")
+        slot_name = str(entry.get("slot", "Kinetic"))
+        was_locked = bool(entry.get("isLocked", False))
+        is_eq = bool(entry.get("isEquipped", False))
+        nm = str(entry.get("name", "Weapon"))
+        lock_cid = src_cid or target_character_id or default_character_id
+
+        if not iid or is_eq or src_loc == "postmaster":
+            continue
+
+        try:
+            # Step 1: Ensure item is UNLOCKED in Destiny 2 so the player can hold Dismantle immediately
+            if was_locked and lock_cid:
+                _bungie_post(
+                    "/Destiny2/Actions/Items/SetLockState/",
+                    {
+                        "state": False,
+                        "itemId": iid,
+                        "characterId": lock_cid,
+                        "membershipType": int(membership_type),
+                    },
+                    api_key,
+                    access_token,
+                )
+                unlocked_ids.append(iid)
+            elif not was_locked:
+                unlocked_ids.append(iid)
+
+            # Step 2: Pull into target character's unequipped slot if requested & space permits
+            if not unlock_only and target_character_id:
+                if src_loc == "character" and src_cid == str(target_character_id):
+                    already_on_char_ids.append(iid)
+                elif free_slots.get(slot_name, 0) > 0:
+                    transfer_guardian_item(
+                        access_token=access_token,
+                        membership_type=int(membership_type),
+                        item_instance_id=iid,
+                        item_hash=ihash,
+                        source_location=src_loc,
+                        source_character_id=src_cid,
+                        target_type="character",
+                        target_character_id=str(target_character_id),
+                        is_equipped=False,
+                    )
+                    free_slots[slot_name] -= 1
+                    pulled_ids.append(iid)
+                else:
+                    skipped_full_ids.append(iid)
+        except PermissionError:
+            if idx == 0:
+                raise
+            failed.append({"itemInstanceId": iid, "name": nm, "reason": "Bungie session expired."})
+        except Exception as exc:
+            failed.append({"itemInstanceId": iid, "name": nm, "reason": str(exc)})
+
+    return {
+        "status": "ok",
+        "unlockedIds": unlocked_ids,
+        "pulledIds": pulled_ids,
+        "alreadyOnCharIds": already_on_char_ids,
+        "skippedFullSlotIds": skipped_full_ids,
+        "failed": failed,
+    }
+
+
 def _norm_text(s: str) -> str:
     s = re.sub(r"\(.*?\)", "", s or "")
     s = s.lower().replace("enhanced ", "").strip()
     return re.sub(r"[^a-z0-9]", "", s)
+
+
+def _weapon_family_key(name: str) -> str:
+    cleaned = re.sub(
+        r"\((?:adept|timelost|harrowed|holofoil|baroque|damaged|curated)\)",
+        "",
+        name or "",
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"[^a-z0-9]", "", cleaned.lower().strip())
+
+
+def _is_adept_variant(name: str) -> bool:
+    low = (name or "").lower()
+    return any(tag in low for tag in ("(adept)", "(timelost)", "(harrowed)", "(holofoil)", "(baroque)"))
 
 
 def _split_godroll_options(spec_str: str) -> List[str]:
@@ -1237,10 +1382,96 @@ _PVP_LETHALITY_TRAITS = {
     "lonewolf", "keepaway",
 }
 
+# Barrel, Magazine & Masterwork Tier Tables (used to compare duplicate God Rolls down to 5/5 perfection)
+_PVE_BARREL_SCORES = {
+    "arrowheadbrake": 13, "flutedbarrel": 13, "quicklaunch": 13, "hardlaunch": 13,
+    "jaggededge": 13, "elasticstring": 13, "polymerstring": 12, "auxiliaryreserves": 12,
+    "corkscrewrifling": 10, "smallbore": 10, "hammerforgedrifling": 9, "polygonalrifling": 9,
+    "linearcompensator": 10, "volatilelaunch": 9, "temperededge": 10, "flexiblestring": 9,
+    "smartdriftcontrol": 10, "ballisticstuning": 10, "chamberedcompensator": 7,
+    "countermass": 8, "confinedlaunch": 7, "honededge": 8, "fullbore": 4, "smoothbore": 3,
+}
+
+_PVP_BARREL_SCORES = {
+    "hammerforgedrifling": 13, "smallbore": 13, "corkscrewrifling": 12, "flutedbarrel": 13,
+    "arrowheadbrake": 12, "elasticstring": 13, "ballisticstuning": 12, "extendedbarrel": 10,
+    "polygonalrifling": 10, "chamberedcompensator": 9, "quicklaunch": 11, "volatilelaunch": 10,
+    "polymerstring": 11, "jaggededge": 11, "fullbore": 9, "smoothbore": 3,
+}
+
+_PVE_MAG_SCORES = {
+    "tacticalmag": 13, "flaredmagwell": 13, "appendedmag": 13, "spikegrenades": 13,
+    "impactcasing": 13, "lightmag": 12, "acceleratedcoils": 13, "liquidcoils": 12,
+    "swordmastersguard": 13, "compactarrowshaft": 12, "fiberglassarrowshaft": 12,
+    "ricochetrounds": 10, "highcaliberrounds": 10, "armorpiercingrounds": 11,
+    "alloymagazine": 10, "ionizedbattery": 11, "enhancedbattery": 11, "implosionrounds": 10,
+    "highvelocityrounds": 10, "accurizedrounds": 9, "extendedmag": 6, "steadyrounds": 5,
+}
+
+_PVP_MAG_SCORES = {
+    "ricochetrounds": 13, "accurizedrounds": 13, "highcaliberrounds": 12, "projectionfuse": 13,
+    "assaultmag": 13, "fiberglassarrowshaft": 13, "highvelocityrounds": 12, "lightmag": 11,
+    "flaredmagwell": 10, "tacticalmag": 9, "liquidcoils": 11, "blackpowder": 10,
+    "compactarrowshaft": 10, "armorpiercingrounds": 9, "extendedmag": 4, "steadyrounds": 8,
+}
+
+_PVE_MW_SCORES = {
+    "reloadspeed": 10, "handling": 9, "velocity": 9, "chargetime": 9, "drawtime": 9,
+    "impact": 9, "range": 7, "stability": 7, "blastradius": 6, "shieldduration": 7,
+}
+
+_PVP_MW_SCORES = {
+    "range": 10, "stability": 9, "handling": 9, "drawtime": 9, "chargetime": 9,
+    "velocity": 9, "blastradius": 8, "reloadspeed": 6, "impact": 8,
+}
+
+
+def _pick_best_column_plug(
+    col_opts: List[dict],
+    tier_table: Dict[str, int],
+    wanted_norms: Optional[List[str]] = None,
+    default_pts: int = 6,
+) -> Tuple[int, str]:
+    if not col_opts:
+        return 0, ""
+    best_pts = -1
+    best_name = ""
+    wanted_set = set(wanted_norms or [])
+    for opt in col_opts:
+        nm = opt.get("name", "")
+        if not nm:
+            continue
+        pn = _norm_text(nm)
+        if wanted_set and pn in wanted_set:
+            pts = 13 + (1 if wanted_norms and pn == wanted_norms[0] else 0)
+        else:
+            pts = tier_table.get(pn, default_pts)
+        # Prefer already-selected option on exact score tie
+        if pts > best_pts or (pts == best_pts and opt.get("selected")):
+            best_pts = pts
+            best_name = nm
+    return max(0, best_pts), best_name
+
+
+def _score_masterwork(mw_name: str, tier_table: Dict[str, int], wanted_norms: Optional[List[str]] = None) -> int:
+    mw_norm = _norm_text(mw_name)
+    if not mw_norm:
+        return 0
+    if wanted_norms and any(w in mw_norm or mw_norm in w for w in wanted_norms):
+        return 10
+    for key, pts in tier_table.items():
+        if key in mw_norm:
+            return pts
+    return 5
+
 
 def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
-    """Evaluates a weapon against My God Rolls (God Roll Finder DB) + F.E.L.I.C.I.A.'s 2-column PVE/PVP Synergy Matrix."""
-    item_norm = _norm_text(item.get("name", ""))
+    """Evaluates a weapon against My God Rolls (God Roll Finder DB) + F.E.L.I.C.I.A.'s 2-column Synergy Matrix with a 0-100 5/5 Roll Score."""
+    raw_name = item.get("name", "")
+    item_norm = _norm_text(raw_name)
+    family_key = _weapon_family_key(raw_name)
+    is_adept = _is_adept_variant(raw_name)
+
     matched_entry = None
     for gr in god_rolls:
         gr_norm = _norm_text(gr.get("name", ""))
@@ -1248,8 +1479,8 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
             matched_entry = gr
             break
 
-    # Map normalized perk -> display name rolled on this weapon
     norm_to_display: Dict[str, str] = {}
+    enhanced_norms: Set[str] = set()
     all_item_perk_norms: Set[str] = set()
     perk_cols = item.get("perkColumns", []) or []
     for col in perk_cols:
@@ -1259,6 +1490,8 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
                 pn = _norm_text(pname)
                 all_item_perk_norms.add(pn)
                 norm_to_display.setdefault(pn, pname)
+                if opt.get("enhanced"):
+                    enhanced_norms.add(pn)
     for ap in item.get("activePerks", []) or []:
         pname = ap.get("name", "")
         if pname:
@@ -1269,9 +1502,10 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
     mw_name = (item.get("masterwork") or {}).get("name", "")
     mw_norm = _norm_text(mw_name)
 
-    # Exotic weapons have fixed/catalyst perks rather than random legendary rolls (unless manually entered in God Roll Finder)
     if (item.get("isExotic") and not matched_entry) or item.get("category") != "Weapon":
         return {
+            "weapon_family_key": family_key,
+            "is_adept_variant": is_adept,
             "in_database": False,
             "match_source": "none",
             "entry": None,
@@ -1281,75 +1515,125 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
             "pve_matched_perks": [],
             "pvp_matches": [],
             "pvp_matched_perks": [],
+            "pve_score": 0,
+            "pvp_score": 0,
+            "best_score": 0,
+            "pve_sort_score": 0.0,
+            "pvp_sort_score": 0.0,
+            "best_barrel": "",
+            "best_mag": "",
+            "masterwork_name": mw_name,
+            "enhanced_trait_count": 0,
             "verdict_code": "EXOTIC" if item.get("isExotic") else "AI_EVAL",
         }
 
-    # Compute F.E.L.I.C.I.A. 2-Column Combat Trait Synergy across distinct trait columns
+    # Resolve Barrel, Mag, and Trait columns
+    t_indexes = item.get("traitColIndexes") or []
+    trait_cols = [perk_cols[i] for i in t_indexes if 0 <= i < len(perk_cols)]
+    if len(trait_cols) < 2 and len(perk_cols) >= 4:
+        trait_cols = perk_cols[2:4]
+
+    b_idx = item.get("barrelColIndex")
+    if b_idx is None and len(perk_cols) >= 4 and 0 not in t_indexes:
+        b_idx = 0
+    m_idx = item.get("magColIndex")
+    if m_idx is None and len(perk_cols) >= 4 and 1 not in t_indexes:
+        m_idx = 1
+
+    barrel_col = perk_cols[b_idx] if (b_idx is not None and 0 <= b_idx < len(perk_cols)) else []
+    mag_col = perk_cols[m_idx] if (m_idx is not None and 0 <= m_idx < len(perk_cols)) else []
+
+    # Compute F.E.L.I.C.I.A. 2-Column Combat Trait Synergy + single-trait hits
     pve_pair: List[str] = []
     pvp_pair: List[str] = []
-    if not item.get("isExotic"):
-        t_indexes = item.get("traitColIndexes") or []
-        trait_cols = [perk_cols[i] for i in t_indexes if 0 <= i < len(perk_cols)]
-        if len(trait_cols) < 2 and len(perk_cols) >= 4:
-            trait_cols = perk_cols[2:4]
+    single_pve_hit: List[str] = []
+    single_pvp_hit: List[str] = []
+    extra_trait_opts = 0
 
-        if len(trait_cols) >= 2:
-            col_a = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[0] if o.get("name")]
-            col_b = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[1] if o.get("name")]
+    if not item.get("isExotic") and len(trait_cols) >= 2:
+        col_a = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[0] if o.get("name")]
+        col_b = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[1] if o.get("name")]
+        extra_trait_opts = max(0, (len(col_a) - 1) + (len(col_b) - 1))
 
-            for na, da in col_a:
-                for nb, db in col_b:
-                    if not na or not nb or na == nb:
-                        continue
-                    if not pve_pair:
-                        if (
-                            (na in _PVE_SETUP_TRAITS and nb in _PVE_PAYOFF_TRAITS)
-                            or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_SETUP_TRAITS)
-                            or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_PAYOFF_TRAITS)
-                        ):
-                            pve_pair = [da, db]
-                    if not pvp_pair:
-                        if (
-                            (na in _PVP_CONSISTENCY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
-                            or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_CONSISTENCY_TRAITS)
-                            or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
-                        ):
-                            pvp_pair = [da, db]
+        for na, da in col_a:
+            if not single_pve_hit and (na in _PVE_SETUP_TRAITS or na in _PVE_PAYOFF_TRAITS):
+                single_pve_hit = [da]
+            if not single_pvp_hit and (na in _PVP_CONSISTENCY_TRAITS or na in _PVP_LETHALITY_TRAITS):
+                single_pvp_hit = [da]
+            for nb, db in col_b:
+                if not single_pve_hit and (nb in _PVE_SETUP_TRAITS or nb in _PVE_PAYOFF_TRAITS):
+                    single_pve_hit = [db]
+                if not single_pvp_hit and (nb in _PVP_CONSISTENCY_TRAITS or nb in _PVP_LETHALITY_TRAITS):
+                    single_pvp_hit = [db]
+                if not na or not nb or na == nb:
+                    continue
+                if not pve_pair:
+                    if (
+                        (na in _PVE_SETUP_TRAITS and nb in _PVE_PAYOFF_TRAITS)
+                        or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_SETUP_TRAITS)
+                        or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_PAYOFF_TRAITS)
+                    ):
+                        pve_pair = [da, db]
+                if not pvp_pair:
+                    if (
+                        (na in _PVP_CONSISTENCY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
+                        or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_CONSISTENCY_TRAITS)
+                        or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
+                    ):
+                        pvp_pair = [da, db]
 
-    # Case 1: Weapon is in our God Roll Finder database (supplemented by F.E.L.I.C.I.A. 2-col synergy for alternate meta rolls)
+    pve_db_spec = (matched_entry or {}).get("pve", {}) if matched_entry else {}
+    pvp_db_spec = (matched_entry or {}).get("pvp", {}) if matched_entry else {}
+
+    pve_traits = 0
+    pvp_traits = 0
+    pve_bonus = 0
+    pvp_bonus = 0
+    pve_matches: List[str] = []
+    pvp_matches: List[str] = []
+    pve_perk_names: List[str] = []
+    pvp_perk_names: List[str] = []
+    pve_primary_rank_bonus = 0
+    pvp_primary_rank_bonus = 0
+    used_db = False
+
     if matched_entry:
-        def _score_mode(mode_spec: dict) -> Tuple[int, int, List[str], List[str]]:
-            trait_hits = 0
-            bonus_hits = 0
-            matched_labels: List[str] = []
-            matched_perks: List[str] = []
+        def _score_db_mode(mode_spec: dict) -> Tuple[int, int, int, List[str], List[str]]:
+            t_hits = 0
+            b_hits = 0
+            pri_bonus = 0
+            m_labels: List[str] = []
+            m_perks: List[str] = []
 
             for key, label in [("perk1", "Trait 1"), ("perk2", "Trait 2")]:
                 wanted = _split_godroll_options(mode_spec.get(key, ""))
-                hit = next((w for w in wanted if w in all_item_perk_norms), None)
-                if hit:
-                    trait_hits += 1
-                    matched_labels.append(f"{label}: {mode_spec.get(key)}")
-                    matched_perks.append(norm_to_display.get(hit, mode_spec.get(key, "")))
+                hit_idx = next((idx for idx, w in enumerate(wanted) if w in all_item_perk_norms), None)
+                if hit_idx is not None:
+                    w = wanted[hit_idx]
+                    t_hits += 1
+                    if hit_idx == 0:
+                        pri_bonus += 1
+                    m_labels.append(f"{label}: {mode_spec.get(key)}")
+                    m_perks.append(norm_to_display.get(w, mode_spec.get(key, "")))
 
             for key, label in [("barrel", "Barrel"), ("mag", "Magazine")]:
                 wanted = _split_godroll_options(mode_spec.get(key, ""))
                 hit = next((w for w in wanted if w in all_item_perk_norms), None)
                 if hit:
-                    bonus_hits += 1
-                    matched_labels.append(f"{label}: {mode_spec.get(key)}")
+                    b_hits += 1
+                    m_labels.append(f"{label}: {mode_spec.get(key)}")
 
             wanted_mw = _split_godroll_options(mode_spec.get("masterwork", ""))
             if mw_norm and any(w in mw_norm or mw_norm in w for w in wanted_mw):
-                bonus_hits += 1
-                matched_labels.append(f"MW: {mode_spec.get('masterwork')}")
+                b_hits += 1
+                m_labels.append(f"MW: {mode_spec.get('masterwork')}")
 
-            return trait_hits, bonus_hits, matched_labels, matched_perks
+            return t_hits, b_hits, pri_bonus, m_labels, m_perks
 
-        pve_traits, pve_bonus, pve_matches, pve_perk_names = _score_mode(matched_entry.get("pve", {}))
-        pvp_traits, pvp_bonus, pvp_matches, pvp_perk_names = _score_mode(matched_entry.get("pvp", {}))
-
+        pve_traits, pve_bonus, pve_primary_rank_bonus, pve_matches, pve_perk_names = _score_db_mode(pve_db_spec)
+        pvp_traits, pvp_bonus, pvp_primary_rank_bonus, pvp_matches, pvp_perk_names = _score_db_mode(pvp_db_spec)
         used_db = (pve_traits == 2) or (pvp_traits == 2)
+
         if pve_traits < 2 and pve_pair:
             pve_traits = 2
             pve_perk_names = pve_pair
@@ -1358,52 +1642,432 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
             pvp_traits = 2
             pvp_perk_names = pvp_pair
             pvp_matches = [f"Synergy: {' + '.join(pvp_pair)}"]
-
-        if pve_traits == 2 and pvp_traits == 2:
-            verdict = "DUAL_GOD_ROLL"
-        elif pve_traits == 2:
-            verdict = "PVE_GOD_ROLL"
-        elif pvp_traits == 2:
-            verdict = "PVP_GOD_ROLL"
-        elif pve_traits == 1 or pvp_traits == 1:
-            verdict = "SOLID_KEEP"
-        else:
-            verdict = "SHARD_CANDIDATE"
-
-        return {
-            "in_database": used_db,
-            "match_source": "database" if used_db else ("felicia_ai" if verdict in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL") else "database"),
-            "entry": matched_entry,
-            "pve_trait_hits": pve_traits,
-            "pve_bonus_hits": pve_bonus,
-            "pve_matches": pve_matches,
-            "pve_matched_perks": pve_perk_names,
-            "pvp_trait_hits": pvp_traits,
-            "pvp_bonus_hits": pvp_bonus,
-            "pvp_matches": pvp_matches,
-            "pvp_matched_perks": pvp_perk_names,
-            "verdict_code": verdict,
-        }
-
-    # Case 2: Legendary Weapon evaluated by F.E.L.I.C.I.A. 2-Column Synergy Matrix
-    if pve_pair and pvp_pair:
-        verdict = "DUAL_GOD_ROLL"
-    elif pve_pair:
-        verdict = "PVE_GOD_ROLL"
-    elif pvp_pair:
-        verdict = "PVP_GOD_ROLL"
     else:
-        verdict = "AI_EVAL"
+        pve_traits = 2 if pve_pair else (1 if single_pve_hit else 0)
+        pvp_traits = 2 if pvp_pair else (1 if single_pvp_hit else 0)
+        pve_perk_names = pve_pair if pve_pair else single_pve_hit
+        pvp_perk_names = pvp_pair if pvp_pair else single_pvp_hit
+        pve_matches = [f"Synergy: {' + '.join(pve_pair)}"] if pve_pair else []
+        pvp_matches = [f"Synergy: {' + '.join(pvp_pair)}"] if pvp_pair else []
+
+    if pve_traits == 2 and pvp_traits == 2:
+        verdict = "DUAL_GOD_ROLL"
+    elif pve_traits == 2:
+        verdict = "PVE_GOD_ROLL"
+    elif pvp_traits == 2:
+        verdict = "PVP_GOD_ROLL"
+    elif pve_traits == 1 or pvp_traits == 1:
+        verdict = "SOLID_KEEP" if matched_entry else "AI_EVAL"
+    else:
+        verdict = "SHARD_CANDIDATE" if matched_entry else "AI_EVAL"
+
+    # Compute 5/5 Roll Quality Scores (0-100 display + exact float tie-breaker)
+    stats_lookup = {s["name"]: int(s["value"]) for s in (item.get("stats") or []) if "name" in s and "value" in s}
+    pve_stat_sum = (
+        stats_lookup.get("Reload Speed", 0) * 1.15
+        + stats_lookup.get("Handling", 0) * 1.1
+        + stats_lookup.get("Stability", 0) * 0.85
+        + stats_lookup.get("Range", 0) * 0.8
+        + stats_lookup.get("Velocity", 0) * 0.9
+    )
+    pvp_stat_sum = (
+        stats_lookup.get("Range", 0) * 1.25
+        + stats_lookup.get("Stability", 0) * 1.05
+        + stats_lookup.get("Handling", 0) * 1.1
+        + stats_lookup.get("Aim Assistance", 0) * 0.7
+    )
+
+    pve_b_pts, pve_barrel_name = _pick_best_column_plug(
+        barrel_col, _PVE_BARREL_SCORES, _split_godroll_options(pve_db_spec.get("barrel", ""))
+    )
+    pvp_b_pts, pvp_barrel_name = _pick_best_column_plug(
+        barrel_col, _PVP_BARREL_SCORES, _split_godroll_options(pvp_db_spec.get("barrel", ""))
+    )
+    pve_m_pts, pve_mag_name = _pick_best_column_plug(
+        mag_col, _PVE_MAG_SCORES, _split_godroll_options(pve_db_spec.get("mag", ""))
+    )
+    pvp_m_pts, pvp_mag_name = _pick_best_column_plug(
+        mag_col, _PVP_MAG_SCORES, _split_godroll_options(pvp_db_spec.get("mag", ""))
+    )
+    pve_mw_pts = _score_masterwork(mw_name, _PVE_MW_SCORES, _split_godroll_options(pve_db_spec.get("masterwork", "")))
+    pvp_mw_pts = _score_masterwork(mw_name, _PVP_MW_SCORES, _split_godroll_options(pvp_db_spec.get("masterwork", "")))
+
+    pve_enh_cnt = sum(1 for p in pve_perk_names if _norm_text(p) in enhanced_norms)
+    pvp_enh_cnt = sum(1 for p in pvp_perk_names if _norm_text(p) in enhanced_norms)
+    max_enh_cnt = max(pve_enh_cnt, pvp_enh_cnt)
+
+    def _calc_total_score(
+        trait_cnt: int,
+        db_matched: bool,
+        pri_rank_bonus: int,
+        enh_cnt: int,
+        barrel_pts: int,
+        mag_pts: int,
+        mw_pts: int,
+        stat_weighted: float,
+    ) -> Tuple[int, float]:
+        base = 50.0 if trait_cnt == 2 else (24.0 if trait_cnt == 1 else 6.0)
+        if trait_cnt == 2 and db_matched:
+            base += 3.0 + float(pri_rank_bonus)  # up to +5 for primary Clan God Roll Finder match
+        invest = min(9.0, (5.0 if item.get("isCrafted") else 0.0) + enh_cnt * 2.5)
+        adept_pts = 4.0 if is_adept else 0.0
+        mw_tier_pts = 2.0 if item.get("isMasterworked") else 0.0
+        flex_pts = min(3.0, (2.0 if verdict == "DUAL_GOD_ROLL" else 0.0) + min(1.5, extra_trait_opts * 0.5))
+        stat_bonus = min(4.0, stat_weighted / 95.0)
+        pwr_tie = float(item.get("power") or 0) * 0.0001
+        raw_total = base + barrel_pts + mag_pts + mw_pts + invest + adept_pts + mw_tier_pts + flex_pts + stat_bonus + pwr_tie
+        disp = max(1, min(100, int(round(raw_total))))
+        return disp, round(raw_total, 4)
+
+    pve_disp, pve_sort = _calc_total_score(
+        pve_traits,
+        bool(matched_entry and len(_split_godroll_options(pve_db_spec.get("perk1", ""))) > 0 and used_db),
+        pve_primary_rank_bonus,
+        pve_enh_cnt,
+        pve_b_pts,
+        pve_m_pts,
+        pve_mw_pts,
+        pve_stat_sum,
+    )
+    pvp_disp, pvp_sort = _calc_total_score(
+        pvp_traits,
+        bool(matched_entry and len(_split_godroll_options(pvp_db_spec.get("perk1", ""))) > 0 and used_db),
+        pvp_primary_rank_bonus,
+        pvp_enh_cnt,
+        pvp_b_pts,
+        pvp_m_pts,
+        pvp_mw_pts,
+        pvp_stat_sum,
+    )
+
+    primary_barrel = pve_barrel_name if pve_sort >= pvp_sort else pvp_barrel_name
+    primary_mag = pve_mag_name if pve_sort >= pvp_sort else pvp_mag_name
 
     return {
-        "in_database": False,
-        "match_source": "felicia_ai" if verdict in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL") else "none",
-        "entry": None,
-        "pve_trait_hits": 2 if pve_pair else 0,
-        "pvp_trait_hits": 2 if pvp_pair else 0,
-        "pve_matches": [f"Synergy: {' + '.join(pve_pair)}"] if pve_pair else [],
-        "pve_matched_perks": pve_pair,
-        "pvp_matches": [f"Synergy: {' + '.join(pvp_pair)}"] if pvp_pair else [],
-        "pvp_matched_perks": pvp_pair,
+        "weapon_family_key": family_key,
+        "is_adept_variant": is_adept,
+        "in_database": used_db,
+        "match_source": (
+            "database"
+            if used_db
+            else ("felicia_ai" if verdict in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL") else ("database" if matched_entry else "none"))
+        ),
+        "entry": matched_entry,
+        "pve_trait_hits": pve_traits,
+        "pve_bonus_hits": pve_bonus,
+        "pve_matches": pve_matches,
+        "pve_matched_perks": pve_perk_names,
+        "pvp_trait_hits": pvp_traits,
+        "pvp_bonus_hits": pvp_bonus,
+        "pvp_matches": pvp_matches,
+        "pvp_matched_perks": pvp_perk_names,
+        "pve_score": pve_disp,
+        "pvp_score": pvp_disp,
+        "best_score": max(pve_disp, pvp_disp),
+        "pve_sort_score": pve_sort,
+        "pvp_sort_score": pvp_sort,
+        "best_barrel": primary_barrel,
+        "best_barrel_pve": pve_barrel_name,
+        "best_barrel_pvp": pvp_barrel_name,
+        "best_mag": primary_mag,
+        "best_mag_pve": pve_mag_name,
+        "best_mag_pvp": pvp_mag_name,
+        "masterwork_name": mw_name,
+        "enhanced_trait_count": max_enh_cnt,
         "verdict_code": verdict,
     }
+
+
+def _describe_roll_advantage(winner: dict, loser: dict, mode: str) -> str:
+    """Explains cleanly in Destiny 2 terms why `winner` outranks `loser` for `mode` ('pve' or 'pvp')."""
+    w_gr = winner.get("godRollCheck", {})
+    l_gr = loser.get("godRollCheck", {})
+    reasons: List[str] = []
+
+    if winner.get("isCrafted") and not loser.get("isCrafted"):
+        reasons.append("Crafted")
+    if w_gr.get("isAdeptVariant") and not l_gr.get("isAdeptVariant"):
+        reasons.append("Adept Variant")
+    if (w_gr.get("enhancedTraitCount") or 0) > (l_gr.get("enhancedTraitCount") or 0):
+        reasons.append("Enhanced Perks")
+    if w_gr.get("verdictCode") == "DUAL_GOD_ROLL" and l_gr.get("verdictCode") != "DUAL_GOD_ROLL":
+        reasons.append("Covers PVE + PVP")
+
+    b_key = "bestBarrelPve" if mode == "pve" else "bestBarrelPvp"
+    m_key = "bestMagPve" if mode == "pve" else "bestMagPvp"
+    p_key = "pveMatchedPerks" if mode == "pve" else "pvpMatchedPerks"
+
+    w_perks = " + ".join(w_gr.get(p_key) or [])
+    l_perks = " + ".join(l_gr.get(p_key) or [])
+    if w_perks and l_perks and w_perks != l_perks:
+        reasons.append(f"Traits ({w_perks})")
+
+    w_b = w_gr.get(b_key) or w_gr.get("bestBarrel") or ""
+    l_b = l_gr.get(b_key) or l_gr.get("bestBarrel") or ""
+    if w_b and w_b != l_b:
+        reasons.append(f"Barrel ({w_b})")
+
+    w_m = w_gr.get(m_key) or w_gr.get("bestMag") or ""
+    l_m = l_gr.get(m_key) or l_gr.get("bestMag") or ""
+    if w_m and w_m != l_m:
+        reasons.append(f"Mag ({w_m})")
+
+    w_mw = w_gr.get("masterworkName") or ""
+    l_mw = l_gr.get("masterworkName") or ""
+    if w_mw and w_mw != l_mw:
+        reasons.append(f"{w_mw} MW")
+
+    if not reasons:
+        w_stats = {s["name"]: int(s["value"]) for s in (winner.get("stats") or [])}
+        l_stats = {s["name"]: int(s["value"]) for s in (loser.get("stats") or [])}
+        stat_diffs = []
+        for st_name in ("Range", "Handling", "Reload Speed", "Stability", "Velocity"):
+            diff = w_stats.get(st_name, 0) - l_stats.get(st_name, 0)
+            if diff > 0:
+                stat_diffs.append(f"+{diff} {st_name}")
+        if stat_diffs:
+            reasons.append(", ".join(stat_diffs[:2]))
+        elif winner.get("isMasterworked") and not loser.get("isMasterworked"):
+            reasons.append("Masterworked")
+        elif (winner.get("power") or 0) > (loser.get("power") or 0):
+            reasons.append(f"Higher Power ({winner.get('power')})")
+        else:
+            reasons.append("Tied Roll Package")
+
+    return ", ".join(reasons[:3])
+
+
+def analyze_arsenal_duplicates_and_trash(inventory_data: dict, god_rolls: List[dict]) -> None:
+    """Evaluates every weapon across Characters + Vault, crowns #1 Best per weapon/mode, flags weaker duplicates, and marks safe dismantle candidates."""
+    saved_loadout_ids: Set[str] = set()
+    all_weapons: List[dict] = []
+    seen_iids: Set[str] = set()
+
+    for ch in inventory_data.get("characters", []) or []:
+        for ld in ch.get("loadouts", []) or []:
+            for w in ld.get("weapons", []) or []:
+                if w.get("itemInstanceId"):
+                    saved_loadout_ids.add(str(w["itemInstanceId"]))
+            for a in ld.get("armor", []) or []:
+                if a.get("itemInstanceId"):
+                    saved_loadout_ids.add(str(a["itemInstanceId"]))
+
+        for bucket_list in (ch.get("equipment", []), ch.get("inventory", []), ch.get("postmaster", [])):
+            for it in bucket_list or []:
+                if it.get("category") == "Weapon":
+                    iid = str(it.get("itemInstanceId") or id(it))
+                    if iid not in seen_iids:
+                        seen_iids.add(iid)
+                        all_weapons.append(it)
+
+    for it in (inventory_data.get("vault") or {}).get("items", []) or []:
+        if it.get("category") == "Weapon":
+            iid = str(it.get("itemInstanceId") or id(it))
+            if iid not in seen_iids:
+                seen_iids.add(iid)
+                all_weapons.append(it)
+
+    max_power_by_slot: Dict[str, int] = {"Kinetic": 0, "Energy": 0, "Heavy": 0}
+    for w in all_weapons:
+        sl = w.get("slot", "")
+        pw = int(w.get("power") or 0)
+        if sl in max_power_by_slot and pw > max_power_by_slot[sl]:
+            max_power_by_slot[sl] = pw
+
+    families: Dict[str, List[dict]] = {}
+    for w in all_weapons:
+        ev = evaluate_item_against_godrolls(w, god_rolls)
+        in_ld = str(w.get("itemInstanceId", "")) in saved_loadout_ids
+        sl = w.get("slot", "")
+        is_top_pwr = bool(sl in max_power_by_slot and max_power_by_slot[sl] > 0 and int(w.get("power") or 0) >= max_power_by_slot[sl])
+
+        w["godRollCheck"] = {
+            "weaponFamilyKey": ev["weapon_family_key"],
+            "isAdeptVariant": ev["is_adept_variant"],
+            "inDatabase": ev["in_database"],
+            "matchSource": ev.get("match_source", "none"),
+            "verdictCode": ev["verdict_code"],
+            "pveTraitHits": ev.get("pve_trait_hits", 0),
+            "pvpTraitHits": ev.get("pvp_trait_hits", 0),
+            "pveMatchedPerks": ev.get("pve_matched_perks", []),
+            "pvpMatchedPerks": ev.get("pvp_matched_perks", []),
+            "pveScore": ev.get("pve_score", 0),
+            "pvpScore": ev.get("pvp_score", 0),
+            "bestScore": ev.get("best_score", 0),
+            "pveSortScore": ev.get("pve_sort_score", 0.0),
+            "pvpSortScore": ev.get("pvp_sort_score", 0.0),
+            "bestBarrel": ev.get("best_barrel", ""),
+            "bestBarrelPve": ev.get("best_barrel_pve", ""),
+            "bestBarrelPvp": ev.get("best_barrel_pvp", ""),
+            "bestMag": ev.get("best_mag", ""),
+            "bestMagPve": ev.get("best_mag_pve", ""),
+            "bestMagPvp": ev.get("best_mag_pvp", ""),
+            "masterworkName": ev.get("masterwork_name", ""),
+            "enhancedTraitCount": ev.get("enhanced_trait_count", 0),
+            "familyTotalCopies": 1,
+            "familyGodRollCount": 0,
+            "isBestGodRoll": False,
+            "isBestPve": False,
+            "isBestPvp": False,
+            "isOutclassedDuplicate": False,
+            "duplicateRank": 0,
+            "comparisonSummary": "",
+            "outclassedByInstanceId": "",
+            "beatenDuplicateIds": [],
+            "inSavedLoadout": in_ld,
+            "isHighestPowerInSlot": is_top_pwr,
+            "dismantleCandidate": False,
+            "dismantleTier": "",
+            "dismantleLabel": "",
+            "dismantleReason": "",
+            "dismantleAutoSelect": False,
+        }
+        fkey = ev["weapon_family_key"] or str(w.get("itemHash", ""))
+        families.setdefault(fkey, []).append(w)
+
+    # Head-to-head comparison per weapon family
+    for fkey, fam_items in families.items():
+        total_copies = len(fam_items)
+        god_copies = [
+            it for it in fam_items
+            if it["godRollCheck"]["verdictCode"] in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL")
+        ]
+        pve_gods = [
+            it for it in god_copies
+            if it["godRollCheck"]["verdictCode"] in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL")
+        ]
+        pvp_gods = [
+            it for it in god_copies
+            if it["godRollCheck"]["verdictCode"] in ("DUAL_GOD_ROLL", "PVP_GOD_ROLL")
+        ]
+
+        pve_gods.sort(
+            key=lambda x: (
+                float(x["godRollCheck"]["pveSortScore"]),
+                1 if x.get("isCrafted") else 0,
+                1 if x.get("isMasterworked") else 0,
+                1 if x.get("isLocked") else 0,
+                1 if x.get("isEquipped") else 0,
+                int(x.get("power") or 0),
+                str(x.get("itemInstanceId") or ""),
+            ),
+            reverse=True,
+        )
+        pvp_gods.sort(
+            key=lambda x: (
+                float(x["godRollCheck"]["pvpSortScore"]),
+                1 if x.get("isCrafted") else 0,
+                1 if x.get("isMasterworked") else 0,
+                1 if x.get("isLocked") else 0,
+                1 if x.get("isEquipped") else 0,
+                int(x.get("power") or 0),
+                str(x.get("itemInstanceId") or ""),
+            ),
+            reverse=True,
+        )
+
+        pve_winner = pve_gods[0] if pve_gods else None
+        pvp_winner = pvp_gods[0] if pvp_gods else None
+
+        if pve_winner:
+            pve_winner["godRollCheck"]["isBestPve"] = True
+            pve_winner["godRollCheck"]["isBestGodRoll"] = True
+            pve_winner["godRollCheck"]["duplicateRank"] = 1
+        if pvp_winner:
+            pvp_winner["godRollCheck"]["isBestPvp"] = True
+            pvp_winner["godRollCheck"]["isBestGodRoll"] = True
+            pvp_winner["godRollCheck"]["duplicateRank"] = 1
+
+        outclassed_gods = [it for it in god_copies if not it["godRollCheck"]["isBestGodRoll"]]
+
+        for it in fam_items:
+            grc = it["godRollCheck"]
+            grc["familyTotalCopies"] = total_copies
+            grc["familyGodRollCount"] = len(god_copies)
+
+        # Annotate #1 winners & outclassed duplicate God Rolls with clear comparison reasons
+        if len(god_copies) > 1:
+            for loser in outclassed_gods:
+                l_grc = loser["godRollCheck"]
+                l_grc["isOutclassedDuplicate"] = True
+                if l_grc["verdictCode"] in ("PVE_GOD_ROLL", "DUAL_GOD_ROLL") and pve_winner:
+                    rank_idx = pve_gods.index(loser) + 1
+                    l_grc["duplicateRank"] = rank_idx
+                    l_grc["outclassedByInstanceId"] = str(pve_winner.get("itemInstanceId", ""))
+                    adv = _describe_roll_advantage(pve_winner, loser, "pve")
+                    l_grc["comparisonSummary"] = (
+                        f"#{rank_idx} of {len(pve_gods)} PVE rolls ({l_grc['pveScore']} vs {pve_winner['godRollCheck']['pveScore']} pts) "
+                        f"— Outclassed by #1 ({adv})"
+                    )
+                    if str(loser.get("itemInstanceId", "")) not in pve_winner["godRollCheck"]["beatenDuplicateIds"]:
+                        pve_winner["godRollCheck"]["beatenDuplicateIds"].append(str(loser.get("itemInstanceId", "")))
+                elif pvp_winner:
+                    rank_idx = pvp_gods.index(loser) + 1
+                    l_grc["duplicateRank"] = rank_idx
+                    l_grc["outclassedByInstanceId"] = str(pvp_winner.get("itemInstanceId", ""))
+                    adv = _describe_roll_advantage(pvp_winner, loser, "pvp")
+                    l_grc["comparisonSummary"] = (
+                        f"#{rank_idx} of {len(pvp_gods)} PVP rolls ({l_grc['pvpScore']} vs {pvp_winner['godRollCheck']['pvpScore']} pts) "
+                        f"— Outclassed by #1 ({adv})"
+                    )
+                    if str(loser.get("itemInstanceId", "")) not in pvp_winner["godRollCheck"]["beatenDuplicateIds"]:
+                        pvp_winner["godRollCheck"]["beatenDuplicateIds"].append(str(loser.get("itemInstanceId", "")))
+
+            if pve_winner and len(pve_gods) > 1:
+                runner_up = pve_gods[1]
+                adv = _describe_roll_advantage(pve_winner, runner_up, "pve")
+                pve_winner["godRollCheck"]["comparisonSummary"] = (
+                    f"#1 Best of {len(pve_gods)} PVE God Rolls ({pve_winner['godRollCheck']['pveScore']} vs {runner_up['godRollCheck']['pveScore']} pts) "
+                    f"— Wins via {adv}"
+                )
+            if pvp_winner and len(pvp_gods) > 1 and (pvp_winner is not pve_winner or not pve_winner["godRollCheck"]["comparisonSummary"]):
+                runner_up = pvp_gods[1]
+                adv = _describe_roll_advantage(pvp_winner, runner_up, "pvp")
+                pvp_winner["godRollCheck"]["comparisonSummary"] = (
+                    f"#1 Best of {len(pvp_gods)} PVP God Rolls ({pvp_winner['godRollCheck']['pvpScore']} vs {runner_up['godRollCheck']['pvpScore']} pts) "
+                    f"— Wins via {adv}"
+                )
+            # If 1 PVE winner + 1 distinct PVP winner exist on the same weapon, explain why BOTH are kept!
+            if pve_winner and pvp_winner and pve_winner is not pvp_winner:
+                if not pve_winner["godRollCheck"]["comparisonSummary"]:
+                    pve_winner["godRollCheck"]["comparisonSummary"] = (
+                        f"#1 PVE Roll ({pve_winner['godRollCheck']['pveScore']}/100) — Paired alongside your separate #1 PVP copy"
+                    )
+                if not pvp_winner["godRollCheck"]["comparisonSummary"]:
+                    pvp_winner["godRollCheck"]["comparisonSummary"] = (
+                        f"#1 PVP Roll ({pvp_winner['godRollCheck']['pvpScore']}/100) — Paired alongside your separate #1 PVE copy"
+                    )
+
+        # Classify safe Dismantle Candidates across this weapon family
+        has_any_god = len(god_copies) > 0
+        for it in fam_items:
+            grc = it["godRollCheck"]
+            if (
+                grc["isBestGodRoll"]
+                or it.get("isExotic")
+                or it.get("isCrafted")
+                or it.get("isEquipped")
+                or grc["inSavedLoadout"]
+                or it.get("location") == "postmaster"
+            ):
+                continue
+
+            if grc["isOutclassedDuplicate"]:
+                grc["dismantleCandidate"] = True
+                grc["dismantleTier"] = "OUTCLASSED_GOD_ROLL"
+                grc["dismantleLabel"] = "Outclassed Duplicate God Roll"
+                grc["dismantleReason"] = grc["comparisonSummary"] or "Outclassed by your #1 Best God Roll of this weapon."
+                grc["dismantleAutoSelect"] = not grc["isHighestPowerInSlot"]
+            elif has_any_god:
+                grc["dismantleCandidate"] = True
+                grc["dismantleTier"] = "EXTRA_COPY_OWNED_GOD_ROLL"
+                grc["dismantleLabel"] = "Inferior Copy (Own #1 God Roll)"
+                grc["dismantleReason"] = f"You already own a #1 God Roll of {it.get('name')} — safe extra copy to dismantle."
+                grc["dismantleAutoSelect"] = (not grc["isHighestPowerInSlot"]) and (not it.get("isLocked"))
+            elif grc["pveTraitHits"] == 0 and grc["pvpTraitHits"] == 0:
+                grc["dismantleCandidate"] = True
+                grc["dismantleTier"] = "BAD_ROLL"
+                grc["dismantleLabel"] = "Bad Roll (0/2 Meta Perks)"
+                grc["dismantleReason"] = "Misses PVE & PVP God Roll trait synergy."
+                grc["dismantleAutoSelect"] = False
+

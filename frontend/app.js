@@ -52,6 +52,10 @@ const state = {
   activeInventoryView: null, // characterId or 'vault'
   invFilter: { search: '', slot: 'all' },
   scannerFilter: 'all',
+  dismantleSelectedIds: new Set(),
+  dismantleSelectionInitialized: false,
+  dismantleTargetCharId: '',
+  dupDrawerOpen: {},
   inspectedLoadout: null,
   loadoutsDrawerOpen: {},
   inspectedItem: null,
@@ -1485,6 +1489,9 @@ function disconnectBungieAccount() {
   state.bungieData = null;
   state.activeInventoryView = null;
   state.loadoutsDrawerOpen = {};
+  state.dismantleSelectedIds = new Set();
+  state.dismantleSelectionInitialized = false;
+  state.dupDrawerOpen = {};
   updateBungieAuthUI();
 }
 
@@ -1566,6 +1573,10 @@ async function loadBungieInventory(silent = false) {
     }
 
     state.bungieData = data;
+    state.dismantleSelectionInitialized = false;
+    if (!state.dismantleTargetCharId && data.characters?.[0]?.characterId) {
+      state.dismantleTargetCharId = data.characters[0].characterId;
+    }
     if (!state.activeInventoryView) {
       state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
     } else if (
@@ -1720,8 +1731,10 @@ function itemMatchesFilter(item) {
   if (f.slot === 'armor' && item.category !== 'Armor') return false;
   if (['Kinetic', 'Energy', 'Heavy'].includes(f.slot) && item.slot !== f.slot) return false;
   if (f.slot === 'godroll') {
-    const vc = item.godRollCheck?.verdictCode || '';
-    if (!['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc)) return false;
+    const grc = item.godRollCheck;
+    if (!grc) return false;
+    if (typeof grc.isBestGodRoll === 'boolean') return grc.isBestGodRoll;
+    return ['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(grc.verdictCode || '');
   }
 
   const q = (f.search || '').trim().toLowerCase();
@@ -1754,14 +1767,18 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     ? `<span class="elem-dot ${escapeHtml(item.element)}"></span>`
     : '';
 
-  const vc = item.godRollCheck?.verdictCode || '';
+  const grc = item.godRollCheck || {};
+  const vc = grc.verdictCode || '';
+  const hasMultipleGods = (grc.familyGodRollCount || 0) > 1;
   let godBadge = '';
-  if (vc === 'DUAL_GOD_ROLL') {
-    godBadge = `<span class="godroll-mini-tag">★ PVE + PVP GOD ROLL</span>`;
+  if (grc.isOutclassedDuplicate) {
+    godBadge = `<span class="godroll-mini-tag outclassed-dup">⚠ DUP #${grc.duplicateRank || 2} (OUTCLASSED)</span>`;
+  } else if (vc === 'DUAL_GOD_ROLL') {
+    godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE+PVP ROLL' : '★ PVE + PVP GOD ROLL'}</span>`;
   } else if (vc === 'PVE_GOD_ROLL') {
-    godBadge = `<span class="godroll-mini-tag">★ PVE GOD ROLL</span>`;
+    godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE GOD ROLL' : '★ PVE GOD ROLL'}</span>`;
   } else if (vc === 'PVP_GOD_ROLL') {
-    godBadge = `<span class="godroll-mini-tag">★ PVP GOD ROLL</span>`;
+    godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVP GOD ROLL' : '★ PVP GOD ROLL'}</span>`;
   }
 
   const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner">◈</span>` : '';
@@ -2492,11 +2509,24 @@ async function executeEquipSavedLoadout() {
 function collectInventoryAndVaultGodRolls() {
   const data = state.bungieData;
   if (!data) {
-    return { totalWeapons: 0, godRolls: [], pveCount: 0, pvpCount: 0, dualCount: 0, unlockedCount: 0 };
+    return {
+      totalWeapons: 0,
+      bestRolls: [],
+      outclassedRolls: [],
+      duplicateFamilies: [],
+      dismantleCandidates: [],
+      byInstanceId: new Map(),
+      pveBestCount: 0,
+      pvpBestCount: 0,
+      unlockedBestCount: 0,
+      outclassedCount: 0,
+      dismantleCount: 0
+    };
   }
 
   const seenIds = new Set();
-  const godRolls = [];
+  const byInstanceId = new Map();
+  const allEntries = [];
   let totalWeapons = 0;
 
   const inspectList = (itemsArr, locLabel, ownerCharId) => {
@@ -2507,14 +2537,25 @@ function collectInventoryAndVaultGodRolls() {
       seenIds.add(key);
       totalWeapons++;
 
-      const vc = item.godRollCheck?.verdictCode || '';
-      if (['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc)) {
-        godRolls.push({
-          item,
-          verdictCode: vc,
-          locLabel,
-          ownerCharId
-        });
+      const grc = item.godRollCheck || {};
+      const vc = grc.verdictCode || '';
+      const isGod = ['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc);
+      const isBest = typeof grc.isBestGodRoll === 'boolean' ? grc.isBestGodRoll : isGod;
+      const isOutclassed = Boolean(grc.isOutclassedDuplicate);
+
+      const entry = {
+        item,
+        grc,
+        verdictCode: vc,
+        isGod,
+        isBest,
+        isOutclassed,
+        locLabel,
+        ownerCharId
+      };
+      allEntries.push(entry);
+      if (item.itemInstanceId) {
+        byInstanceId.set(String(item.itemInstanceId), entry);
       }
     });
   };
@@ -2528,23 +2569,100 @@ function collectInventoryAndVaultGodRolls() {
 
   inspectList(data.vault?.items || [], 'IN VAULT', '');
 
-  // Sort: Unlocked first so player sees items needing protection right at top, then Dual -> PVE -> PVP -> Power
   const vcOrder = { DUAL_GOD_ROLL: 0, PVE_GOD_ROLL: 1, PVP_GOD_ROLL: 2 };
-  godRolls.sort((a, b) => {
+  const bestRolls = allEntries.filter(e => e.isGod && e.isBest);
+  bestRolls.sort((a, b) => {
     if (Boolean(a.item.isLocked) !== Boolean(b.item.isLocked)) {
       return a.item.isLocked ? 1 : -1;
     }
+    const aHasDups = (a.grc.beatenDuplicateIds || []).length > 0 ? 0 : 1;
+    const bHasDups = (b.grc.beatenDuplicateIds || []).length > 0 ? 0 : 1;
+    if (aHasDups !== bHasDups) return aHasDups - bHasDups;
     const vo = (vcOrder[a.verdictCode] ?? 9) - (vcOrder[b.verdictCode] ?? 9);
     if (vo !== 0) return vo;
+    const sc = (b.grc.bestScore || 0) - (a.grc.bestScore || 0);
+    if (sc !== 0) return sc;
     return (b.item.power || 0) - (a.item.power || 0);
   });
 
-  const pveCount = godRolls.filter(g => g.verdictCode === 'PVE_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
-  const pvpCount = godRolls.filter(g => g.verdictCode === 'PVP_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
-  const dualCount = godRolls.filter(g => g.verdictCode === 'DUAL_GOD_ROLL').length;
-  const unlockedCount = godRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster').length;
+  const outclassedRolls = allEntries.filter(e => e.isOutclassed);
+  outclassedRolls.sort((a, b) => (b.grc.bestScore || 0) - (a.grc.bestScore || 0));
 
-  return { totalWeapons, godRolls, pveCount, pvpCount, dualCount, unlockedCount };
+  // Build weapon family duplicate groups (any gun where 2+ God Rolls exist, OR 1+ God Roll + inferior extra copies)
+  const familyMap = new Map();
+  allEntries.forEach(e => {
+    const fkey = e.grc.weaponFamilyKey || String(e.item.itemHash || e.item.name);
+    if (!familyMap.has(fkey)) {
+      familyMap.set(fkey, {
+        familyKey: fkey,
+        weaponName: e.item.name,
+        winners: [],
+        outclassedGods: [],
+        inferiorExtras: []
+      });
+    }
+    const grp = familyMap.get(fkey);
+    if (e.isGod && e.isBest) {
+      grp.winners.push(e);
+    } else if (e.isOutclassed) {
+      grp.outclassedGods.push(e);
+    } else if (e.grc.dismantleTier === 'EXTRA_COPY_OWNED_GOD_ROLL') {
+      grp.inferiorExtras.push(e);
+    }
+  });
+
+  const duplicateFamilies = Array.from(familyMap.values()).filter(
+    g => g.winners.length > 0 && (g.outclassedGods.length > 0 || g.winners.length > 1 || g.inferiorExtras.length > 0)
+  );
+  duplicateFamilies.sort((a, b) => {
+    const aOut = a.outclassedGods.length;
+    const bOut = b.outclassedGods.length;
+    if (bOut !== aOut) return bOut - aOut;
+    return (b.winners.length + b.inferiorExtras.length) - (a.winners.length + a.inferiorExtras.length);
+  });
+
+  const tierOrder = { OUTCLASSED_GOD_ROLL: 0, EXTRA_COPY_OWNED_GOD_ROLL: 1, BAD_ROLL: 2 };
+  const dismantleCandidates = allEntries.filter(e => Boolean(e.grc.dismantleCandidate));
+  dismantleCandidates.sort((a, b) => {
+    const to = (tierOrder[a.grc.dismantleTier] ?? 9) - (tierOrder[b.grc.dismantleTier] ?? 9);
+    if (to !== 0) return to;
+    return a.item.name.localeCompare(b.item.name);
+  });
+
+  // Pre-select safe duplicate candidates on initial scan (never auto-selects highest-power slot items or random bad rolls unless clicked)
+  if (!state.dismantleSelectionInitialized) {
+    state.dismantleSelectedIds = new Set();
+    dismantleCandidates.forEach(e => {
+      if (e.grc.dismantleAutoSelect && e.item.itemInstanceId) {
+        state.dismantleSelectedIds.add(String(e.item.itemInstanceId));
+      }
+    });
+    state.dismantleSelectionInitialized = true;
+  } else {
+    const validIds = new Set(dismantleCandidates.map(e => String(e.item.itemInstanceId)));
+    for (const id of Array.from(state.dismantleSelectedIds)) {
+      if (!validIds.has(id)) state.dismantleSelectedIds.delete(id);
+    }
+  }
+
+  const pveBestCount = bestRolls.filter(g => g.verdictCode === 'PVE_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
+  const pvpBestCount = bestRolls.filter(g => g.verdictCode === 'PVP_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
+  const unlockedBestCount = bestRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster').length;
+
+  return {
+    totalWeapons,
+    bestRolls,
+    outclassedRolls,
+    duplicateFamilies,
+    dismantleCandidates,
+    byInstanceId,
+    pveBestCount,
+    pvpBestCount,
+    unlockedBestCount,
+    outclassedCount: outclassedRolls.length,
+    dupFamiliesCount: duplicateFamilies.length,
+    dismantleCount: dismantleCandidates.length
+  };
 }
 
 function openGodRollScannerModal() {
@@ -2568,6 +2686,300 @@ function openGodRollScannerModal() {
   if (modal) modal.showModal();
 }
 
+function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Map() } = {}) {
+  const it = entry.item;
+  const grc = entry.grc || it.godRollCheck || {};
+  const iid = String(it.itemInstanceId || '');
+  const isDismantleView = viewMode === 'dismantle';
+  const isOutclassed = Boolean(entry.isOutclassed);
+
+  const shell = document.createElement('div');
+  shell.className = `scanner-card-shell ${isOutclassed ? 'is-outclassed' : ''} ${isDismantleView ? 'is-dismantle-row' : ''}`.trim();
+
+  const row = document.createElement('div');
+  row.className = 'scanner-item-row';
+
+  const iconSrc = it.icon ? `https://www.bungie.net${it.icon}` : 'icon-192.png';
+
+  // Mode / Verdict badge
+  let modeBadge = '';
+  if (entry.verdictCode === 'DUAL_GOD_ROLL') {
+    modeBadge = `<span class="scanner-mode-tag dual">★ PVE + PVP GOD ROLL</span>`;
+  } else if (entry.verdictCode === 'PVE_GOD_ROLL') {
+    modeBadge = `<span class="scanner-mode-tag pve">⚔️ PVE GOD ROLL</span>`;
+  } else if (entry.verdictCode === 'PVP_GOD_ROLL') {
+    modeBadge = `<span class="scanner-mode-tag pvp">🎯 PVP GOD ROLL</span>`;
+  }
+
+  // Score & Winner / Outclassed / Trash Rank badge
+  let rankBadge = '';
+  if (isOutclassed) {
+    rankBadge = `<span class="scanner-score-badge outclassed">⚠ DUP #${grc.duplicateRank || 2} • ${grc.bestScore || 0}/100</span>`;
+  } else if (entry.isGod && entry.isBest) {
+    const crownTxt = (grc.familyGodRollCount || 0) > 1
+      ? `👑 #1 BEST • ${grc.bestScore || 0}/100`
+      : `★ SCORE ${grc.bestScore || 0}/100`;
+    rankBadge = `<span class="scanner-score-badge best">${crownTxt}</span>`;
+  } else if (grc.dismantleCandidate) {
+    rankBadge = `<span class="scanner-score-badge trash">🗑️ ${escapeHtml(grc.dismantleLabel || 'Shard Candidate')}</span>`;
+  }
+
+  const extraFlags = [];
+  if (it.isCrafted) {
+    extraFlags.push(`<span class="scanner-loc-pill" style="color:#F87171; border:1px solid rgba(248,113,113,0.4);">◈ CRAFTED</span>`);
+  }
+  if (grc.isAdeptVariant) {
+    extraFlags.push(`<span class="scanner-loc-pill" style="color:#FDE047; border:1px solid rgba(250,204,21,0.4);">ADEPT</span>`);
+  }
+  if (grc.isHighestPowerInSlot && isDismantleView) {
+    extraFlags.push(`<span class="scanner-loc-pill" style="color:#38BDF8; border:1px solid rgba(56,189,248,0.45);">⚡ HIGHEST SLOT POWER</span>`);
+  }
+  if (grc.inDatabase && entry.isGod) {
+    extraFlags.push(`<span class="scanner-loc-pill" style="color:#FDE047; border:1px solid rgba(250,204,21,0.35);">MY GOD ROLLS</span>`);
+  }
+
+  // Perk chips (show matched PVE/PVP perks, or rolled active traits on bad rolls so user sees why it's trash)
+  const perkTags = [];
+  if ((grc.pveMatchedPerks || []).length >= 2) {
+    perkTags.push(`<span class="scanner-perk-chip">⚔️ PVE: <strong>${escapeHtml(grc.pveMatchedPerks.join(' + '))}</strong></span>`);
+  }
+  if ((grc.pvpMatchedPerks || []).length >= 2) {
+    perkTags.push(`<span class="scanner-perk-chip">🎯 PVP: <strong>${escapeHtml(grc.pvpMatchedPerks.join(' + '))}</strong></span>`);
+  }
+  if (perkTags.length === 0) {
+    const tCols = (it.traitColIndexes || []).map(idx => it.perkColumns?.[idx]).filter(Boolean);
+    const fallbackCols = tCols.length >= 2 ? tCols : (it.perkColumns || []).slice(2, 4);
+    const rolledNames = fallbackCols
+      .map(col => (col.find(o => o.selected) || col[0])?.name)
+      .filter(Boolean);
+    if (rolledNames.length > 0) {
+      perkTags.push(`<span class="scanner-perk-chip">Perks: <strong>${escapeHtml(rolledNames.join(' + '))}</strong></span>`);
+    }
+  }
+
+  // Barrel / Mag / Masterwork 5/5 breakdown strip
+  const subParts = [];
+  if (grc.bestBarrel) subParts.push(`<span class="scanner-subpart-pill">Barrel: ${escapeHtml(grc.bestBarrel)}</span>`);
+  if (grc.bestMag) subParts.push(`<span class="scanner-subpart-pill">Mag: ${escapeHtml(grc.bestMag)}</span>`);
+  if (grc.masterworkName) subParts.push(`<span class="scanner-subpart-pill">MW: ${escapeHtml(grc.masterworkName)}</span>`);
+  const subPartsHtml = subParts.length > 0 ? `<div class="scanner-subparts-strip">${subParts.join('')}</div>` : '';
+
+  // Comparison / Dismantle Reason Callout
+  let calloutHtml = '';
+  if (isDismantleView && grc.dismantleReason) {
+    const cls = isOutclassed ? 'outclassed' : 'trash';
+    calloutHtml = `<div class="scanner-compare-callout ${cls}">${escapeHtml(grc.dismantleReason)}</div>`;
+  } else if (grc.comparisonSummary) {
+    const cls = isOutclassed ? 'outclassed' : 'winner';
+    const prefix = isOutclassed ? '⚠ ' : '👑 ';
+    calloutHtml = `<div class="scanner-compare-callout ${cls}">${prefix}${escapeHtml(grc.comparisonSummary)}</div>`;
+  }
+
+  // Checkbox in Dismantle View (wrapped in 44px <label> per modern-web-guidance `checkbox`)
+  const chkId = `chk_dism_${iid}`;
+  const isChecked = state.dismantleSelectedIds.has(iid);
+  const checkboxHtml = isDismantleView && iid
+    ? `<label class="dismantle-check-label" for="${escapeHtml(chkId)}" title="Select for Dismantle Prep">
+         <input type="checkbox" class="checkbox-custom" id="${escapeHtml(chkId)}" ${isChecked ? 'checked' : ''}>
+       </label>`
+    : '';
+
+  // Right-side action buttons:
+  // Outclassed duplicates CANNOT be locked as God Rolls (only unlocked if already locked!)
+  const isPm = it.location === 'postmaster';
+  let primaryActionBtnHtml = '';
+  if (isDismantleView) {
+    const pullLbl = it.isLocked ? '🔓 Unlock & Pull' : '📥 Pull to Char';
+    primaryActionBtnHtml = `<button type="button" class="btn-mini-action" data-role="pull-single" style="border-color:rgba(251,113,133,0.55); color:#FDA4AF;">${pullLbl}</button>`;
+  } else if (isPm) {
+    primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle is-blocked" disabled>📬 In Postmaster</button>`;
+  } else if (isOutclassed) {
+    if (it.isLocked) {
+      primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle unlock-dup" data-role="unlock-dup" title="This roll is outclassed by your #1 copy—unlock so you can dismantle it">🔓 Unlock Duplicate</button>`;
+    } else {
+      primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle is-blocked" disabled title="Only your #1 Best copy of each gun can be locked as a God Roll">🚫 Outclassed (#${grc.duplicateRank || 2})</button>`;
+    }
+  } else {
+    const lockBtnLabel = it.isLocked ? '🔒 Locked' : '🔓 Lock';
+    primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one">${lockBtnLabel}</button>`;
+  }
+
+  row.innerHTML = `
+    <div class="scanner-item-main">
+      ${checkboxHtml}
+      <div class="scanner-item-icon">
+        <img src="${iconSrc}" alt="${escapeHtml(it.name)}" width="52" height="52" loading="lazy">
+      </div>
+      <div class="scanner-item-info">
+        <div class="scanner-item-top">
+          <span class="scanner-item-name">${escapeHtml(it.name)}</span>
+          <span style="color:#FACC15; font-family:var(--font-tactical); font-weight:700; font-size:12.5px;">✦ ${it.power || ''}</span>
+          <span class="scanner-loc-pill">${escapeHtml(entry.locLabel)}</span>
+          ${rankBadge}
+          ${modeBadge}
+          ${extraFlags.join('')}
+        </div>
+        <div class="scanner-perks-line">
+          ${perkTags.join('')}
+        </div>
+        ${subPartsHtml}
+        ${calloutHtml}
+      </div>
+    </div>
+    <div class="scanner-item-actions">
+      ${primaryActionBtnHtml}
+      <button type="button" class="btn-mini-action" data-role="inspect-one">Inspect</button>
+    </div>
+  `;
+
+  if (isDismantleView && iid) {
+    const chkEl = row.querySelector(`#${CSS.escape(chkId)}`);
+    if (chkEl) {
+      chkEl.addEventListener('change', () => {
+        if (chkEl.checked) {
+          state.dismantleSelectedIds.add(iid);
+        } else {
+          state.dismantleSelectedIds.delete(iid);
+        }
+        syncDismantleToolbarState(collectInventoryAndVaultGodRolls());
+      });
+    }
+    const pullSingleBtn = row.querySelector('[data-role="pull-single"]');
+    if (pullSingleBtn) {
+      pullSingleBtn.addEventListener('click', async () => {
+        pullSingleBtn.disabled = true;
+        await executeDismantlePrep(false, [entry]);
+      });
+    }
+  }
+
+  const lockOneBtn = row.querySelector('[data-role="lock-one"]');
+  if (lockOneBtn && !isPm && !isOutclassed) {
+    lockOneBtn.addEventListener('click', async () => {
+      lockOneBtn.disabled = true;
+      await toggleSingleItemLock(it, !it.isLocked);
+      renderScannerModalContent();
+    });
+  }
+
+  const unlockDupBtn = row.querySelector('[data-role="unlock-dup"]');
+  if (unlockDupBtn && isOutclassed) {
+    unlockDupBtn.addEventListener('click', async () => {
+      unlockDupBtn.disabled = true;
+      await toggleSingleItemLock(it, false);
+      renderScannerModalContent();
+    });
+  }
+
+  const inspectOneBtn = row.querySelector('[data-role="inspect-one"]');
+  if (inspectOneBtn) {
+    inspectOneBtn.addEventListener('click', () => openItemInspectModal(it));
+  }
+
+  shell.appendChild(row);
+
+  // If rendering #1 Best Rolls tab and this #1 copy beat weaker duplicate God Rolls, attach inline Duplicate Showdown!
+  if (viewMode === 'best' && (grc.beatenDuplicateIds || []).length > 0) {
+    const beatenEntries = grc.beatenDuplicateIds
+      .map(id => byInstanceId.get(String(id)))
+      .filter(Boolean);
+    if (beatenEntries.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'scanner-dup-drawer';
+      if (state.dupDrawerOpen[iid]) {
+        details.setAttribute('open', '');
+      }
+      details.addEventListener('toggle', () => {
+        state.dupDrawerOpen[iid] = details.open;
+      });
+
+      const sumEl = document.createElement('summary');
+      sumEl.className = 'scanner-dup-summary';
+      sumEl.innerHTML = `<span>⚖️ Beat ${beatenEntries.length} weaker God Roll ${beatenEntries.length === 1 ? 'copy' : 'copies'} of ${escapeHtml(it.name)} (Only #1 above can be locked)</span>`;
+      details.appendChild(sumEl);
+
+      const dupList = document.createElement('div');
+      dupList.className = 'scanner-dup-list';
+      beatenEntries.forEach(bEntry => {
+        dupList.appendChild(buildScannerEntryCard(bEntry, { viewMode: 'dup-child', byInstanceId }));
+      });
+      details.appendChild(dupList);
+      shell.appendChild(details);
+    }
+  }
+
+  return shell;
+}
+
+function syncDismantleToolbarState(summary) {
+  const toolbar = document.getElementById('scannerDismantleToolbar');
+  const chkAll = document.getElementById('chkSelectAllDismantle');
+  const lblAll = document.getElementById('lblSelectAllDismantle');
+  const charSelect = document.getElementById('selectDismantleChar');
+  const btnUnlock = document.getElementById('btnUnlockSelectedTrash');
+  const btnPull = document.getElementById('btnPullSelectedTrash');
+  const btnPresetDups = document.getElementById('btnPresetDuplicatesOnly');
+  const btnPresetAll = document.getElementById('btnPresetAllTrash');
+
+  if (!toolbar) return;
+  const isDismantleTab = state.scannerFilter === 'dismantle';
+  toolbar.classList.toggle('hidden', !isDismantleTab);
+  if (!isDismantleTab) return;
+
+  const total = summary.dismantleCandidates.length;
+  const selectedCount = summary.dismantleCandidates.filter(
+    e => state.dismantleSelectedIds.has(String(e.item.itemInstanceId))
+  ).length;
+  const dupOnlyCount = summary.dismantleCandidates.filter(
+    e => e.grc.dismantleTier === 'OUTCLASSED_GOD_ROLL' || e.grc.dismantleTier === 'EXTRA_COPY_OWNED_GOD_ROLL'
+  ).length;
+
+  if (chkAll) {
+    chkAll.disabled = total === 0;
+    chkAll.checked = total > 0 && selectedCount === total;
+    chkAll.indeterminate = selectedCount > 0 && selectedCount < total;
+  }
+  if (lblAll) {
+    lblAll.textContent = `Selected (${selectedCount}/${total})`;
+  }
+  if (btnPresetDups) {
+    btnPresetDups.textContent = `Duplicates Only (${dupOnlyCount})`;
+  }
+  if (btnPresetAll) {
+    btnPresetAll.textContent = `All Trash + Dups (${total})`;
+  }
+
+  // Populate character target picker with live free weapon bag slot count
+  const chars = state.bungieData?.characters || [];
+  if (charSelect && chars.length > 0) {
+    if (!state.dismantleTargetCharId || !chars.some(c => c.characterId === state.dismantleTargetCharId)) {
+      state.dismantleTargetCharId = chars[0].characterId;
+    }
+    charSelect.innerHTML = '';
+    chars.forEach(ch => {
+      const wepBagCount = (ch.inventory || []).filter(i => i.category === 'Weapon').length;
+      const freeWepSlots = Math.max(0, 27 - wepBagCount);
+      const opt = document.createElement('option');
+      opt.value = ch.characterId;
+      opt.selected = ch.characterId === state.dismantleTargetCharId;
+      opt.textContent = `${ch.className} (${freeWepSlots} open weapon slots)`;
+      charSelect.appendChild(opt);
+    });
+  }
+
+  const chosenChar = chars.find(c => c.characterId === state.dismantleTargetCharId);
+  const chosenClassName = chosenChar?.className || 'Character';
+
+  if (btnUnlock) {
+    btnUnlock.disabled = selectedCount === 0;
+    btnUnlock.textContent = `🔓 Unlock Only (${selectedCount})`;
+  }
+  if (btnPull) {
+    btnPull.disabled = selectedCount === 0 || !chosenChar;
+    btnPull.textContent = `📥 Unlock & Pull to ${chosenClassName} (${selectedCount})`;
+  }
+}
+
 function renderScannerModalContent() {
   const summary = collectInventoryAndVaultGodRolls();
   const msgEl = document.getElementById('scannerFeliciaMsg');
@@ -2578,20 +2990,31 @@ function renderScannerModalContent() {
   const pillAll = document.getElementById('scanPillAll');
   const pillPve = document.getElementById('scanPillPve');
   const pillPvp = document.getElementById('scanPillPvp');
-  const pillUnl = document.getElementById('scanPillUnlocked');
+  const pillDups = document.getElementById('scanPillDuplicates');
+  const pillDism = document.getElementById('scanPillDismantle');
 
-  if (pillAll) pillAll.textContent = `All God Rolls (${summary.godRolls.length})`;
-  if (pillPve) pillPve.textContent = `⚔️ PVE (${summary.pveCount})`;
-  if (pillPvp) pillPvp.textContent = `🎯 PVP (${summary.pvpCount})`;
-  if (pillUnl) pillUnl.textContent = `🔓 Unlocked (${summary.unlockedCount})`;
+  if (pillAll) pillAll.textContent = `👑 Best Rolls (${summary.bestRolls.length})`;
+  if (pillPve) pillPve.textContent = `⚔️ PVE Best (${summary.pveBestCount})`;
+  if (pillPvp) pillPvp.textContent = `🎯 PVP Best (${summary.pvpBestCount})`;
+  if (pillDups) pillDups.textContent = `⚖️ Duplicates (${summary.dupFamiliesCount})`;
+  if (pillDism) pillDism.textContent = `🗑️ Dismantle Helper (${summary.dismantleCount})`;
+
+  syncDismantleToolbarState(summary);
 
   if (msgEl) {
-    if (summary.godRolls.length === 0) {
-      msgEl.innerHTML = `All right, Guardian—I swept all <strong>${summary.totalWeapons}</strong> weapons across your Characters and Vault. None hit a full 2-trait PVE or PVP God Roll yet. Add custom targets in <strong>God Roll Finder</strong> anytime!`;
-    } else if (summary.unlockedCount > 0) {
-      msgEl.innerHTML = `Right then, Guardian! I swept all <strong>${summary.totalWeapons} weapons</strong> across your 3 Characters and Vault and located <strong>${summary.godRolls.length} God Rolls</strong> (<strong>${summary.pveCount} PVE</strong>, <strong>${summary.pvpCount} PVP</strong>). <strong>${summary.unlockedCount}</strong> ${summary.unlockedCount === 1 ? 'is' : 'are'} currently <strong>unlocked</strong>—tap <strong>Lock All God Rolls</strong> so nothing gets dismantled by mistake!`;
+    const dupSentence = summary.outclassedCount > 0
+      ? ` I also compared your duplicate weapons head-to-head and flagged <strong>${summary.outclassedCount} weaker duplicate God ${summary.outclassedCount === 1 ? 'Roll' : 'Rolls'}</strong>—only the <strong>#1 Best</strong> copy of each gun can be locked!`
+      : '';
+    const trashSentence = summary.dismantleCount > 0
+      ? ` Open <strong>🗑️ Dismantle Helper (${summary.dismantleCount})</strong> anytime to unlock &amp; pull weaker duplicates or bad rolls straight to your Character for fast sharding.`
+      : '';
+
+    if (summary.bestRolls.length === 0) {
+      msgEl.innerHTML = `All right, Guardian—I swept all <strong>${summary.totalWeapons}</strong> weapons across your Characters and Vault. None hit a full 2-trait PVE or PVP God Roll yet.${trashSentence}`;
+    } else if (summary.unlockedBestCount > 0) {
+      msgEl.innerHTML = `Right then, Guardian! I swept <strong>${summary.totalWeapons} weapons</strong> and crowned <strong>${summary.bestRolls.length} #1 Best God Rolls</strong> (<strong>${summary.pveBestCount} PVE</strong>, <strong>${summary.pvpBestCount} PVP</strong>).${dupSentence} <strong>${summary.unlockedBestCount}</strong> #1 ${summary.unlockedBestCount === 1 ? 'winner is' : 'winners are'} unlocked—tap <strong>Lock Best God Rolls</strong>!${trashSentence}`;
     } else {
-      msgEl.innerHTML = `Spot on, Guardian! I swept all <strong>${summary.totalWeapons} weapons</strong> across your Characters and Vault—all <strong>${summary.godRolls.length} PVE &amp; PVP God Rolls</strong> are safely <strong>locked (🔒)</strong>!`;
+      msgEl.innerHTML = `Spot on, Guardian! All <strong>${summary.bestRolls.length} #1 Best God Rolls</strong> across your Characters and Vault are safely <strong>locked (🔒)</strong>!${dupSentence}${trashSentence}`;
     }
   }
 
@@ -2602,134 +3025,106 @@ function renderScannerModalContent() {
         <span class="scanner-kpi-lbl">Weapons Scanned</span>
       </div>
       <div class="scanner-kpi-box">
-        <span class="scanner-kpi-val" style="color:#FDE047;">${summary.godRolls.length}</span>
-        <span class="scanner-kpi-lbl">God Rolls Found</span>
+        <span class="scanner-kpi-val" style="color:#FDE047;">${summary.bestRolls.length}</span>
+        <span class="scanner-kpi-lbl">👑 #1 Best Rolls</span>
       </div>
       <div class="scanner-kpi-box">
-        <span class="scanner-kpi-val" style="color:#7DD3FC;">${summary.pveCount}</span>
-        <span class="scanner-kpi-lbl">⚔️ PVE God Rolls</span>
+        <span class="scanner-kpi-val" style="color:#FDBA74;">${summary.outclassedCount}</span>
+        <span class="scanner-kpi-lbl">⚖️ Outclassed Dups</span>
       </div>
       <div class="scanner-kpi-box">
-        <span class="scanner-kpi-val" style="color:#FDA4AF;">${summary.pvpCount}</span>
-        <span class="scanner-kpi-lbl">🎯 PVP God Rolls</span>
+        <span class="scanner-kpi-val" style="color:${summary.unlockedBestCount > 0 ? '#F5A623' : '#6EE7B7'};">${summary.unlockedBestCount}</span>
+        <span class="scanner-kpi-lbl">🔓 Unlocked #1s</span>
       </div>
       <div class="scanner-kpi-box">
-        <span class="scanner-kpi-val" style="color:${summary.unlockedCount > 0 ? '#F5A623' : '#6EE7B7'};">${summary.unlockedCount}</span>
-        <span class="scanner-kpi-lbl">🔓 Unlocked Rolls</span>
+        <span class="scanner-kpi-val" style="color:#FDA4AF;">${summary.dismantleCount}</span>
+        <span class="scanner-kpi-lbl">🗑️ Dismantle Prep</span>
       </div>
     `;
   }
 
   if (lockAllBtn) {
-    if (summary.unlockedCount > 0) {
+    if (summary.unlockedBestCount > 0) {
       lockAllBtn.disabled = false;
-      lockAllBtn.textContent = `🔒 Lock All God Rolls (${summary.unlockedCount})`;
+      lockAllBtn.textContent = `🔒 Lock Best God Rolls (${summary.unlockedBestCount})`;
     } else {
       lockAllBtn.disabled = true;
-      lockAllBtn.textContent = summary.godRolls.length > 0 ? '✓ All God Rolls Locked' : '🔒 No Unlocked Rolls';
+      lockAllBtn.textContent = summary.bestRolls.length > 0 ? '✓ All #1 Best Rolls Locked' : '🔒 No Unlocked #1 Rolls';
     }
   }
 
   if (!listEl) return;
   listEl.innerHTML = '';
 
-  const filtered = summary.godRolls.filter(entry => {
+  // Tab 4: Grouped Duplicate Showdown View
+  if (state.scannerFilter === 'duplicates') {
+    if (summary.duplicateFamilies.length === 0) {
+      listEl.innerHTML = `<div style="text-align:center; padding:28px; color:#94A3B8; font-family:var(--font-tactical);">No duplicate copies of any God Roll weapon were found—every God Roll you own is already unique!</div>`;
+      return;
+    }
+    summary.duplicateFamilies.forEach(fam => {
+      const famCard = document.createElement('div');
+      famCard.className = 'dup-family-card';
+      const totalFamCount = fam.winners.length + fam.outclassedGods.length + fam.inferiorExtras.length;
+      famCard.innerHTML = `
+        <div class="dup-family-header">
+          <span>⚖️ ${escapeHtml(fam.weaponName)} — ${totalFamCount} Copies Compared</span>
+          <span style="font-family:var(--font-tactical); font-size:12px; color:#A7F3D0;">
+            ${fam.winners.length} Keeper${fam.winners.length > 1 ? 's' : ''} • ${fam.outclassedGods.length + fam.inferiorExtras.length} Safe to Dismantle
+          </span>
+        </div>
+      `;
+      const body = document.createElement('div');
+      body.className = 'dup-family-body';
+      fam.winners.forEach(w => body.appendChild(buildScannerEntryCard(w, { viewMode: 'dup-group', byInstanceId: summary.byInstanceId })));
+      fam.outclassedGods.forEach(o => body.appendChild(buildScannerEntryCard(o, { viewMode: 'dup-group', byInstanceId: summary.byInstanceId })));
+      fam.inferiorExtras.forEach(ex => body.appendChild(buildScannerEntryCard(ex, { viewMode: 'dup-group', byInstanceId: summary.byInstanceId })));
+      famCard.appendChild(body);
+      listEl.appendChild(famCard);
+    });
+    return;
+  }
+
+  // Tab 5: Dismantle Helper View
+  if (state.scannerFilter === 'dismantle') {
+    if (summary.dismantleCandidates.length === 0) {
+      listEl.innerHTML = `<div style="text-align:center; padding:28px; color:#94A3B8; font-family:var(--font-tactical);">Your Vault &amp; Character bags are super clean—no outclassed duplicates or 0/2 bad rolls found!</div>`;
+      return;
+    }
+    summary.dismantleCandidates.forEach(entry => {
+      listEl.appendChild(buildScannerEntryCard(entry, { viewMode: 'dismantle', byInstanceId: summary.byInstanceId }));
+    });
+    return;
+  }
+
+  // Tabs 1-3: #1 Best God Rolls (All / PVE Best / PVP Best)
+  const filtered = summary.bestRolls.filter(entry => {
     if (state.scannerFilter === 'pve') {
       return entry.verdictCode === 'PVE_GOD_ROLL' || entry.verdictCode === 'DUAL_GOD_ROLL';
     }
     if (state.scannerFilter === 'pvp') {
       return entry.verdictCode === 'PVP_GOD_ROLL' || entry.verdictCode === 'DUAL_GOD_ROLL';
     }
-    if (state.scannerFilter === 'unlocked') {
-      return !entry.item.isLocked;
-    }
     return true;
   });
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `<div style="text-align:center; padding:28px; color:#94A3B8; font-family:var(--font-tactical);">No God Rolls match this filter tab.</div>`;
+    listEl.innerHTML = `<div style="text-align:center; padding:28px; color:#94A3B8; font-family:var(--font-tactical);">No #1 Best God Rolls match this filter tab.</div>`;
     return;
   }
 
   filtered.forEach(entry => {
-    const it = entry.item;
-    const grc = it.godRollCheck || {};
-    const row = document.createElement('div');
-    row.className = 'scanner-item-row';
-
-    const iconSrc = it.icon ? `https://www.bungie.net${it.icon}` : 'icon-192.png';
-    let modeBadge = '';
-    if (entry.verdictCode === 'DUAL_GOD_ROLL') {
-      modeBadge = `<span class="scanner-mode-tag dual">★ PVE + PVP GOD ROLL</span>`;
-    } else if (entry.verdictCode === 'PVE_GOD_ROLL') {
-      modeBadge = `<span class="scanner-mode-tag pve">⚔️ PVE GOD ROLL</span>`;
-    } else {
-      modeBadge = `<span class="scanner-mode-tag pvp">🎯 PVP GOD ROLL</span>`;
-    }
-
-    const srcBadge = grc.inDatabase
-      ? `<span class="scanner-loc-pill" style="color:#FDE047; border:1px solid rgba(250,204,21,0.35);">MY GOD ROLLS</span>`
-      : `<span class="scanner-loc-pill">F.E.L.I.C.I.A. SCAN</span>`;
-
-    const perkTags = [];
-    if ((grc.pveMatchedPerks || []).length >= 2) {
-      perkTags.push(`<span class="scanner-perk-chip">⚔️ PVE: <strong>${escapeHtml(grc.pveMatchedPerks.join(' + '))}</strong></span>`);
-    }
-    if ((grc.pvpMatchedPerks || []).length >= 2) {
-      perkTags.push(`<span class="scanner-perk-chip">🎯 PVP: <strong>${escapeHtml(grc.pvpMatchedPerks.join(' + '))}</strong></span>`);
-    }
-
-    const isPm = it.location === 'postmaster';
-    const lockBtnLabel = isPm
-      ? '📬 In Postmaster'
-      : (it.isLocked ? '🔒 Locked' : '🔓 Lock');
-
-    row.innerHTML = `
-      <div class="scanner-item-main">
-        <div class="scanner-item-icon">
-          <img src="${iconSrc}" alt="${escapeHtml(it.name)}" width="52" height="52" loading="lazy">
-        </div>
-        <div class="scanner-item-info">
-          <div class="scanner-item-top">
-            <span class="scanner-item-name">${escapeHtml(it.name)}</span>
-            <span style="color:#FACC15; font-family:var(--font-tactical); font-weight:700; font-size:12.5px;">✦ ${it.power || ''}</span>
-            <span class="scanner-loc-pill">${escapeHtml(entry.locLabel)}</span>
-            ${modeBadge}
-            ${srcBadge}
-          </div>
-          <div class="scanner-perks-line">
-            ${perkTags.join('')}
-          </div>
-        </div>
-      </div>
-      <div class="scanner-item-actions">
-        <button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one" ${isPm ? 'disabled' : ''}>${lockBtnLabel}</button>
-        <button type="button" class="btn-mini-action" data-role="inspect-one">Inspect</button>
-      </div>
-    `;
-
-    const lockOneBtn = row.querySelector('[data-role="lock-one"]');
-    if (lockOneBtn && !isPm) {
-      lockOneBtn.addEventListener('click', async () => {
-        lockOneBtn.disabled = true;
-        await toggleSingleItemLock(it, !it.isLocked);
-        renderScannerModalContent();
-      });
-    }
-
-    const inspectOneBtn = row.querySelector('[data-role="inspect-one"]');
-    if (inspectOneBtn) {
-      inspectOneBtn.addEventListener('click', () => {
-        openItemInspectModal(it);
-      });
-    }
-
-    listEl.appendChild(row);
+    listEl.appendChild(buildScannerEntryCard(entry, { viewMode: 'best', byInstanceId: summary.byInstanceId }));
   });
 }
 
 async function toggleSingleItemLock(item, desiredLockState) {
   if (!state.bungieData || !item.itemInstanceId) return;
+  if (desiredLockState && item.godRollCheck?.isOutclassedDuplicate) {
+    sfx.playAlert();
+    alert(`${item.name} is an outclassed duplicate roll. Only your #1 Best copy can be locked as a God Roll!`);
+    return;
+  }
   const defaultCharId = state.bungieData.characters?.[0]?.characterId || '';
   sfx.playChirp();
 
@@ -2772,7 +3167,8 @@ async function toggleSingleItemLock(item, desiredLockState) {
 async function lockAllScannedGodRolls() {
   if (!state.bungieData) return;
   const summary = collectInventoryAndVaultGodRolls();
-  const targets = summary.godRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster');
+  // STRICTLY lock ONLY #1 Best God Rolls — never lock outclassed duplicates!
+  const targets = summary.bestRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster');
   if (targets.length === 0) return;
 
   const lockAllBtn = document.getElementById('btnLockAllGodRolls');
@@ -2781,11 +3177,11 @@ async function lockAllScannedGodRolls() {
 
   if (lockAllBtn) {
     lockAllBtn.disabled = true;
-    lockAllBtn.textContent = `🔒 Locking ${targets.length} God Rolls...`;
+    lockAllBtn.textContent = `🔒 Locking ${targets.length} #1 Best Rolls...`;
   }
   if (feedbackEl) {
     feedbackEl.classList.remove('hidden', 'error');
-    feedbackEl.textContent = `F.E.L.I.C.I.A. is transmitting lock commands to Bungie.net for ${targets.length} PVE & PVP God Rolls...`;
+    feedbackEl.textContent = `F.E.L.I.C.I.A. is locking your ${targets.length} #1 Best God Rolls on Bungie.net (skipping any weaker duplicates)...`;
   }
   sfx.playTransmit();
 
@@ -2825,11 +3221,120 @@ async function lockAllScannedGodRolls() {
 
     if (feedbackEl) {
       const failCount = (data.failed || []).length;
+      const skippedDupMsg = summary.outclassedCount > 0
+        ? ` (${summary.outclassedCount} weaker duplicate ${summary.outclassedCount === 1 ? 'copy was' : 'copies were'} left unlocked so you can shard ${summary.outclassedCount === 1 ? 'it' : 'them'}!)`
+        : '';
       feedbackEl.classList.remove('hidden');
       feedbackEl.classList.toggle('error', data.lockedCount === 0 && failCount > 0);
       feedbackEl.textContent = failCount > 0
-        ? `✓ Locked ${data.lockedCount} God Rolls! (${failCount} could not be locked right now: ${data.failed[0].reason})`
-        : `✓ Locked all ${data.lockedCount} PVE & PVP God Rolls across your Inventory and Vault!`;
+        ? `✓ Locked ${data.lockedCount} #1 Best God Rolls! (${failCount} could not be locked: ${data.failed[0].reason})`
+        : `✓ Locked all ${data.lockedCount} #1 Best God Rolls across your Inventory & Vault!${skippedDupMsg}`;
+    }
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+    renderScannerModalContent();
+  }
+}
+
+async function executeDismantlePrep(unlockOnly = false, explicitEntries = null) {
+  if (!state.bungieData) return;
+  const summary = collectInventoryAndVaultGodRolls();
+  const entries = explicitEntries || summary.dismantleCandidates.filter(
+    e => state.dismantleSelectedIds.has(String(e.item.itemInstanceId))
+  );
+  if (entries.length === 0) return;
+
+  const feedbackEl = document.getElementById('scannerLockFeedback');
+  const btnUnlock = document.getElementById('btnUnlockSelectedTrash');
+  const btnPull = document.getElementById('btnPullSelectedTrash');
+  const defaultCharId = state.bungieData.characters?.[0]?.characterId || '';
+  const targetCharId = state.dismantleTargetCharId || defaultCharId;
+  const targetChar = (state.bungieData.characters || []).find(c => c.characterId === targetCharId);
+  const targetClassName = targetChar?.className || 'Character';
+
+  if (btnUnlock) btnUnlock.disabled = true;
+  if (btnPull) btnPull.disabled = true;
+
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = unlockOnly
+      ? `F.E.L.I.C.I.A. is unlocking ${entries.length} weaker duplicate / trash ${entries.length === 1 ? 'weapon' : 'weapons'}...`
+      : `F.E.L.I.C.I.A. is unlocking & pulling ${entries.length} dismantle ${entries.length === 1 ? 'candidate' : 'candidates'} onto your ${targetClassName}...`;
+  }
+  sfx.playTransmit();
+
+  try {
+    const res = await fetch('/api/bungie/dismantle-prep', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        defaultCharacterId: defaultCharId,
+        targetCharacterId: targetCharId,
+        unlockOnly: Boolean(unlockOnly),
+        items: entries.map(e => ({
+          itemInstanceId: e.item.itemInstanceId,
+          itemHash: e.item.itemHash,
+          sourceLocation: e.item.location,
+          sourceCharacterId: e.item.characterId || '',
+          slot: e.item.slot || 'Kinetic',
+          isLocked: Boolean(e.item.isLocked),
+          isEquipped: Boolean(e.item.isEquipped),
+          name: e.item.name
+        }))
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Dismantle prep failed.');
+    if (data.refreshed_session) saveBungieSession(data.refreshed_session);
+
+    // Refresh live inventory silently if items moved across Vault/Character, otherwise update lock flags in memory
+    if (!unlockOnly && (data.pulledIds || []).length > 0) {
+      const prevSelection = new Set(state.dismantleSelectedIds);
+      await loadBungieInventory(true);
+      state.dismantleSelectedIds = prevSelection;
+      state.dismantleSelectionInitialized = true;
+    } else {
+      const unlockedSet = new Set(data.unlockedIds || []);
+      entries.forEach(e => {
+        if (unlockedSet.has(e.item.itemInstanceId)) {
+          e.item.isLocked = false;
+        }
+      });
+      renderInventoryStage();
+    }
+
+    sfx.playReceive();
+    renderScannerModalContent();
+
+    if (feedbackEl) {
+      const pulledCnt = (data.pulledIds || []).length;
+      const alreadyCnt = (data.alreadyOnCharIds || []).length;
+      const fullCnt = (data.skippedFullSlotIds || []).length;
+      const failCnt = (data.failed || []).length;
+
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.toggle('error', failCnt > 0 && pulledCnt === 0 && (data.unlockedIds || []).length === 0);
+
+      if (unlockOnly) {
+        feedbackEl.textContent = `✓ Unlocked ${(data.unlockedIds || []).length} weaker duplicate / trash weapons in Destiny 2 — every #1 Best God Roll stays Locked (🔒)!`;
+      } else {
+        let msg = `✓ Ready to shard! Pulled ${pulledCnt} unlocked ${pulledCnt === 1 ? 'weapon' : 'weapons'} onto your ${targetClassName}`;
+        if (alreadyCnt > 0) msg += ` (${alreadyCnt} already in ${targetClassName}'s bag)`;
+        if (fullCnt > 0) msg += ` — ${fullCnt} unlocked in Vault because ${targetClassName}'s weapon slots hit 9/9 (dismantle this wave in-game, then click Pull again!)`;
+        else msg += ` — hold Dismantle on the unlocked weapons in-game while your #1 God Rolls stay Locked (🔒)!`;
+        if (failCnt > 0) msg += ` (${failCnt} skipped: ${data.failed[0].reason})`;
+        feedbackEl.textContent = msg;
+      }
     }
   } catch (err) {
     sfx.playAlert();
@@ -3978,6 +4483,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnLockAllGodRolls) {
     btnLockAllGodRolls.addEventListener('click', () => lockAllScannedGodRolls());
+  }
+
+  const chkSelectAllDismantle = document.getElementById('chkSelectAllDismantle');
+  const btnPresetDuplicatesOnly = document.getElementById('btnPresetDuplicatesOnly');
+  const btnPresetAllTrash = document.getElementById('btnPresetAllTrash');
+  const btnPresetClearTrash = document.getElementById('btnPresetClearTrash');
+  const selectDismantleChar = document.getElementById('selectDismantleChar');
+  const btnUnlockSelectedTrash = document.getElementById('btnUnlockSelectedTrash');
+  const btnPullSelectedTrash = document.getElementById('btnPullSelectedTrash');
+
+  if (chkSelectAllDismantle) {
+    chkSelectAllDismantle.addEventListener('change', () => {
+      sfx.playChirp();
+      const summary = collectInventoryAndVaultGodRolls();
+      if (chkSelectAllDismantle.checked) {
+        summary.dismantleCandidates.forEach(e => {
+          if (e.item.itemInstanceId) state.dismantleSelectedIds.add(String(e.item.itemInstanceId));
+        });
+      } else {
+        state.dismantleSelectedIds.clear();
+      }
+      renderScannerModalContent();
+    });
+  }
+
+  if (btnPresetDuplicatesOnly) {
+    btnPresetDuplicatesOnly.addEventListener('click', () => {
+      sfx.playChirp();
+      const summary = collectInventoryAndVaultGodRolls();
+      state.dismantleSelectedIds.clear();
+      summary.dismantleCandidates.forEach(e => {
+        if (
+          e.item.itemInstanceId &&
+          (e.grc.dismantleTier === 'OUTCLASSED_GOD_ROLL' || e.grc.dismantleTier === 'EXTRA_COPY_OWNED_GOD_ROLL')
+        ) {
+          state.dismantleSelectedIds.add(String(e.item.itemInstanceId));
+        }
+      });
+      renderScannerModalContent();
+    });
+  }
+
+  if (btnPresetAllTrash) {
+    btnPresetAllTrash.addEventListener('click', () => {
+      sfx.playChirp();
+      const summary = collectInventoryAndVaultGodRolls();
+      summary.dismantleCandidates.forEach(e => {
+        if (e.item.itemInstanceId) state.dismantleSelectedIds.add(String(e.item.itemInstanceId));
+      });
+      renderScannerModalContent();
+    });
+  }
+
+  if (btnPresetClearTrash) {
+    btnPresetClearTrash.addEventListener('click', () => {
+      sfx.playChirp();
+      state.dismantleSelectedIds.clear();
+      renderScannerModalContent();
+    });
+  }
+
+  if (selectDismantleChar) {
+    selectDismantleChar.addEventListener('change', () => {
+      state.dismantleTargetCharId = selectDismantleChar.value;
+      syncDismantleToolbarState(collectInventoryAndVaultGodRolls());
+    });
+  }
+
+  if (btnUnlockSelectedTrash) {
+    btnUnlockSelectedTrash.addEventListener('click', () => executeDismantlePrep(true));
+  }
+
+  if (btnPullSelectedTrash) {
+    btnPullSelectedTrash.addEventListener('click', () => executeDismantlePrep(false));
   }
 
   if (btnResyncScanner) {

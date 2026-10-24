@@ -31,6 +31,9 @@
   --font-display: 'Chakra Petch', sans-serif;
   --font-tactical: 'Rajdhani', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --icon-check: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'></polyline></svg>");
+  --icon-dash: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'></line></svg>");
   
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -4201,7 +4204,18 @@ dialog.modal-inspect-item::backdrop {
 }
 
 /* F.E.L.I.C.I.A. God Roll Scanner Modal & Saved Loadout Modal */
-dialog.modal-godroll-scanner,
+dialog.modal-godroll-scanner {
+  width: min(96vw, 960px);
+  max-width: 960px;
+  border: 1px solid rgba(245, 166, 35, 0.5);
+  border-radius: 14px;
+  background: #0B101A;
+  color: var(--text-primary);
+  padding: 0;
+  margin: auto;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.88);
+}
+
 dialog.modal-saved-loadout {
   width: min(95vw, 880px);
   max-width: 880px;
@@ -4615,4 +4629,357 @@ dialog.modal-saved-loadout::backdrop {
   .scanner-item-actions {
     justify-content: flex-end;
   }
+}
+
+/* ==========================================================================
+   DUPLICATE GOD ROLL SHOWDOWN & DISMANTLE HELPER (SCANNER UPGRADE)
+   ========================================================================== */
+
+/* Accessible custom checkbox following modern-web-guidance `checkbox` */
+.checkbox-custom {
+  --checkbox-size: 1.25em;
+  --checkbox-icon-size: 0.72em;
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  inline-size: var(--checkbox-size);
+  aspect-ratio: 1;
+  margin: 0;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  color: var(--vanguard-amber);
+  background: rgba(7, 10, 16, 0.9);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-custom::before {
+  content: "";
+  inline-size: var(--checkbox-icon-size);
+  aspect-ratio: 1;
+  background-color: currentColor;
+  mask: var(--checkbox-icon) no-repeat center / contain;
+  scale: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .checkbox-custom::before {
+    transition: scale 150ms ease;
+  }
+}
+
+@media (forced-colors: active) {
+  .checkbox-custom::before {
+    background-color: CanvasText;
+  }
+}
+
+.checkbox-custom:checked {
+  --checkbox-icon: var(--icon-check);
+  background: rgba(245, 166, 35, 0.16);
+}
+
+.checkbox-custom:indeterminate {
+  --checkbox-icon: var(--icon-dash);
+  background: rgba(245, 166, 35, 0.16);
+}
+
+.checkbox-custom:is(:checked, :indeterminate)::before {
+  scale: 1;
+}
+
+.checkbox-custom:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.checkbox-custom:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dismantle-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-block-size: 44px;
+  padding-inline: 4px;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  font-weight: 700;
+  color: #F8FAFC;
+  cursor: pointer;
+  user-select: none;
+}
+
+.godroll-mini-tag.outclassed-dup {
+  background: rgba(249, 115, 22, 0.14);
+  border: 1px solid rgba(249, 115, 22, 0.48);
+  color: #FDBA74;
+}
+
+.inv-pill-dismantle.active {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: #FB7185;
+  color: #FFE4E6;
+}
+
+/* Scanner Item Card Wrapper (supports inline duplicate comparison drawer) */
+.scanner-card-shell {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 3px solid #FACC15;
+  overflow: hidden;
+}
+
+.scanner-card-shell.is-outclassed {
+  border-left-color: #F97316;
+  background: rgba(15, 20, 31, 0.86);
+  opacity: 0.94;
+}
+
+.scanner-card-shell.is-dismantle-row {
+  border-left-color: #FB7185;
+}
+
+.scanner-card-shell > .scanner-item-row {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.scanner-score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.4px;
+}
+
+.scanner-score-badge.best {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(250, 204, 21, 0.2));
+  border: 1px solid rgba(110, 231, 183, 0.7);
+  color: #A7F3D0;
+}
+
+.scanner-score-badge.outclassed {
+  background: rgba(249, 115, 22, 0.18);
+  border: 1px solid rgba(251, 146, 60, 0.6);
+  color: #FDBA74;
+}
+
+.scanner-score-badge.trash {
+  background: rgba(244, 63, 94, 0.16);
+  border: 1px solid rgba(251, 113, 133, 0.5);
+  color: #FDA4AF;
+}
+
+.scanner-compare-callout {
+  font-family: var(--font-tactical);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 6px;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.scanner-compare-callout.winner {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  color: #A7F3D0;
+}
+
+.scanner-compare-callout.outclassed {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #FED7AA;
+}
+
+.scanner-compare-callout.trash {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #FECDD3;
+}
+
+.scanner-subparts-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  color: #94A3B8;
+}
+
+.scanner-subpart-pill {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #CBD5E1;
+}
+
+.btn-lock-toggle.is-blocked {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.65);
+  color: #94A3B8;
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.btn-lock-toggle.unlock-dup {
+  border-color: rgba(251, 146, 60, 0.75);
+  background: rgba(249, 115, 22, 0.2);
+  color: #FDBA74;
+}
+
+/* Inline Duplicate Showdown Drawer under #1 Winner */
+.scanner-dup-drawer {
+  border-top: 1px dashed rgba(245, 166, 35, 0.28);
+  background: rgba(9, 13, 21, 0.88);
+}
+
+.scanner-dup-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: var(--font-tactical);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #FDE047;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scanner-dup-summary::-webkit-details-marker {
+  display: none;
+}
+
+.scanner-dup-summary::after {
+  content: "▾ Compare Copies";
+  font-size: 11.5px;
+  color: var(--arc-blue);
+}
+
+.scanner-dup-drawer[open] .scanner-dup-summary::after {
+  content: "▴ Hide Copies";
+}
+
+.scanner-dup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 12px 12px;
+}
+
+/* Grouped Weapon Family Card on Duplicates Tab */
+.dup-family-card {
+  border-radius: 11px;
+  border: 1px solid rgba(245, 166, 35, 0.38);
+  background: rgba(11, 16, 26, 0.95);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dup-family-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 14px;
+  background: linear-gradient(90deg, rgba(245, 166, 35, 0.14), rgba(56, 189, 248, 0.08));
+  border-bottom: 1px solid rgba(245, 166, 35, 0.25);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #F8FAFC;
+}
+
+.dup-family-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+/* Dismantle Helper Toolbar */
+.scanner-dismantle-toolbar {
+  border-radius: 10px;
+  border: 1px solid rgba(244, 63, 94, 0.38);
+  background: linear-gradient(180deg, rgba(244, 63, 94, 0.09) 0%, rgba(13, 19, 30, 0.95) 100%);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dismantle-explainer {
+  font-size: 12.8px;
+  line-height: 1.45;
+  color: #E2E8F0;
+}
+
+.dismantle-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dismantle-select-left,
+.dismantle-actions-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dismantle-char-select {
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #080C14;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #F8FAFC;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.btn-pull-dismantle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 7px;
+  border: 1px solid #FDA4AF;
+  background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%);
+  color: #FFF1F2;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-pull-dismantle:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.btn-pull-dismantle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }

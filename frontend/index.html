@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261024_v16">
+  <link rel="stylesheet" href="styles.css?v=20261024_v17">
 </head>
 <body class="theme-vanguard">
 
@@ -1313,17 +1313,41 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           <div class="scanner-kpi-strip" id="scannerKpiStrip"></div>
         </div>
 
-        <!-- Filter Pills + Lock All God Rolls Action Bar -->
+        <!-- Filter Pills + Lock Best God Rolls Action Bar -->
         <div class="scanner-action-bar">
           <div class="scanner-filter-pills" id="scannerFilterPills">
-            <button type="button" class="inv-pill active" data-scanfilter="all" id="scanPillAll">All God Rolls</button>
-            <button type="button" class="inv-pill" data-scanfilter="pve" id="scanPillPve">⚔️ PVE</button>
-            <button type="button" class="inv-pill" data-scanfilter="pvp" id="scanPillPvp">🎯 PVP</button>
-            <button type="button" class="inv-pill" data-scanfilter="unlocked" id="scanPillUnlocked">🔓 Unlocked</button>
+            <button type="button" class="inv-pill active" data-scanfilter="all" id="scanPillAll">👑 Best Rolls</button>
+            <button type="button" class="inv-pill" data-scanfilter="pve" id="scanPillPve">⚔️ PVE Best</button>
+            <button type="button" class="inv-pill" data-scanfilter="pvp" id="scanPillPvp">🎯 PVP Best</button>
+            <button type="button" class="inv-pill" data-scanfilter="duplicates" id="scanPillDuplicates">⚖️ Duplicates</button>
+            <button type="button" class="inv-pill inv-pill-dismantle" data-scanfilter="dismantle" id="scanPillDismantle">🗑️ Dismantle Helper</button>
           </div>
           <div class="scanner-cta-group">
             <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnResyncScanner">🔄 Re-Scan</button>
-            <button type="button" class="btn-lock-all-godrolls" id="btnLockAllGodRolls">🔒 Lock All God Rolls</button>
+            <button type="button" class="btn-lock-all-godrolls" id="btnLockAllGodRolls">🔒 Lock Best God Rolls</button>
+          </div>
+        </div>
+
+        <!-- Dismantle Prep Toolbar (shown when 🗑️ Dismantle Helper tab is active) -->
+        <div class="scanner-dismantle-toolbar hidden" id="scannerDismantleToolbar">
+          <div class="dismantle-explainer">
+            <strong>🛡️ Safe Dismantle Prep:</strong> Bungie's API blocks direct remote deletion for account safety. Select weaker duplicate rolls or bad rolls below—F.E.L.I.C.I.A. will <strong>Unlock (🔓)</strong> them and <strong>Pull them onto your Character</strong> while keeping every <strong>#1 Best God Roll Locked (🔒)</strong> so you can hold Dismantle in-game in seconds! <em>(Equipped, Exotic, Crafted, and Saved-Loadout weapons are automatically protected.)</em>
+          </div>
+          <div class="dismantle-controls-row">
+            <div class="dismantle-select-left">
+              <label class="dismantle-check-label" for="chkSelectAllDismantle">
+                <input type="checkbox" class="checkbox-custom" id="chkSelectAllDismantle">
+                <span id="lblSelectAllDismantle">Select All</span>
+              </label>
+              <button type="button" class="btn-mini-action" id="btnPresetDuplicatesOnly">Duplicates Only</button>
+              <button type="button" class="btn-mini-action" id="btnPresetAllTrash">All Trash + Dups</button>
+              <button type="button" class="btn-mini-action" id="btnPresetClearTrash">Clear</button>
+            </div>
+            <div class="dismantle-actions-right">
+              <select id="selectDismantleChar" class="dismantle-char-select" aria-label="Target character to pull items for dismantling"></select>
+              <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnUnlockSelectedTrash">🔓 Unlock Only</button>
+              <button type="button" class="btn-pull-dismantle" id="btnPullSelectedTrash">📥 Unlock &amp; Pull to Dismantle</button>
+            </div>
           </div>
         </div>
 
@@ -1362,6 +1386,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261024_v16"></script>
+  <script type="module" src="app.js?v=20261024_v17"></script>
 </body>
 </html>

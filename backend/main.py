@@ -25,8 +25,10 @@ try:
         fetch_guardian_inventory,
         transfer_guardian_item,
         batch_lock_guardian_items,
+        prepare_items_for_dismantle,
         equip_guardian_loadout,
         evaluate_item_against_godrolls,
+        analyze_arsenal_duplicates_and_trash,
     )
 except ImportError:
     from bungie_service import (
@@ -38,8 +40,10 @@ except ImportError:
         fetch_guardian_inventory,
         transfer_guardian_item,
         batch_lock_guardian_items,
+        prepare_items_for_dismantle,
         equip_guardian_loadout,
         evaluate_item_against_godrolls,
+        analyze_arsenal_duplicates_and_trash,
     )
 
 # Base directories
@@ -1114,28 +1118,9 @@ async def get_bungie_inventory_endpoint(req: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Tag every weapon against My God Rolls (God Roll Finder DB) + F.E.L.I.C.I.A. PVE/PVP Synergy Matrix
+    # Evaluate all weapons, compare duplicate God Rolls head-to-head, crown #1 winners, and mark dismantle candidates
     god_rolls = get_all_god_rolls()
-
-    def _tag_items(items_list: List[dict]):
-        for it in items_list:
-            if it.get("category") == "Weapon":
-                ev = evaluate_item_against_godrolls(it, god_rolls)
-                it["godRollCheck"] = {
-                    "inDatabase": ev["in_database"],
-                    "matchSource": ev.get("match_source", "none"),
-                    "verdictCode": ev["verdict_code"],
-                    "pveTraitHits": ev.get("pve_trait_hits", 0),
-                    "pvpTraitHits": ev.get("pvp_trait_hits", 0),
-                    "pveMatchedPerks": ev.get("pve_matched_perks", []),
-                    "pvpMatchedPerks": ev.get("pvp_matched_perks", []),
-                }
-
-    for ch in data.get("characters", []):
-        _tag_items(ch.get("equipment", []))
-        _tag_items(ch.get("inventory", []))
-        _tag_items(ch.get("postmaster", []))
-    _tag_items(data.get("vault", {}).get("items", []))
+    analyze_arsenal_duplicates_and_trash(data, god_rolls)
 
     if refreshed_session:
         data["refreshed_session"] = refreshed_session
@@ -1230,6 +1215,60 @@ async def post_bungie_lock_endpoint(body: BungieLockBatchRequest, req: Request):
         if refresh_token:
             refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
             res = await run_in_threadpool(_do_lock, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+class BungieDismantlePrepItem(BaseModel):
+    itemInstanceId: str
+    itemHash: int
+    sourceLocation: str
+    sourceCharacterId: Optional[str] = ""
+    slot: Optional[str] = "Kinetic"
+    isLocked: Optional[bool] = False
+    isEquipped: Optional[bool] = False
+    name: Optional[str] = ""
+
+
+class BungieDismantlePrepRequest(BaseModel):
+    membershipType: int
+    defaultCharacterId: str
+    targetCharacterId: Optional[str] = ""
+    unlockOnly: Optional[bool] = False
+    items: List[BungieDismantlePrepItem]
+
+
+@app.post("/api/bungie/dismantle-prep")
+async def post_bungie_dismantle_prep_endpoint(body: BungieDismantlePrepRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    items_dicts = [it.model_dump() if hasattr(it, "model_dump") else it.dict() for it in body.items]
+
+    def _do_prep(token: str):
+        return prepare_items_for_dismantle(
+            access_token=token,
+            membership_type=body.membershipType,
+            default_character_id=body.defaultCharacterId,
+            items_to_prep=items_dicts,
+            target_character_id=body.targetCharacterId or "",
+            unlock_only=bool(body.unlockOnly),
+        )
+
+    try:
+        res = await run_in_threadpool(_do_prep, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_prep, refreshed_session["access_token"])
         else:
             raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
     except Exception as e:
@@ -1433,6 +1472,20 @@ async def appraise_bungie_item_endpoint(req: Request):
             f"IMPORTANT: Judge this weapon directly against our Clan God Roll Finder entry above! Note if a god-roll perk is sitting [SELECTABLE] in a multi-perk column so the Guardian knows to click it!\n"
         )
 
+    dup_note = ""
+    client_grc = item.get("godRollCheck") or {}
+    if client_grc.get("isOutclassedDuplicate") and client_grc.get("comparisonSummary"):
+        dup_note = (
+            f"\n⚠ DUPLICATE COMPARISON ALERT: The Guardian owns MULTIPLE God Roll copies of {item.get('name')}! "
+            f"Status of THIS copy: {client_grc.get('comparisonSummary')}. "
+            f"Explicitly let them know that while this roll has strong perks, they already own a higher-rated #1 copy, making this duplicate safe to dismantle!\n"
+        )
+    elif client_grc.get("isBestGodRoll") and (client_grc.get("familyGodRollCount") or 0) > 1 and client_grc.get("comparisonSummary"):
+        dup_note = (
+            f"\n👑 DUPLICATE WINNER ALERT: The Guardian owns {client_grc.get('familyGodRollCount')} God Roll copies of {item.get('name')}, "
+            f"and THIS copy is their #1 BEST ({client_grc.get('comparisonSummary')}). Tell them to lock THIS copy and dismantle the weaker duplicates!\n"
+        )
+
     prompt = (
         f"GUARDIAN LIVE INVENTORY ITEM INSPECTION REQUEST ('Ask F.E.L.I.C.I.A.'):\n"
         f"• Item Name: {item.get('name')}\n"
@@ -1442,7 +1495,7 @@ async def appraise_bungie_item_endpoint(req: Request):
         f"• Masterwork: {mw_name} | Crafted: {item.get('isCrafted')} | Masterworked: {item.get('isMasterworked')}\n"
         f"• Stats: {stats_text}" + (f" (Total Armor Stats: {item.get('totalStats')})" if item.get("category") == "Armor" else "") + "\n"
         f"• Rolled Sockets / Perks:\n" + ("\n".join(cols_text) if cols_text else "  - Fixed / Intrinsic") + "\n"
-        f"{db_section}\n"
+        f"{db_section}{dup_note}\n"
         f"TASK FOR F.E.L.I.C.I.A.:\n"
         f"Give a concise, high-impact Destiny 2 roll review in your grounded Scottish Vanguard voice:\n"
         f"1. **Verdict Header:** State clearly right away whether this roll is a **GOD ROLL (KEEP & LOCK)**, **SOLID KEEP**, or **TRASH / SAFE TO SHARD**.\n"
