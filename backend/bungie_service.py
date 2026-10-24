@@ -7,6 +7,7 @@ import shutil
 import zipfile
 import sqlite3
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any, Set, Tuple
 import requests
 
@@ -115,6 +116,7 @@ WEAPON_STAT_ORDER = [
 
 _manifest_lock = threading.Lock()
 _item_mem_cache: Dict[int, dict] = {}
+_loadout_defs_cache: Dict[str, Dict[int, str]] = {}
 _recent_code_cache: Dict[str, Tuple[float, dict]] = {}
 
 # Built-in server fallback credentials (obfuscated) so every clan member & device works automatically out of the box
@@ -327,6 +329,7 @@ def ensure_manifest_db(api_key: str) -> str:
             json.dump({"sqlite_path": sqlite_rel_path, "updated_at": int(time.time())}, mf)
 
         _item_mem_cache.clear()
+        _loadout_defs_cache.clear()
         return MANIFEST_DB_PATH
 
 
@@ -406,6 +409,46 @@ def resolve_item_definitions(hashes: Set[int], api_key: str) -> Dict[int, dict]:
         conn.close()
 
     return result
+
+
+def resolve_loadout_definitions(api_key: str) -> Dict[str, Dict[int, str]]:
+    """Loads & caches Destiny 2 Loadout Name, Icon, and Color manifest tables (~65 rows total)."""
+    if _loadout_defs_cache.get("names"):
+        return _loadout_defs_cache
+
+    db_path = ensure_manifest_db(api_key)
+    names_map: Dict[int, str] = {}
+    icons_map: Dict[int, str] = {}
+    colors_map: Dict[int, str] = {}
+
+    conn = sqlite3.connect(db_path)
+    try:
+        for sid, raw_json in conn.execute("SELECT id, json FROM DestinyLoadoutNameDefinition").fetchall():
+            uh = _from_sqlite_id(sid)
+            obj = json.loads(raw_json)
+            if obj.get("name"):
+                names_map[uh] = obj["name"]
+
+        for sid, raw_json in conn.execute("SELECT id, json FROM DestinyLoadoutIconDefinition").fetchall():
+            uh = _from_sqlite_id(sid)
+            obj = json.loads(raw_json)
+            if obj.get("iconImagePath"):
+                icons_map[uh] = obj["iconImagePath"]
+
+        for sid, raw_json in conn.execute("SELECT id, json FROM DestinyLoadoutColorDefinition").fetchall():
+            uh = _from_sqlite_id(sid)
+            obj = json.loads(raw_json)
+            if obj.get("colorImagePath"):
+                colors_map[uh] = obj["colorImagePath"]
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+    _loadout_defs_cache["names"] = names_map
+    _loadout_defs_cache["icons"] = icons_map
+    _loadout_defs_cache["colors"] = colors_map
+    return _loadout_defs_cache
 
 
 def _bungie_get(path: str, api_key: str, access_token: str = "") -> dict:
@@ -506,6 +549,7 @@ def _enrich_item(
     # Parse sockets (Intrinsic frame, Perks, Masterwork, Mods)
     frame_info = None
     perk_columns: List[List[dict]] = []
+    trait_col_indexes: List[int] = []
     active_perks: List[dict] = []
     masterwork_info = None
     mods_list: List[dict] = []
@@ -574,7 +618,10 @@ def _enrich_item(
                             "enhanced": "enhanced" in active_def.get("tierTypeName", "").lower(),
                         })
 
+                    col_idx_now = len(perk_columns)
                     perk_columns.append(col_options)
+                    if sc_hash in SOCKET_CAT_WEAPON_PERKS and "frames" in pcat and "origin" not in pcat:
+                        trait_col_indexes.append(col_idx_now)
                     active_perks.append({
                         "name": active_def["name"],
                         "description": active_def.get("description", ""),
@@ -646,6 +693,7 @@ def _enrich_item(
         "transferStatus": int(raw_item.get("transferStatus", 0)),
         "frame": frame_info,
         "perkColumns": perk_columns,
+        "traitColIndexes": trait_col_indexes,
         "activePerks": active_perks,
         "masterwork": masterwork_info,
         "mods": mods_list,
@@ -664,7 +712,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     m_id = membership["destinyMembershipId"]
 
     profile = _bungie_get(
-        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,200,201,205,300,304,305,310",
+        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,200,201,205,206,300,304,305,310",
         creds["api_key"],
         access_token,
     )
@@ -672,6 +720,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     chars_raw = profile.get("characters", {}).get("data", {})
     char_equip_raw = profile.get("characterEquipment", {}).get("data", {})
     char_inv_raw = profile.get("characterInventories", {}).get("data", {})
+    char_loadouts_raw = profile.get("characterLoadouts", {}).get("data", {})
     vault_raw = profile.get("profileInventory", {}).get("data", {}).get("items", [])
 
     instances = profile.get("itemComponents", {}).get("instances", {}).get("data", {})
@@ -708,6 +757,9 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
     # Build character summaries & inventories
     characters_list = []
+    subclass_by_instance: Dict[str, dict] = {}
+    gear_by_instance: Dict[str, dict] = {}
+
     # Sort characters consistently: Hunter, Warlock, Titan or by last played
     for cid, cinfo in sorted(chars_raw.items(), key=lambda kv: kv[1].get("dateLastPlayed", ""), reverse=True):
         c_type = int(cinfo.get("classType", 0))
@@ -726,18 +778,36 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             ehash = int(raw_eq.get("itemHash", 0))
             edef = defs.get(ehash)
             if edef and int(edef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
+                sub_iid = str(raw_eq.get("itemInstanceId", ""))
                 equipped_subclass = {
+                    "itemInstanceId": sub_iid,
                     "name": edef.get("name", ""),
                     "icon": edef.get("icon", ""),
                 }
+                if sub_iid:
+                    subclass_by_instance[sub_iid] = equipped_subclass
                 continue
             enriched = _enrich_item(raw_eq, defs, instances, stats_map, sockets_map, reusable_map, "character", cid, True)
             if enriched:
                 equipped_items.append(enriched)
+                if enriched.get("itemInstanceId"):
+                    gear_by_instance[enriched["itemInstanceId"]] = enriched
 
         bag_items = []
         postmaster_items = []
         for raw_inv in char_inv_raw.get(cid, {}).get("items", []):
+            ihash = int(raw_inv.get("itemHash", 0))
+            idef = defs.get(ihash)
+            if idef and int(idef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
+                sub_iid = str(raw_inv.get("itemInstanceId", ""))
+                if sub_iid:
+                    subclass_by_instance[sub_iid] = {
+                        "itemInstanceId": sub_iid,
+                        "name": idef.get("name", ""),
+                        "icon": idef.get("icon", ""),
+                    }
+                continue
+
             is_pm = int(raw_inv.get("bucketHash", 0)) == BUCKET_POSTMASTER
             loc = "postmaster" if is_pm else "character"
             enriched = _enrich_item(raw_inv, defs, instances, stats_map, sockets_map, reusable_map, loc, cid, False)
@@ -746,6 +816,8 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                     postmaster_items.append(enriched)
                 else:
                     bag_items.append(enriched)
+                if enriched.get("itemInstanceId"):
+                    gear_by_instance[enriched["itemInstanceId"]] = enriched
 
         characters_list.append({
             "characterId": cid,
@@ -761,6 +833,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "equipment": equipped_items,
             "inventory": bag_items,
             "postmaster": postmaster_items,
+            "loadouts": [],
         })
 
     # Build Vault items
@@ -769,9 +842,92 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         enriched = _enrich_item(raw_v, defs, instances, stats_map, sockets_map, reusable_map, "vault", "", False)
         if enriched:
             vault_items.append(enriched)
+            if enriched.get("itemInstanceId"):
+                gear_by_instance[enriched["itemInstanceId"]] = enriched
 
     # Sort Vault items: Exotics & highest power weapons first, then armor
     vault_items.sort(key=lambda x: (0 if x["category"] == "Weapon" else 1, -int(x["power"] or 0), x["name"]))
+
+    # Resolve saved in-game Character Loadouts (Component 206) across all characters + vault
+    loadout_defs = resolve_loadout_definitions(creds["api_key"])
+    ld_names_map = loadout_defs.get("names", {})
+    ld_icons_map = loadout_defs.get("icons", {})
+    ld_colors_map = loadout_defs.get("colors", {})
+    weapon_slot_order = {"Kinetic": 0, "Energy": 1, "Heavy": 2}
+    armor_slot_order = {"Helmet": 0, "Gauntlets": 1, "Chest Armor": 2, "Leg Armor": 3, "Class Armor": 4}
+
+    for ch_obj in characters_list:
+        cid = ch_obj["characterId"]
+        raw_lds = char_loadouts_raw.get(cid, {}).get("loadouts", [])
+        saved_lds = []
+        for idx, ld in enumerate(raw_lds):
+            ld_items = ld.get("items", []) or []
+            active_refs = [li for li in ld_items if str(li.get("itemInstanceId", "0")) not in ("", "0")]
+            if not active_refs:
+                continue
+
+            n_hash = int(ld.get("nameHash", 0)) & 0xFFFFFFFF
+            i_hash = int(ld.get("iconHash", 0)) & 0xFFFFFFFF
+            c_hash = int(ld.get("colorHash", 0)) & 0xFFFFFFFF
+
+            ld_name = ld_names_map.get(n_hash) or f"Loadout {idx + 1}"
+            ld_icon = ld_icons_map.get(i_hash, "")
+            ld_color = ld_colors_map.get(c_hash, "")
+
+            ld_subclass = None
+            ld_weapons = []
+            ld_armor = []
+            exotic_armor = None
+            exotic_weapon = None
+            missing_count = 0
+
+            for li in active_refs:
+                iid = str(li.get("itemInstanceId", ""))
+                if iid in subclass_by_instance:
+                    ld_subclass = subclass_by_instance[iid]
+                elif iid in gear_by_instance:
+                    g = gear_by_instance[iid]
+                    slim_g = {
+                        "itemInstanceId": g["itemInstanceId"],
+                        "itemHash": g["itemHash"],
+                        "name": g["name"],
+                        "icon": g["icon"],
+                        "slot": g["slot"],
+                        "category": g["category"],
+                        "typeName": g["typeName"],
+                        "tierName": g["tierName"],
+                        "isExotic": g["isExotic"],
+                        "element": g["element"],
+                        "power": g["power"],
+                    }
+                    if g["category"] == "Weapon":
+                        ld_weapons.append(slim_g)
+                        if g["isExotic"] and not exotic_weapon:
+                            exotic_weapon = slim_g
+                    else:
+                        ld_armor.append(slim_g)
+                        if g["isExotic"] and not exotic_armor:
+                            exotic_armor = slim_g
+                else:
+                    missing_count += 1
+
+            ld_weapons.sort(key=lambda w: weapon_slot_order.get(w["slot"], 99))
+            ld_armor.sort(key=lambda a: armor_slot_order.get(a["slot"], 99))
+
+            saved_lds.append({
+                "loadoutIndex": idx,
+                "slotNumber": idx + 1,
+                "name": ld_name,
+                "iconPath": ld_icon,
+                "colorPath": ld_color,
+                "subclass": ld_subclass,
+                "exoticItem": exotic_armor or exotic_weapon,
+                "weapons": ld_weapons,
+                "armor": ld_armor,
+                "missingCount": missing_count,
+            })
+
+        ch_obj["loadouts"] = saved_lds
 
     return {
         "player": membership,
@@ -907,6 +1063,129 @@ def transfer_guardian_item(
     return {"status": "transferred", "destination": target_character_id}
 
 
+def set_item_lock_state(
+    access_token: str,
+    membership_type: int,
+    item_instance_id: str,
+    character_id: str,
+    lock_state: bool = True,
+) -> dict:
+    """Locks or unlocks a single Destiny 2 instanced item via Bungie SetLockState."""
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+    if not character_id:
+        raise ValueError("A valid characterId is required by Bungie API to lock/unlock items.")
+
+    _bungie_post(
+        "/Destiny2/Actions/Items/SetLockState/",
+        {
+            "state": bool(lock_state),
+            "itemId": str(item_instance_id),
+            "characterId": str(character_id),
+            "membershipType": int(membership_type),
+        },
+        api_key,
+        access_token,
+    )
+    return {"status": "ok", "itemInstanceId": str(item_instance_id), "isLocked": bool(lock_state)}
+
+
+def batch_lock_guardian_items(
+    access_token: str,
+    membership_type: int,
+    default_character_id: str,
+    items_to_lock: List[dict],
+    lock_state: bool = True,
+) -> dict:
+    """Locks (or unlocks) multiple God Roll items across Characters and Vault safely."""
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+    if not items_to_lock:
+        return {"status": "ok", "lockedIds": [], "lockedCount": 0, "failed": []}
+
+    locked_ids: List[str] = []
+    failed: List[dict] = []
+
+    def _lock_one(entry: dict) -> Tuple[str, Optional[str], str]:
+        iid = str(entry.get("itemInstanceId", ""))
+        cid = str(entry.get("characterId") or default_character_id or "")
+        nm = str(entry.get("name", "Item"))
+        if not iid or not cid:
+            return iid, "Missing instance or character ID", nm
+        try:
+            _bungie_post(
+                "/Destiny2/Actions/Items/SetLockState/",
+                {
+                    "state": bool(lock_state),
+                    "itemId": iid,
+                    "characterId": cid,
+                    "membershipType": int(membership_type),
+                },
+                api_key,
+                access_token,
+            )
+            return iid, None, nm
+        except PermissionError:
+            raise
+        except Exception as exc:
+            return iid, str(exc), nm
+
+    # Test first item synchronously so an expired OAuth token raises PermissionError cleanly for auto-refresh
+    first_iid, first_err, first_nm = _lock_one(items_to_lock[0])
+    if first_err is None:
+        locked_ids.append(first_iid)
+    else:
+        failed.append({"itemInstanceId": first_iid, "name": first_nm, "reason": first_err})
+
+    remaining = items_to_lock[1:]
+    if remaining:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(_lock_one, it) for it in remaining]
+            for fut in as_completed(futures):
+                iid, err, nm = fut.result()
+                if err is None:
+                    locked_ids.append(iid)
+                else:
+                    failed.append({"itemInstanceId": iid, "name": nm, "reason": err})
+
+    return {
+        "status": "ok",
+        "lockedIds": locked_ids,
+        "lockedCount": len(locked_ids),
+        "failed": failed,
+        "isLocked": bool(lock_state),
+    }
+
+
+def equip_guardian_loadout(
+    access_token: str,
+    membership_type: int,
+    character_id: str,
+    loadout_index: int,
+) -> dict:
+    """Equips a saved in-game Destiny 2 character loadout (requires character in Orbit, Tower/Social, or Offline)."""
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+
+    _bungie_post(
+        "/Destiny2/Actions/Loadouts/EquipLoadout/",
+        {
+            "loadoutIndex": int(loadout_index),
+            "characterId": str(character_id),
+            "membershipType": int(membership_type),
+        },
+        api_key,
+        access_token,
+    )
+    return {"status": "equipped", "characterId": str(character_id), "loadoutIndex": int(loadout_index)}
+
+
 def _norm_text(s: str) -> str:
     s = re.sub(r"\(.*?\)", "", s or "")
     s = s.lower().replace("enhanced ", "").strip()
@@ -920,8 +1199,47 @@ def _split_godroll_options(spec_str: str) -> List[str]:
     return [_norm_text(p) for p in parts if _norm_text(p)]
 
 
+# Curated S-Tier Destiny 2 Trait-Column Synergy Pools for weapons not manually listed in God Roll Finder yet
+_PVE_SETUP_TRAITS = {
+    "healclip", "enviousassassin", "enviousarsenal", "reconstruction", "rewindrounds",
+    "repulsorbrace", "rimestealer", "attritionorbs", "demolitionist", "subsistence",
+    "airtrigger", "leadfromgold", "autoloadingholster", "relentlessstrikes",
+    "fourthtimesthecharm", "tripletap", "shoottoloot", "impulseamplifier",
+    "beaconrounds", "slice", "overflow", "clowncartridge", "fieldprep", "rapidhit",
+    "outlaw", "statsforall", "eddycurrent", "loosechange", "tirelessblade",
+    "ambitiousassassin", "pugilist", "witheringgaze",
+}
+
+_PVE_PAYOFF_TRAITS = {
+    "incandescent", "baitandswitch", "voltshot", "joltingfeedback", "chillclip",
+    "destabilizingrounds", "headstone", "kinetictremors", "explosivepayload",
+    "frenzy", "chaosreshaped", "oneforall", "surrounded", "eageredge",
+    "whirlwindblade", "coldsteel", "controlledburst", "reservoirburst",
+    "chainreaction", "hatchling", "firefly", "dragonfly", "desperatemeasures",
+    "masterofarms", "killingtally", "goldentricorn", "aggregatecharge",
+    "elementalhoning", "reaperstithe", "detonatorbeam", "rollingstorm",
+    "attritionorbs", "witheringgaze",
+}
+
+_PVP_CONSISTENCY_TRAITS = {
+    "lonewolf", "keepaway", "slideshot", "slideways", "zenmoment",
+    "dynamicswayreduction", "perpetualmotion", "rapidhit", "movingtarget",
+    "snapshotsights", "quickdraw", "tothepain", "encore", "fragilefocus",
+    "elementalcapacitor", "rangefinder", "surplus", "threatdetector",
+    "tunnelvision", "killingwind", "nodistractions", "hipfiregrip",
+}
+
+_PVP_LETHALITY_TRAITS = {
+    "openingshot", "eyeofthestorm", "headseeker", "precisioninstrument",
+    "killclip", "closingtime", "magnificenthowl", "targetlock", "desperado",
+    "swordlogic", "tapthetrigger", "explosivepayload", "timedpayload",
+    "snapshotsights", "rangefinder", "zenmoment", "masterofarms", "boxbreathing",
+    "lonewolf", "keepaway",
+}
+
+
 def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
-    """Matches an inventory weapon against our Clan God Roll Finder database and grades PVE & PVP rolls."""
+    """Evaluates a weapon against My God Rolls (God Roll Finder DB) + F.E.L.I.C.I.A.'s 2-column PVE/PVP Synergy Matrix."""
     item_norm = _norm_text(item.get("name", ""))
     matched_entry = None
     for gr in god_rolls:
@@ -930,82 +1248,162 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
             matched_entry = gr
             break
 
-    # Collect all perks available across all columns on this weapon
+    # Map normalized perk -> display name rolled on this weapon
+    norm_to_display: Dict[str, str] = {}
     all_item_perk_norms: Set[str] = set()
-    all_item_perk_names: List[str] = []
-    for col in item.get("perkColumns", []):
+    perk_cols = item.get("perkColumns", []) or []
+    for col in perk_cols:
         for opt in col:
             pname = opt.get("name", "")
             if pname:
-                all_item_perk_names.append(pname)
-                all_item_perk_norms.add(_norm_text(pname))
-    for ap in item.get("activePerks", []):
+                pn = _norm_text(pname)
+                all_item_perk_norms.add(pn)
+                norm_to_display.setdefault(pn, pname)
+    for ap in item.get("activePerks", []) or []:
         pname = ap.get("name", "")
         if pname:
-            all_item_perk_norms.add(_norm_text(pname))
+            pn = _norm_text(pname)
+            all_item_perk_norms.add(pn)
+            norm_to_display.setdefault(pn, pname)
 
     mw_name = (item.get("masterwork") or {}).get("name", "")
     mw_norm = _norm_text(mw_name)
 
-    if not matched_entry:
+    # Exotic weapons have fixed/catalyst perks rather than random legendary rolls (unless manually entered in God Roll Finder)
+    if (item.get("isExotic") and not matched_entry) or item.get("category") != "Weapon":
         return {
             "in_database": False,
+            "match_source": "none",
             "entry": None,
             "pve_trait_hits": 0,
             "pvp_trait_hits": 0,
             "pve_matches": [],
+            "pve_matched_perks": [],
             "pvp_matches": [],
+            "pvp_matched_perks": [],
             "verdict_code": "EXOTIC" if item.get("isExotic") else "AI_EVAL",
         }
 
-    def _score_mode(mode_spec: dict) -> Tuple[int, int, List[str]]:
-        trait_hits = 0
-        bonus_hits = 0
-        matched_labels = []
+    # Compute F.E.L.I.C.I.A. 2-Column Combat Trait Synergy across distinct trait columns
+    pve_pair: List[str] = []
+    pvp_pair: List[str] = []
+    if not item.get("isExotic"):
+        t_indexes = item.get("traitColIndexes") or []
+        trait_cols = [perk_cols[i] for i in t_indexes if 0 <= i < len(perk_cols)]
+        if len(trait_cols) < 2 and len(perk_cols) >= 4:
+            trait_cols = perk_cols[2:4]
 
-        for key, label in [("perk1", "Trait 1"), ("perk2", "Trait 2")]:
-            wanted = _split_godroll_options(mode_spec.get(key, ""))
-            hit = next((w for w in wanted if w in all_item_perk_norms), None)
-            if hit:
-                trait_hits += 1
-                matched_labels.append(f"{label}: {mode_spec.get(key)}")
+        if len(trait_cols) >= 2:
+            col_a = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[0] if o.get("name")]
+            col_b = [(_norm_text(o.get("name", "")), o.get("name", "")) for o in trait_cols[1] if o.get("name")]
 
-        for key, label in [("barrel", "Barrel"), ("mag", "Magazine")]:
-            wanted = _split_godroll_options(mode_spec.get(key, ""))
-            hit = next((w for w in wanted if w in all_item_perk_norms), None)
-            if hit:
+            for na, da in col_a:
+                for nb, db in col_b:
+                    if not na or not nb or na == nb:
+                        continue
+                    if not pve_pair:
+                        if (
+                            (na in _PVE_SETUP_TRAITS and nb in _PVE_PAYOFF_TRAITS)
+                            or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_SETUP_TRAITS)
+                            or (na in _PVE_PAYOFF_TRAITS and nb in _PVE_PAYOFF_TRAITS)
+                        ):
+                            pve_pair = [da, db]
+                    if not pvp_pair:
+                        if (
+                            (na in _PVP_CONSISTENCY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
+                            or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_CONSISTENCY_TRAITS)
+                            or (na in _PVP_LETHALITY_TRAITS and nb in _PVP_LETHALITY_TRAITS)
+                        ):
+                            pvp_pair = [da, db]
+
+    # Case 1: Weapon is in our God Roll Finder database (supplemented by F.E.L.I.C.I.A. 2-col synergy for alternate meta rolls)
+    if matched_entry:
+        def _score_mode(mode_spec: dict) -> Tuple[int, int, List[str], List[str]]:
+            trait_hits = 0
+            bonus_hits = 0
+            matched_labels: List[str] = []
+            matched_perks: List[str] = []
+
+            for key, label in [("perk1", "Trait 1"), ("perk2", "Trait 2")]:
+                wanted = _split_godroll_options(mode_spec.get(key, ""))
+                hit = next((w for w in wanted if w in all_item_perk_norms), None)
+                if hit:
+                    trait_hits += 1
+                    matched_labels.append(f"{label}: {mode_spec.get(key)}")
+                    matched_perks.append(norm_to_display.get(hit, mode_spec.get(key, "")))
+
+            for key, label in [("barrel", "Barrel"), ("mag", "Magazine")]:
+                wanted = _split_godroll_options(mode_spec.get(key, ""))
+                hit = next((w for w in wanted if w in all_item_perk_norms), None)
+                if hit:
+                    bonus_hits += 1
+                    matched_labels.append(f"{label}: {mode_spec.get(key)}")
+
+            wanted_mw = _split_godroll_options(mode_spec.get("masterwork", ""))
+            if mw_norm and any(w in mw_norm or mw_norm in w for w in wanted_mw):
                 bonus_hits += 1
-                matched_labels.append(f"{label}: {mode_spec.get(key)}")
+                matched_labels.append(f"MW: {mode_spec.get('masterwork')}")
 
-        wanted_mw = _split_godroll_options(mode_spec.get("masterwork", ""))
-        if mw_norm and any(w in mw_norm or mw_norm in w for w in wanted_mw):
-            bonus_hits += 1
-            matched_labels.append(f"MW: {mode_spec.get('masterwork')}")
+            return trait_hits, bonus_hits, matched_labels, matched_perks
 
-        return trait_hits, bonus_hits, matched_labels
+        pve_traits, pve_bonus, pve_matches, pve_perk_names = _score_mode(matched_entry.get("pve", {}))
+        pvp_traits, pvp_bonus, pvp_matches, pvp_perk_names = _score_mode(matched_entry.get("pvp", {}))
 
-    pve_traits, pve_bonus, pve_matches = _score_mode(matched_entry.get("pve", {}))
-    pvp_traits, pvp_bonus, pvp_matches = _score_mode(matched_entry.get("pvp", {}))
+        used_db = (pve_traits == 2) or (pvp_traits == 2)
+        if pve_traits < 2 and pve_pair:
+            pve_traits = 2
+            pve_perk_names = pve_pair
+            pve_matches = [f"Synergy: {' + '.join(pve_pair)}"]
+        if pvp_traits < 2 and pvp_pair:
+            pvp_traits = 2
+            pvp_perk_names = pvp_pair
+            pvp_matches = [f"Synergy: {' + '.join(pvp_pair)}"]
 
-    if pve_traits == 2 and pvp_traits == 2:
+        if pve_traits == 2 and pvp_traits == 2:
+            verdict = "DUAL_GOD_ROLL"
+        elif pve_traits == 2:
+            verdict = "PVE_GOD_ROLL"
+        elif pvp_traits == 2:
+            verdict = "PVP_GOD_ROLL"
+        elif pve_traits == 1 or pvp_traits == 1:
+            verdict = "SOLID_KEEP"
+        else:
+            verdict = "SHARD_CANDIDATE"
+
+        return {
+            "in_database": used_db,
+            "match_source": "database" if used_db else ("felicia_ai" if verdict in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL") else "database"),
+            "entry": matched_entry,
+            "pve_trait_hits": pve_traits,
+            "pve_bonus_hits": pve_bonus,
+            "pve_matches": pve_matches,
+            "pve_matched_perks": pve_perk_names,
+            "pvp_trait_hits": pvp_traits,
+            "pvp_bonus_hits": pvp_bonus,
+            "pvp_matches": pvp_matches,
+            "pvp_matched_perks": pvp_perk_names,
+            "verdict_code": verdict,
+        }
+
+    # Case 2: Legendary Weapon evaluated by F.E.L.I.C.I.A. 2-Column Synergy Matrix
+    if pve_pair and pvp_pair:
         verdict = "DUAL_GOD_ROLL"
-    elif pve_traits == 2:
+    elif pve_pair:
         verdict = "PVE_GOD_ROLL"
-    elif pvp_traits == 2:
+    elif pvp_pair:
         verdict = "PVP_GOD_ROLL"
-    elif pve_traits == 1 or pvp_traits == 1:
-        verdict = "SOLID_KEEP"
     else:
-        verdict = "SHARD_CANDIDATE"
+        verdict = "AI_EVAL"
 
     return {
-        "in_database": True,
-        "entry": matched_entry,
-        "pve_trait_hits": pve_traits,
-        "pve_bonus_hits": pve_bonus,
-        "pve_matches": pve_matches,
-        "pvp_trait_hits": pvp_traits,
-        "pvp_bonus_hits": pvp_bonus,
-        "pvp_matches": pvp_matches,
+        "in_database": False,
+        "match_source": "felicia_ai" if verdict in ("DUAL_GOD_ROLL", "PVE_GOD_ROLL", "PVP_GOD_ROLL") else "none",
+        "entry": None,
+        "pve_trait_hits": 2 if pve_pair else 0,
+        "pvp_trait_hits": 2 if pvp_pair else 0,
+        "pve_matches": [f"Synergy: {' + '.join(pve_pair)}"] if pve_pair else [],
+        "pve_matched_perks": pve_pair,
+        "pvp_matches": [f"Synergy: {' + '.join(pvp_pair)}"] if pvp_pair else [],
+        "pvp_matched_perks": pvp_pair,
         "verdict_code": verdict,
     }

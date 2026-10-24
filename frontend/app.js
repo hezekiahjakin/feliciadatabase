@@ -51,6 +51,9 @@ const state = {
   bungieData: null,
   activeInventoryView: null, // characterId or 'vault'
   invFilter: { search: '', slot: 'all' },
+  scannerFilter: 'all',
+  inspectedLoadout: null,
+  loadoutsDrawerOpen: {},
   inspectedItem: null,
   lastAppraisalReply: ''
 };
@@ -1570,8 +1573,11 @@ function renderInventoryHeaderAndSwitcher() {
   if (!switcher) return;
   switcher.innerHTML = '';
 
-  // 1. Character Cards (Hunter, Warlock, Titan)
+  // 1. Character Columns: Character Emblem Banner + Saved Loadouts Directly Underneath
   (data.characters || []).forEach(ch => {
+    const colWrap = document.createElement('div');
+    colWrap.className = 'switcher-char-col';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `switcher-card ${state.activeInventoryView === ch.characterId ? 'active' : ''}`;
@@ -1592,7 +1598,62 @@ function renderInventoryHeaderAndSwitcher() {
       renderInventoryHeaderAndSwitcher();
       renderInventoryStage();
     });
-    switcher.appendChild(btn);
+    colWrap.appendChild(btn);
+
+    // Saved In-Game Loadouts Strip directly under this Character
+    const loadouts = ch.loadouts || [];
+    const details = document.createElement('details');
+    details.className = 'char-loadouts-details';
+    if (state.loadoutsDrawerOpen[ch.characterId] !== false) {
+      details.setAttribute('open', '');
+    }
+    details.addEventListener('toggle', () => {
+      state.loadoutsDrawerOpen[ch.characterId] = details.open;
+    });
+
+    const summary = document.createElement('summary');
+    summary.className = 'char-loadouts-summary';
+    summary.innerHTML = `<span>SAVED LOADOUTS (${loadouts.length})</span>`;
+    details.appendChild(summary);
+
+    if (loadouts.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'char-loadouts-empty';
+      emptyEl.textContent = 'No in-game loadouts saved.';
+      details.appendChild(emptyEl);
+    } else {
+      const ldGrid = document.createElement('div');
+      ldGrid.className = 'char-loadouts-grid';
+      loadouts.forEach(ld => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'saved-loadout-chip';
+        const colorStyle = ld.colorPath
+          ? `style="background-image:url('https://www.bungie.net${ld.colorPath}');"`
+          : '';
+        const iconHtml = ld.iconPath
+          ? `<img src="https://www.bungie.net${ld.iconPath}" alt="" width="18" height="18" loading="lazy">`
+          : '<span>⚡</span>';
+        const subParts = [];
+        if (ld.subclass?.name) subParts.push(ld.subclass.name);
+        if (ld.exoticItem?.name) subParts.push(ld.exoticItem.name);
+        const subLabel = subParts.join(' • ') || `Slot #${ld.slotNumber}`;
+
+        chip.innerHTML = `
+          <div class="saved-loadout-swatch" ${colorStyle}>${iconHtml}</div>
+          <div class="saved-loadout-meta">
+            <span class="saved-loadout-name">${escapeHtml(ld.name)}</span>
+            <span class="saved-loadout-sub">${escapeHtml(subLabel)}</span>
+          </div>
+        `;
+        chip.addEventListener('click', () => openSavedLoadoutModal(ch, ld));
+        ldGrid.appendChild(chip);
+      });
+      details.appendChild(ldGrid);
+    }
+
+    colWrap.appendChild(details);
+    switcher.appendChild(colWrap);
   });
 
   // 2. Vault Card
@@ -1668,18 +1729,20 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     godBadge = `<span class="godroll-mini-tag">★ PVP GOD ROLL</span>`;
   }
 
-  const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner" title="Crafted">◈</span>` : '';
+  const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner">◈</span>` : '';
+  const lockCorner = item.isLocked ? `<span class="gear-lock-pip" aria-label="Locked">🔒</span>` : '';
   const subDetail = item.category === 'Armor' && item.totalStats
     ? `${escapeHtml(item.slot)} • ${item.totalStats} Stat`
     : escapeHtml(item.typeName || item.slot);
 
   btn.innerHTML = `
     <div class="gear-icon-frame">
-      <img src="${iconSrc}" alt="${escapeHtml(item.name)}" loading="lazy">
+      <img src="${iconSrc}" alt="${escapeHtml(item.name)}" width="48" height="48" loading="lazy">
       ${craftedCorner}
+      ${lockCorner}
     </div>
     <div class="gear-meta">
-      <div class="gear-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+      <div class="gear-name">${escapeHtml(item.name)}</div>
       <div class="gear-sub">
         ${elemDot}
         <span class="gear-power">${item.power ? `✦ ${item.power}` : ''}</span>
@@ -1963,6 +2026,23 @@ function openItemInspectModal(item) {
       actionsGrid.appendChild(vaultBtn);
     }
 
+    if (item.itemInstanceId && item.location !== 'postmaster') {
+      const lockBtn = document.createElement('button');
+      lockBtn.type = 'button';
+      lockBtn.className = 'btn-item-action';
+      const syncLockBtnLabel = () => {
+        lockBtn.innerHTML = item.isLocked ? `<span>🔒</span> Locked (Unlock)` : `<span>🔓</span> Lock Item`;
+      };
+      syncLockBtnLabel();
+      lockBtn.addEventListener('click', async () => {
+        lockBtn.disabled = true;
+        await toggleSingleItemLock(item, !item.isLocked);
+        syncLockBtnLabel();
+        lockBtn.disabled = false;
+      });
+      actionsGrid.appendChild(lockBtn);
+    }
+
     // Signature Action: Ask F.E.L.I.C.I.A.
     const askBtn = document.createElement('button');
     askBtn.type = 'button';
@@ -2189,6 +2269,540 @@ async function triggerAskFeliciaOnItem(item) {
     bodyEl.innerHTML = `<p style="color:#FCA5A5;">Could not reach F.E.L.I.C.I.A.: ${escapeHtml(err.message)}</p>`;
   } finally {
     if (askBtn) askBtn.disabled = false;
+  }
+}
+
+function attachLightDismissFallback(dialogEl) {
+  if (!dialogEl) return;
+  if (!('closedBy' in HTMLDialogElement.prototype)) {
+    dialogEl.addEventListener('click', (event) => {
+      if (event.target !== dialogEl) return;
+      const rect = dialogEl.getBoundingClientRect();
+      const isDialogContent = (
+        rect.top <= event.clientY &&
+        event.clientY <= rect.top + rect.height &&
+        rect.left <= event.clientX &&
+        event.clientX <= rect.left + rect.width
+      );
+      if (isDialogContent) return;
+      dialogEl.close();
+    });
+  }
+}
+
+function findLiveItemByInstanceId(instanceId) {
+  if (!instanceId || !state.bungieData) return null;
+  for (const ch of (state.bungieData.characters || [])) {
+    for (const list of [ch.equipment || [], ch.inventory || [], ch.postmaster || []]) {
+      const hit = list.find(i => i.itemInstanceId === instanceId);
+      if (hit) return hit;
+    }
+  }
+  return (state.bungieData.vault?.items || []).find(i => i.itemInstanceId === instanceId) || null;
+}
+
+function openSavedLoadoutModal(character, loadout) {
+  sfx.playChirp();
+  state.inspectedLoadout = { character, loadout };
+
+  const modal = document.getElementById('modalSavedLoadout');
+  if (!modal) return;
+
+  const badgeLg = document.getElementById('savedLoadoutBadgeLg');
+  const iconLg = document.getElementById('savedLoadoutIconLg');
+  const subEl = document.getElementById('savedLoadoutSubtitle');
+  const titleEl = document.getElementById('savedLoadoutTitle');
+  const equipBtn = document.getElementById('btnEquipSavedLoadout');
+  const feedbackEl = document.getElementById('savedLoadoutFeedback');
+  const container = document.getElementById('savedLoadoutItemsContainer');
+
+  if (badgeLg) {
+    badgeLg.style.backgroundImage = loadout.colorPath
+      ? `url("https://www.bungie.net${loadout.colorPath}")`
+      : 'none';
+  }
+  if (iconLg) {
+    if (loadout.iconPath) {
+      iconLg.src = `https://www.bungie.net${loadout.iconPath}`;
+      iconLg.classList.remove('hidden');
+    } else {
+      iconLg.classList.add('hidden');
+    }
+  }
+  if (subEl) {
+    subEl.textContent = `${classGlyph(character.className)} ${character.className.toUpperCase()} // SAVED LOADOUT SLOT #${loadout.slotNumber}`;
+  }
+  if (titleEl) {
+    titleEl.textContent = loadout.name || `Loadout ${loadout.slotNumber}`;
+  }
+  if (equipBtn) {
+    equipBtn.disabled = false;
+    equipBtn.textContent = `⚡ Equip Loadout on ${character.className}`;
+  }
+  if (feedbackEl) {
+    feedbackEl.classList.add('hidden');
+    feedbackEl.classList.remove('error');
+  }
+
+  if (container) {
+    container.innerHTML = '';
+
+    // Subclass Banner
+    if (loadout.subclass && loadout.subclass.name) {
+      const subBar = document.createElement('div');
+      subBar.className = 'saved-loadout-subclass-bar';
+      const sIcon = loadout.subclass.icon
+        ? `<img src="https://www.bungie.net${loadout.subclass.icon}" alt="" width="36" height="36">`
+        : '';
+      subBar.innerHTML = `
+        ${sIcon}
+        <div>
+          <div style="font-family:var(--font-tactical); font-size:11px; color:var(--arc-blue); font-weight:700; letter-spacing:0.8px;">SUBCLASS CONFIGURATION</div>
+          <div style="font-family:var(--font-display); font-size:15px; font-weight:700; color:#FFFFFF;">${escapeHtml(loadout.subclass.name)}</div>
+        </div>
+      `;
+      container.appendChild(subBar);
+    }
+
+    const cols = document.createElement('div');
+    cols.className = 'saved-loadout-columns';
+
+    const buildLoadoutCol = (heading, itemsArr) => {
+      const panel = document.createElement('div');
+      panel.className = 'loadout-col-panel';
+      panel.innerHTML = `<div class="loadout-col-header">${heading}</div>`;
+
+      if (!itemsArr || itemsArr.length === 0) {
+        const empty = document.createElement('p');
+        empty.style.cssText = 'color:#64748B; font-size:13px;';
+        empty.textContent = 'No items saved in this group.';
+        panel.appendChild(empty);
+      } else {
+        itemsArr.forEach(slimItem => {
+          const fullItem = findLiveItemByInstanceId(slimItem.itemInstanceId) || slimItem;
+          const card = createGearCardElement(fullItem);
+          panel.appendChild(card);
+        });
+      }
+      return panel;
+    };
+
+    cols.appendChild(buildLoadoutCol('⚔️ SAVED WEAPONS', loadout.weapons || []));
+    cols.appendChild(buildLoadoutCol('🛡️ SAVED ARMOR RIG', loadout.armor || []));
+    container.appendChild(cols);
+
+    if (loadout.missingCount > 0) {
+      const missNote = document.createElement('p');
+      missNote.style.cssText = 'margin-top:10px; font-size:12px; color:#FBBF24; font-family:var(--font-tactical);';
+      missNote.textContent = `⚠ Note: ${loadout.missingCount} item(s) originally saved in this loadout were dismantled or are no longer on your account.`;
+      container.appendChild(missNote);
+    }
+  }
+
+  modal.showModal();
+}
+
+async function executeEquipSavedLoadout() {
+  if (!state.inspectedLoadout || !state.bungieData) return;
+  const { character, loadout } = state.inspectedLoadout;
+  const equipBtn = document.getElementById('btnEquipSavedLoadout');
+  const feedbackEl = document.getElementById('savedLoadoutFeedback');
+
+  if (equipBtn) equipBtn.disabled = true;
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = `Applying '${loadout.name}' on ${character.className}...`;
+  }
+  sfx.playTransmit();
+
+  try {
+    const res = await fetch('/api/bungie/loadout/equip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        characterId: character.characterId,
+        loadoutIndex: loadout.loadoutIndex
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Could not equip loadout (make sure your character is in Orbit, the Tower, or Offline).');
+    }
+    if (data.refreshed_session) {
+      saveBungieSession(data.refreshed_session);
+    }
+
+    sfx.playReceive();
+    if (feedbackEl) {
+      feedbackEl.textContent = `✓ '${loadout.name}' equipped on ${character.className}!`;
+    }
+    await loadBungieInventory(true);
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+  } finally {
+    if (equipBtn) equipBtn.disabled = false;
+  }
+}
+
+function collectInventoryAndVaultGodRolls() {
+  const data = state.bungieData;
+  if (!data) {
+    return { totalWeapons: 0, godRolls: [], pveCount: 0, pvpCount: 0, dualCount: 0, unlockedCount: 0 };
+  }
+
+  const seenIds = new Set();
+  const godRolls = [];
+  let totalWeapons = 0;
+
+  const inspectList = (itemsArr, locLabel, ownerCharId) => {
+    (itemsArr || []).forEach(item => {
+      if (item.category !== 'Weapon') return;
+      const key = item.itemInstanceId || `${item.itemHash}_${locLabel}`;
+      if (seenIds.has(key)) return;
+      seenIds.add(key);
+      totalWeapons++;
+
+      const vc = item.godRollCheck?.verdictCode || '';
+      if (['DUAL_GOD_ROLL', 'PVE_GOD_ROLL', 'PVP_GOD_ROLL'].includes(vc)) {
+        godRolls.push({
+          item,
+          verdictCode: vc,
+          locLabel,
+          ownerCharId
+        });
+      }
+    });
+  };
+
+  (data.characters || []).forEach(ch => {
+    const cUpper = (ch.className || 'Character').toUpperCase();
+    inspectList(ch.equipment, `EQUIPPED • ${cUpper}`, ch.characterId);
+    inspectList(ch.inventory, `INVENTORY • ${cUpper}`, ch.characterId);
+    inspectList(ch.postmaster, `POSTMASTER • ${cUpper}`, ch.characterId);
+  });
+
+  inspectList(data.vault?.items || [], 'IN VAULT', '');
+
+  // Sort: Unlocked first so player sees items needing protection right at top, then Dual -> PVE -> PVP -> Power
+  const vcOrder = { DUAL_GOD_ROLL: 0, PVE_GOD_ROLL: 1, PVP_GOD_ROLL: 2 };
+  godRolls.sort((a, b) => {
+    if (Boolean(a.item.isLocked) !== Boolean(b.item.isLocked)) {
+      return a.item.isLocked ? 1 : -1;
+    }
+    const vo = (vcOrder[a.verdictCode] ?? 9) - (vcOrder[b.verdictCode] ?? 9);
+    if (vo !== 0) return vo;
+    return (b.item.power || 0) - (a.item.power || 0);
+  });
+
+  const pveCount = godRolls.filter(g => g.verdictCode === 'PVE_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
+  const pvpCount = godRolls.filter(g => g.verdictCode === 'PVP_GOD_ROLL' || g.verdictCode === 'DUAL_GOD_ROLL').length;
+  const dualCount = godRolls.filter(g => g.verdictCode === 'DUAL_GOD_ROLL').length;
+  const unlockedCount = godRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster').length;
+
+  return { totalWeapons, godRolls, pveCount, pvpCount, dualCount, unlockedCount };
+}
+
+function openGodRollScannerModal() {
+  if (!state.bungieData) return;
+  sfx.playTransmit();
+  state.scannerFilter = 'all';
+
+  document.querySelectorAll('#scannerFilterPills .inv-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.scanfilter === 'all');
+  });
+
+  const fb = document.getElementById('scannerLockFeedback');
+  if (fb) {
+    fb.classList.add('hidden');
+    fb.classList.remove('error');
+  }
+
+  renderScannerModalContent();
+  const modal = document.getElementById('modalGodRollScanner');
+  if (modal) modal.showModal();
+}
+
+function renderScannerModalContent() {
+  const summary = collectInventoryAndVaultGodRolls();
+  const msgEl = document.getElementById('scannerFeliciaMsg');
+  const kpiEl = document.getElementById('scannerKpiStrip');
+  const listEl = document.getElementById('scannerResultsList');
+  const lockAllBtn = document.getElementById('btnLockAllGodRolls');
+
+  const pillAll = document.getElementById('scanPillAll');
+  const pillPve = document.getElementById('scanPillPve');
+  const pillPvp = document.getElementById('scanPillPvp');
+  const pillUnl = document.getElementById('scanPillUnlocked');
+
+  if (pillAll) pillAll.textContent = `All God Rolls (${summary.godRolls.length})`;
+  if (pillPve) pillPve.textContent = `⚔️ PVE (${summary.pveCount})`;
+  if (pillPvp) pillPvp.textContent = `🎯 PVP (${summary.pvpCount})`;
+  if (pillUnl) pillUnl.textContent = `🔓 Unlocked (${summary.unlockedCount})`;
+
+  if (msgEl) {
+    if (summary.godRolls.length === 0) {
+      msgEl.innerHTML = `All right, Guardian—I swept all <strong>${summary.totalWeapons}</strong> weapons across your Characters and Vault. None hit a full 2-trait PVE or PVP God Roll yet. Add custom targets in <strong>God Roll Finder</strong> anytime!`;
+    } else if (summary.unlockedCount > 0) {
+      msgEl.innerHTML = `Right then, Guardian! I swept all <strong>${summary.totalWeapons} weapons</strong> across your 3 Characters and Vault and located <strong>${summary.godRolls.length} God Rolls</strong> (<strong>${summary.pveCount} PVE</strong>, <strong>${summary.pvpCount} PVP</strong>). <strong>${summary.unlockedCount}</strong> ${summary.unlockedCount === 1 ? 'is' : 'are'} currently <strong>unlocked</strong>—tap <strong>Lock All God Rolls</strong> so nothing gets dismantled by mistake!`;
+    } else {
+      msgEl.innerHTML = `Spot on, Guardian! I swept all <strong>${summary.totalWeapons} weapons</strong> across your Characters and Vault—all <strong>${summary.godRolls.length} PVE &amp; PVP God Rolls</strong> are safely <strong>locked (🔒)</strong>!`;
+    }
+  }
+
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div class="scanner-kpi-box">
+        <span class="scanner-kpi-val">${summary.totalWeapons}</span>
+        <span class="scanner-kpi-lbl">Weapons Scanned</span>
+      </div>
+      <div class="scanner-kpi-box">
+        <span class="scanner-kpi-val" style="color:#FDE047;">${summary.godRolls.length}</span>
+        <span class="scanner-kpi-lbl">God Rolls Found</span>
+      </div>
+      <div class="scanner-kpi-box">
+        <span class="scanner-kpi-val" style="color:#7DD3FC;">${summary.pveCount}</span>
+        <span class="scanner-kpi-lbl">⚔️ PVE God Rolls</span>
+      </div>
+      <div class="scanner-kpi-box">
+        <span class="scanner-kpi-val" style="color:#FDA4AF;">${summary.pvpCount}</span>
+        <span class="scanner-kpi-lbl">🎯 PVP God Rolls</span>
+      </div>
+      <div class="scanner-kpi-box">
+        <span class="scanner-kpi-val" style="color:${summary.unlockedCount > 0 ? '#F5A623' : '#6EE7B7'};">${summary.unlockedCount}</span>
+        <span class="scanner-kpi-lbl">🔓 Unlocked Rolls</span>
+      </div>
+    `;
+  }
+
+  if (lockAllBtn) {
+    if (summary.unlockedCount > 0) {
+      lockAllBtn.disabled = false;
+      lockAllBtn.textContent = `🔒 Lock All God Rolls (${summary.unlockedCount})`;
+    } else {
+      lockAllBtn.disabled = true;
+      lockAllBtn.textContent = summary.godRolls.length > 0 ? '✓ All God Rolls Locked' : '🔒 No Unlocked Rolls';
+    }
+  }
+
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  const filtered = summary.godRolls.filter(entry => {
+    if (state.scannerFilter === 'pve') {
+      return entry.verdictCode === 'PVE_GOD_ROLL' || entry.verdictCode === 'DUAL_GOD_ROLL';
+    }
+    if (state.scannerFilter === 'pvp') {
+      return entry.verdictCode === 'PVP_GOD_ROLL' || entry.verdictCode === 'DUAL_GOD_ROLL';
+    }
+    if (state.scannerFilter === 'unlocked') {
+      return !entry.item.isLocked;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div style="text-align:center; padding:28px; color:#94A3B8; font-family:var(--font-tactical);">No God Rolls match this filter tab.</div>`;
+    return;
+  }
+
+  filtered.forEach(entry => {
+    const it = entry.item;
+    const grc = it.godRollCheck || {};
+    const row = document.createElement('div');
+    row.className = 'scanner-item-row';
+
+    const iconSrc = it.icon ? `https://www.bungie.net${it.icon}` : 'icon-192.png';
+    let modeBadge = '';
+    if (entry.verdictCode === 'DUAL_GOD_ROLL') {
+      modeBadge = `<span class="scanner-mode-tag dual">★ PVE + PVP GOD ROLL</span>`;
+    } else if (entry.verdictCode === 'PVE_GOD_ROLL') {
+      modeBadge = `<span class="scanner-mode-tag pve">⚔️ PVE GOD ROLL</span>`;
+    } else {
+      modeBadge = `<span class="scanner-mode-tag pvp">🎯 PVP GOD ROLL</span>`;
+    }
+
+    const srcBadge = grc.inDatabase
+      ? `<span class="scanner-loc-pill" style="color:#FDE047; border:1px solid rgba(250,204,21,0.35);">MY GOD ROLLS</span>`
+      : `<span class="scanner-loc-pill">F.E.L.I.C.I.A. SCAN</span>`;
+
+    const perkTags = [];
+    if ((grc.pveMatchedPerks || []).length >= 2) {
+      perkTags.push(`<span class="scanner-perk-chip">⚔️ PVE: <strong>${escapeHtml(grc.pveMatchedPerks.join(' + '))}</strong></span>`);
+    }
+    if ((grc.pvpMatchedPerks || []).length >= 2) {
+      perkTags.push(`<span class="scanner-perk-chip">🎯 PVP: <strong>${escapeHtml(grc.pvpMatchedPerks.join(' + '))}</strong></span>`);
+    }
+
+    const isPm = it.location === 'postmaster';
+    const lockBtnLabel = isPm
+      ? '📬 In Postmaster'
+      : (it.isLocked ? '🔒 Locked' : '🔓 Lock');
+
+    row.innerHTML = `
+      <div class="scanner-item-main">
+        <div class="scanner-item-icon">
+          <img src="${iconSrc}" alt="${escapeHtml(it.name)}" width="52" height="52" loading="lazy">
+        </div>
+        <div class="scanner-item-info">
+          <div class="scanner-item-top">
+            <span class="scanner-item-name">${escapeHtml(it.name)}</span>
+            <span style="color:#FACC15; font-family:var(--font-tactical); font-weight:700; font-size:12.5px;">✦ ${it.power || ''}</span>
+            <span class="scanner-loc-pill">${escapeHtml(entry.locLabel)}</span>
+            ${modeBadge}
+            ${srcBadge}
+          </div>
+          <div class="scanner-perks-line">
+            ${perkTags.join('')}
+          </div>
+        </div>
+      </div>
+      <div class="scanner-item-actions">
+        <button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one" ${isPm ? 'disabled' : ''}>${lockBtnLabel}</button>
+        <button type="button" class="btn-mini-action" data-role="inspect-one">Inspect</button>
+      </div>
+    `;
+
+    const lockOneBtn = row.querySelector('[data-role="lock-one"]');
+    if (lockOneBtn && !isPm) {
+      lockOneBtn.addEventListener('click', async () => {
+        lockOneBtn.disabled = true;
+        await toggleSingleItemLock(it, !it.isLocked);
+        renderScannerModalContent();
+      });
+    }
+
+    const inspectOneBtn = row.querySelector('[data-role="inspect-one"]');
+    if (inspectOneBtn) {
+      inspectOneBtn.addEventListener('click', () => {
+        openItemInspectModal(it);
+      });
+    }
+
+    listEl.appendChild(row);
+  });
+}
+
+async function toggleSingleItemLock(item, desiredLockState) {
+  if (!state.bungieData || !item.itemInstanceId) return;
+  const defaultCharId = state.bungieData.characters?.[0]?.characterId || '';
+  sfx.playChirp();
+
+  try {
+    const res = await fetch('/api/bungie/lock', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        defaultCharacterId: defaultCharId,
+        state: Boolean(desiredLockState),
+        items: [{
+          itemInstanceId: item.itemInstanceId,
+          characterId: item.characterId || defaultCharId,
+          name: item.name
+        }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Lock update failed.');
+    if (data.refreshed_session) saveBungieSession(data.refreshed_session);
+
+    if ((data.lockedIds || []).includes(item.itemInstanceId)) {
+      item.isLocked = Boolean(desiredLockState);
+      sfx.playReceive();
+      renderInventoryStage();
+    } else if ((data.failed || []).length > 0) {
+      throw new Error(data.failed[0].reason || 'Bungie rejected lock change.');
+    }
+  } catch (err) {
+    sfx.playAlert();
+    alert(`Could not change lock state for ${item.name}: ${err.message}`);
+  }
+}
+
+async function lockAllScannedGodRolls() {
+  if (!state.bungieData) return;
+  const summary = collectInventoryAndVaultGodRolls();
+  const targets = summary.godRolls.filter(g => !g.item.isLocked && g.item.location !== 'postmaster');
+  if (targets.length === 0) return;
+
+  const lockAllBtn = document.getElementById('btnLockAllGodRolls');
+  const feedbackEl = document.getElementById('scannerLockFeedback');
+  const defaultCharId = state.bungieData.characters?.[0]?.characterId || '';
+
+  if (lockAllBtn) {
+    lockAllBtn.disabled = true;
+    lockAllBtn.textContent = `🔒 Locking ${targets.length} God Rolls...`;
+  }
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = `F.E.L.I.C.I.A. is transmitting lock commands to Bungie.net for ${targets.length} PVE & PVP God Rolls...`;
+  }
+  sfx.playTransmit();
+
+  try {
+    const res = await fetch('/api/bungie/lock', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        defaultCharacterId: defaultCharId,
+        state: true,
+        items: targets.map(t => ({
+          itemInstanceId: t.item.itemInstanceId,
+          characterId: t.item.characterId || defaultCharId,
+          name: t.item.name
+        }))
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Batch lock failed.');
+    if (data.refreshed_session) saveBungieSession(data.refreshed_session);
+
+    const lockedSet = new Set(data.lockedIds || []);
+    targets.forEach(t => {
+      if (lockedSet.has(t.item.itemInstanceId)) {
+        t.item.isLocked = true;
+      }
+    });
+
+    sfx.playReceive();
+    renderScannerModalContent();
+    renderInventoryStage();
+
+    if (feedbackEl) {
+      const failCount = (data.failed || []).length;
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.toggle('error', data.lockedCount === 0 && failCount > 0);
+      feedbackEl.textContent = failCount > 0
+        ? `✓ Locked ${data.lockedCount} God Rolls! (${failCount} could not be locked right now: ${data.failed[0].reason})`
+        : `✓ Locked all ${data.lockedCount} PVE & PVP God Rolls across your Inventory and Vault!`;
+    }
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+    renderScannerModalContent();
   }
 }
 
@@ -3121,6 +3735,9 @@ document.addEventListener('DOMContentLoaded', () => {
           sfx.playReceive();
           modalEditGodRoll.close();
           await loadGodRolls();
+          if (state.bungieSession && state.bungieSession.access_token) {
+            loadBungieInventory(true);
+          }
         } else {
           alert('Failed to save god roll');
         }
@@ -3291,36 +3908,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  document.querySelectorAll('#invFilterPills .inv-pill').forEach(pill => {
+  document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(pill => {
     pill.addEventListener('click', () => {
       sfx.playChirp();
-      document.querySelectorAll('#invFilterPills .inv-pill').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       state.invFilter.slot = pill.dataset.invfilter || 'all';
       renderInventoryStage();
     });
   });
 
+  const btnScanGodRolls = document.getElementById('btnScanGodRolls');
+  const modalGodRollScanner = document.getElementById('modalGodRollScanner');
+  const btnLockAllGodRolls = document.getElementById('btnLockAllGodRolls');
+  const btnResyncScanner = document.getElementById('btnResyncScanner');
+  const modalSavedLoadout = document.getElementById('modalSavedLoadout');
+  const btnEquipSavedLoadout = document.getElementById('btnEquipSavedLoadout');
+  const btnAskFeliciaLoadout = document.getElementById('btnAskFeliciaLoadout');
+
+  if (btnScanGodRolls) {
+    btnScanGodRolls.addEventListener('click', () => openGodRollScannerModal());
+  }
+
+  document.querySelectorAll('#scannerFilterPills .inv-pill[data-scanfilter]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      sfx.playChirp();
+      document.querySelectorAll('#scannerFilterPills .inv-pill[data-scanfilter]').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.scannerFilter = pill.dataset.scanfilter || 'all';
+      renderScannerModalContent();
+    });
+  });
+
+  if (btnLockAllGodRolls) {
+    btnLockAllGodRolls.addEventListener('click', () => lockAllScannedGodRolls());
+  }
+
+  if (btnResyncScanner) {
+    btnResyncScanner.addEventListener('click', async () => {
+      btnResyncScanner.disabled = true;
+      btnResyncScanner.textContent = '🔄 Syncing...';
+      await loadBungieInventory(true);
+      renderScannerModalContent();
+      btnResyncScanner.disabled = false;
+      btnResyncScanner.textContent = '🔄 Re-Scan';
+    });
+  }
+
+  if (btnEquipSavedLoadout) {
+    btnEquipSavedLoadout.addEventListener('click', () => executeEquipSavedLoadout());
+  }
+
+  if (btnAskFeliciaLoadout) {
+    btnAskFeliciaLoadout.addEventListener('click', () => {
+      if (!state.inspectedLoadout) return;
+      const { character, loadout } = state.inspectedLoadout;
+      const wSummary = (loadout.weapons || []).map(w => `${w.slot}: ${w.name}`).join(', ');
+      const exName = loadout.exoticItem ? loadout.exoticItem.name : 'Legendary Setup';
+      const subName = loadout.subclass?.name || character.subclass?.name || 'Active Subclass';
+      const statsTxt = Object.entries(character.stats || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+      const prompt = `Review my saved ${character.className} loadout '${loadout.name}' (Subclass: ${subName}, Exotic: ${exName}, Weapons: ${wSummary || 'Standard'}, Current Character Stats: ${statsTxt}). How strong is this setup for PVE or PVP, and what tweaks would make it hit even harder?`;
+      modalSavedLoadout?.close();
+      switchTabDirect('tab-comms');
+      const input = document.getElementById('chatInput');
+      if (input) input.value = prompt;
+      sendChatMessage(prompt);
+    });
+  }
+
   if (modalInspectItem) {
     if (btnCloseInspectItem) {
       btnCloseInspectItem.addEventListener('click', () => modalInspectItem.close());
     }
-    // Fallback for browsers without native <dialog closedby="any"> support
-    if (!('closedBy' in HTMLDialogElement.prototype)) {
-      modalInspectItem.addEventListener('click', (event) => {
-        if (event.target !== modalInspectItem) return;
-        const rect = modalInspectItem.getBoundingClientRect();
-        const isDialogContent = (
-          rect.top <= event.clientY &&
-          event.clientY <= rect.top + rect.height &&
-          rect.left <= event.clientX &&
-          event.clientX <= rect.left + rect.width
-        );
-        if (isDialogContent) return;
-        modalInspectItem.close();
-      });
-    }
+    attachLightDismissFallback(modalInspectItem);
   }
+  attachLightDismissFallback(modalGodRollScanner);
+  attachLightDismissFallback(modalSavedLoadout);
 
   if (btnSpeakAppraisal) {
     btnSpeakAppraisal.addEventListener('click', () => {

@@ -24,6 +24,8 @@ try:
         refresh_bungie_tokens,
         fetch_guardian_inventory,
         transfer_guardian_item,
+        batch_lock_guardian_items,
+        equip_guardian_loadout,
         evaluate_item_against_godrolls,
     )
 except ImportError:
@@ -35,6 +37,8 @@ except ImportError:
         refresh_bungie_tokens,
         fetch_guardian_inventory,
         transfer_guardian_item,
+        batch_lock_guardian_items,
+        equip_guardian_loadout,
         evaluate_item_against_godrolls,
     )
 
@@ -1110,7 +1114,7 @@ async def get_bungie_inventory_endpoint(req: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Tag every weapon against our Clan God Roll Finder database in <5ms
+    # Tag every weapon against My God Rolls (God Roll Finder DB) + F.E.L.I.C.I.A. PVE/PVP Synergy Matrix
     god_rolls = get_all_god_rolls()
 
     def _tag_items(items_list: List[dict]):
@@ -1119,9 +1123,12 @@ async def get_bungie_inventory_endpoint(req: Request):
                 ev = evaluate_item_against_godrolls(it, god_rolls)
                 it["godRollCheck"] = {
                     "inDatabase": ev["in_database"],
+                    "matchSource": ev.get("match_source", "none"),
                     "verdictCode": ev["verdict_code"],
                     "pveTraitHits": ev.get("pve_trait_hits", 0),
                     "pvpTraitHits": ev.get("pvp_trait_hits", 0),
+                    "pveMatchedPerks": ev.get("pve_matched_perks", []),
+                    "pvpMatchedPerks": ev.get("pvp_matched_perks", []),
                 }
 
     for ch in data.get("characters", []):
@@ -1176,6 +1183,91 @@ async def post_bungie_transfer_endpoint(body: BungieTransferRequest, req: Reques
         if refresh_token:
             refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
             res = await run_in_threadpool(_do_transfer, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+class BungieLockItemEntry(BaseModel):
+    itemInstanceId: str
+    characterId: Optional[str] = ""
+    name: Optional[str] = ""
+
+
+class BungieLockBatchRequest(BaseModel):
+    membershipType: int
+    defaultCharacterId: str
+    items: List[BungieLockItemEntry]
+    state: Optional[bool] = True
+
+
+@app.post("/api/bungie/lock")
+async def post_bungie_lock_endpoint(body: BungieLockBatchRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    items_dicts = [it.model_dump() if hasattr(it, "model_dump") else it.dict() for it in body.items]
+
+    def _do_lock(token: str):
+        return batch_lock_guardian_items(
+            access_token=token,
+            membership_type=body.membershipType,
+            default_character_id=body.defaultCharacterId,
+            items_to_lock=items_dicts,
+            lock_state=True if body.state is None else bool(body.state),
+        )
+
+    try:
+        res = await run_in_threadpool(_do_lock, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_lock, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+class BungieEquipLoadoutRequest(BaseModel):
+    membershipType: int
+    characterId: str
+    loadoutIndex: int
+
+
+@app.post("/api/bungie/loadout/equip")
+async def post_bungie_equip_loadout_endpoint(body: BungieEquipLoadoutRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+
+    def _do_equip(token: str):
+        return equip_guardian_loadout(
+            access_token=token,
+            membership_type=body.membershipType,
+            character_id=body.characterId,
+            loadout_index=body.loadoutIndex,
+        )
+
+    try:
+        res = await run_in_threadpool(_do_equip, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_equip, refreshed_session["access_token"])
         else:
             raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
     except Exception as e:

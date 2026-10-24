@@ -1,5 +1,130 @@
 [
   {
+    "id": "roll-hawkmoon-84ec",
+    "name": "Hawkmoon",
+    "slot": "Kinetic",
+    "type": "Hand Cannon",
+    "element": "Kinetic",
+    "frame": "Paracausal Shot (140 RPM)",
+    "source": "Zur",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Alloy Magazine",
+      "perk1": "Killing Wind",
+      "perk2": "Smooth Grip",
+      "masterwork": ".",
+      "notes": "This setup capitalizes on Hawkmoon's Paracausal Shot loop for aggressively taking down high-health targets. Securing minor enemy kills to build your damage stacks activates Killing Wind, granting a surge of range, handling, and mobility to help you seamlessly chain consecutive precision hits. Once you unleash your max-stack final round, Alloy Magazine drastically speeds up your empty reload, allowing you to instantly reset the exotic perk loop and keep the damage flowing."
+    },
+    "pvp": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Alloy Magazine",
+      "perk1": "Opening Shot",
+      "perk2": "Smooth Grip / Heavy Grip",
+      "masterwork": ".",
+      "notes": "This roll is designed to maximize Hawkmoon's already incredible baseline stats for Crucible dueling. Opening Shot provides an immense boost to range and aim assist on your initial trigger pull, making it highly forgiving to land your first precision hit and start building Paracausal Charge stacks. Pairing this with a Range masterwork pushes your effective damage falloff even further, while Alloy Magazine ensures you recover quickly if you are forced to reload immediately after firing off your lethal final bullet."
+    }
+  },
+  {
+    "id": "roll-eye-of-sol-f595",
+    "name": "Eye of Sol",
+    "slot": "Kinetic",
+    "type": "Sniper",
+    "element": "Kinetic",
+    "frame": "Adaptive Frame (90 RPM)",
+    "source": "Trials of Osiris",
+    "pve": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Ricochet Rounds",
+      "perk1": "Rewind Rounds",
+      "perk2": "Kinetic Tremors",
+      "masterwork": "Handling",
+      "notes": "This combination transforms the sniper into a sustained damage powerhouse against Champions and majors. Landing consecutive shots procs Kinetic Tremors to unleash heavy area-of-effect shockwaves, while Rewind Rounds automatically refills the magazine based on the number of hits you land. This synergy allows you to stay scoped in and continuously dish out punishment without breaking your aim to reload."
+    },
+    "pvp": {
+      "barrel": "Arrowhead Brake",
+      "mag": "Ricochet Rounds",
+      "perk1": "Moving Target",
+      "perk2": "Snapshot Sights / Opening Shot",
+      "masterwork": "Range / Handling",
+      "notes": "This setup is engineered for premium lane dueling and quick-scoping in the Crucible. Moving Target provides a crucial boost to aim assist and strafe speed while aiming down sights. You can pair it with Snapshot Sights for instantaneous ADS speeds during highly mobile engagements, or swap to Opening Shot to guarantee maximum accuracy and bullet magnetism on your initial peek."
+    }
+  },
+  {
+    "id": "roll-felwinter-s-lie-1276",
+    "name": "Felwinter's Lie",
+    "slot": "Energy",
+    "type": "Shotgun",
+    "element": "Solar",
+    "frame": "Shot Package",
+    "source": "Iron Banner",
+    "pve": {
+      "barrel": "Rifled Barrel",
+      "mag": "Accurized Rounds",
+      "perk1": "Heal Clip",
+      "perk2": "Incandescent",
+      "masterwork": "Reload Speed / Range",
+      "notes": "This setup transforms the shotgun into a powerful close-quarters Solar utility engine. Securing eliminations with Incandescent spreads Scorch to nearby enemy groups, priming them for massive Ignitions. Following up with a quick reload triggers Heal Clip, granting Cure to keep you and your nearby fireteam members alive in the thick of the fight. Opting for a Reload Speed masterwork ensures you can activate this healing loop as quickly as possible."
+    },
+    "pvp": {
+      "barrel": "Barrel Shroud / Rifled Barrel",
+      "mag": "Accurized Rounds",
+      "perk1": "Slideshot / Threat Detector",
+      "perk2": "Opening Shot",
+      "masterwork": "Range",
+      "notes": "This roll focuses strictly on maximizing your one-hit elimination consistency and responsiveness. Accurized Rounds paired with Opening Shot guarantees a massive boost to range and accuracy on your initial trigger pull, pushing the weapon's lethal boundaries to the limit. You can utilize Slideshot to aggressively close the gap while auto-reloading, or swap to Threat Detector alongside Barrel Shroud for top-tier handling, enabling incredibly snappy weapon swaps during tight engagements."
+    }
+  },
+  {
+    "id": "roll-epochal-integration-5e81",
+    "name": "Epochal Integration",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Solar",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Neomuna (or Nimbus once finished Lightfall)",
+    "pve": {
+      "barrel": "Corkscrew Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Explosive Payload",
+      "perk2": "Incandescent",
+      "masterwork": "Range",
+      "notes": "This is a top-tier Solar ad-clear setup. Explosive Payload provides a flat damage boost to every shot while mitigating damage falloff, making it highly effective for staggering combatants in higher-tier content. Pairing this with Incandescent spreads Scorch to grouped targets upon kills, feeding perfectly into Solar subclass synergies to chain massive Ignitions."
+    },
+    "pvp": {
+      "barrel": "Hammer Forged Rifling / Corkscrew Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Slideshot / Opening Shot",
+      "perk2": "Precision Instrument",
+      "masterwork": "Range",
+      "notes": "This roll is built for maximum consistency and extending your engagement range. Opening Shot or Slideshot guarantees a massive boost to your accuracy and range for the opening volley. Following up with consecutive hits procs Precision Instrument, raising your critical damage just enough to push out your effective three-tap range and make dueling highly forgiving against high-resilience targets."
+    }
+  },
+  {
+    "id": "roll-nation-of-beasts-a3f9",
+    "name": "Nation of Beasts",
+    "slot": "Energy",
+    "type": "Hand Cannon",
+    "element": "Arc",
+    "frame": "Adaptive Frame (140 RPM)",
+    "source": "Last Wish Raid (Craftable)",
+    "pve": {
+      "barrel": "Hammer Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Dragon Fly / Gear Shift",
+      "perk2": "Voltshot / Jolting Feedback",
+      "masterwork": "Reload Speed / Range",
+      "notes": "This roll is an absolute ad-clear monster. Combining Dragon Fly's precision explosions with Voltshot's chain lightning creates massive Arc area-of-effect damage, allowing you to wipe out grouped enemies instantly. Opting for the Reload Speed masterwork is highly recommended to ensure you can quickly proc Voltshot after a kill."
+    },
+    "pvp": {
+      "barrel": "Hammer Forged Rifling",
+      "mag": "Accurized Rounds",
+      "perk1": "Gear Shift",
+      "perk2": "Kill Clip",
+      "masterwork": "Range",
+      "notes": "This roll is built for extending your engagement distance and snowballing duels. Hammer Forged Rifling, Accurized Rounds, and a Range masterwork work together to push your damage falloff as far out as possible. After securing your first elimination, reloading activates Kill Clip, granting a lethal damage boost that provides a highly forgiving time-to-kill for your next gunfight. Used by Content Creator, Aztecross himself!"
+    }
+  },
+  {
     "id": "roll-eyasluna-b910",
     "name": "Eyasluna",
     "slot": "Kinetic",

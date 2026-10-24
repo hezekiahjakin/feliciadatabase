@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261024_v13">
+  <link rel="stylesheet" href="styles.css?v=20261024_v15">
 </head>
 <body class="theme-vanguard">
 
@@ -112,12 +112,12 @@
               <div class="signin-feat-box">
                 <div class="feat-icon">🏛️</div>
                 <h4>1-Click Vault Transfers</h4>
-                <p>Send any weapon or armor piece directly between characters or your 700-slot Vault in seconds.</p>
+                <p>Send any weapon or armor piece directly between characters or your 1,300-slot Vault in seconds.</p>
               </div>
               <div class="signin-feat-box highlight">
                 <div class="feat-icon">❖</div>
                 <h4>Ask F.E.L.I.C.I.A.</h4>
-                <p>Click any gun to scan its perks against our Clan God Roll Finder—know instantly whether to lock or shard it.</p>
+                <p>Scan your entire Inventory &amp; Vault for PVE and PVP God Rolls and lock them all in one click.</p>
               </div>
             </div>
           </div>
@@ -164,7 +164,8 @@
               <button type="button" class="inv-pill" data-invfilter="Energy">Energy</button>
               <button type="button" class="inv-pill" data-invfilter="Heavy">Heavy</button>
               <button type="button" class="inv-pill" data-invfilter="armor">Armor</button>
-              <button type="button" class="inv-pill inv-pill-godroll" data-invfilter="godroll">★ Clan God Rolls</button>
+              <button type="button" class="inv-pill inv-pill-godroll" data-invfilter="godroll">★ My God Rolls</button>
+              <button type="button" class="inv-pill inv-btn-scan-godrolls" id="btnScanGodRolls">❖ Scan God Rolls</button>
             </div>
           </div>
 
@@ -1289,6 +1290,78 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261024_v14"></script>
+  <!-- MODAL: F.E.L.I.C.I.A. INVENTORY & VAULT GOD ROLL SCANNER -->
+  <dialog class="hud-modal modal-godroll-scanner" id="modalGodRollScanner" closedby="any" aria-labelledby="scannerModalTitle">
+    <div class="modal-content scanner-modal-content">
+      <div class="scanner-header">
+        <div class="scanner-header-left">
+          <div class="scanner-orb-badge">❖</div>
+          <div>
+            <div class="scanner-eyebrow">VANGUARD ARSENAL TELEMETRY // PVE &amp; PVP SWEEP</div>
+            <h3 class="scanner-title" id="scannerModalTitle">F.E.L.I.C.I.A. GOD ROLL SCANNER</h3>
+          </div>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="btn-modal-close" aria-label="Close God Roll Scanner">&times;</button>
+        </form>
+      </div>
+
+      <div class="modal-body scanner-modal-body">
+        <!-- F.E.L.I.C.I.A. Readout & Stats -->
+        <div class="scanner-summary-card" id="scannerSummaryCard">
+          <div class="scanner-felicia-msg" id="scannerFeliciaMsg">Scanning Characters &amp; Vault...</div>
+          <div class="scanner-kpi-strip" id="scannerKpiStrip"></div>
+        </div>
+
+        <!-- Filter Pills + Lock All God Rolls Action Bar -->
+        <div class="scanner-action-bar">
+          <div class="scanner-filter-pills" id="scannerFilterPills">
+            <button type="button" class="inv-pill active" data-scanfilter="all" id="scanPillAll">All God Rolls</button>
+            <button type="button" class="inv-pill" data-scanfilter="pve" id="scanPillPve">⚔️ PVE</button>
+            <button type="button" class="inv-pill" data-scanfilter="pvp" id="scanPillPvp">🎯 PVP</button>
+            <button type="button" class="inv-pill" data-scanfilter="unlocked" id="scanPillUnlocked">🔓 Unlocked</button>
+          </div>
+          <div class="scanner-cta-group">
+            <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnResyncScanner">🔄 Re-Scan</button>
+            <button type="button" class="btn-lock-all-godrolls" id="btnLockAllGodRolls">🔒 Lock All God Rolls</button>
+          </div>
+        </div>
+
+        <div class="inspect-transfer-feedback hidden" id="scannerLockFeedback"></div>
+
+        <!-- Scanned God Rolls List -->
+        <div class="scanner-results-list" id="scannerResultsList"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: SAVED CHARACTER LOADOUT INSPECTOR -->
+  <dialog class="hud-modal modal-saved-loadout" id="modalSavedLoadout" closedby="any" aria-labelledby="savedLoadoutTitle">
+    <div class="modal-content saved-loadout-modal-content">
+      <div class="saved-loadout-banner">
+        <div class="saved-loadout-badge-lg" id="savedLoadoutBadgeLg">
+          <img id="savedLoadoutIconLg" src="" alt="" width="36" height="36">
+        </div>
+        <div class="saved-loadout-title-wrap">
+          <div class="scanner-eyebrow" id="savedLoadoutSubtitle">CHARACTER SAVED LOADOUT</div>
+          <h3 class="scanner-title" id="savedLoadoutTitle">LOADOUT NAME</h3>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="btn-modal-close" aria-label="Close Saved Loadout">&times;</button>
+        </form>
+      </div>
+
+      <div class="modal-body saved-loadout-body">
+        <div class="saved-loadout-actions">
+          <button type="button" class="btn-item-action" id="btnEquipSavedLoadout">⚡ Equip Loadout In-Game</button>
+          <button type="button" class="btn-item-action btn-ask-felicia" id="btnAskFeliciaLoadout">❖ Ask F.E.L.I.C.I.A. to Review Loadout</button>
+        </div>
+        <div class="inspect-transfer-feedback hidden" id="savedLoadoutFeedback"></div>
+        <div id="savedLoadoutItemsContainer"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=20261024_v15"></script>
 </body>
 </html>
