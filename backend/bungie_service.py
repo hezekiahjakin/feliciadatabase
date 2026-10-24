@@ -750,9 +750,9 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         "player": membership,
         "characters": characters_list,
         "vault": {
-            "count": len(vault_raw),
+            "count": len(vault_gear_candidates),
             "gearCount": len(vault_items),
-            "capacity": 700,
+            "capacity": 1300,
             "items": vault_items,
         },
     }

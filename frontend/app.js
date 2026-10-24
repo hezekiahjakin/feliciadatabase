@@ -1601,7 +1601,7 @@ function renderInventoryHeaderAndSwitcher() {
   vaultBtn.className = `switcher-card vault-card ${state.activeInventoryView === 'vault' ? 'active' : ''}`;
   const vCount = data.vault?.gearCount ?? 0;
   const vTotal = data.vault?.count ?? vCount;
-  const vCap = data.vault?.capacity ?? 700;
+  const vCap = data.vault?.capacity ?? 1300;
   vaultBtn.innerHTML = `
     <div class="switcher-info">
       <span class="switcher-class">🏛️ THE VAULT</span>
