@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261024_v15">
+  <link rel="stylesheet" href="styles.css?v=20261024_v16">
 </head>
 <body class="theme-vanguard">
 
@@ -164,7 +164,7 @@
               <button type="button" class="inv-pill" data-invfilter="Energy">Energy</button>
               <button type="button" class="inv-pill" data-invfilter="Heavy">Heavy</button>
               <button type="button" class="inv-pill" data-invfilter="armor">Armor</button>
-              <button type="button" class="inv-pill inv-pill-godroll" data-invfilter="godroll">★ My God Rolls</button>
+              <button type="button" class="inv-pill inv-pill-godroll hidden" id="btnMyGodRollsFilter" data-invfilter="godroll">★ My God Rolls</button>
               <button type="button" class="inv-pill inv-btn-scan-godrolls" id="btnScanGodRolls">❖ Scan God Rolls</button>
             </div>
           </div>
@@ -1362,6 +1362,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261024_v15"></script>
+  <script type="module" src="app.js?v=20261024_v16"></script>
 </body>
 </html>

@@ -1446,11 +1446,45 @@ function startBungieLogin() {
   window.location.href = `/api/auth/bungie/login?origin=${origin}`;
 }
 
+function getGodRollScanFlagKey() {
+  const mid = state.bungieSession?.membership_id || state.bungieData?.player?.destinyMembershipId || 'default';
+  return `felicia_has_scanned_godrolls_${mid}`;
+}
+
+function hasScannedGodRollsBefore() {
+  try {
+    return localStorage.getItem(getGodRollScanFlagKey()) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function markGodRollsScanned() {
+  try {
+    localStorage.setItem(getGodRollScanFlagKey(), 'true');
+  } catch (e) {}
+  syncMyGodRollsButtonVisibility();
+}
+
+function syncMyGodRollsButtonVisibility() {
+  const myGrBtn = document.getElementById('btnMyGodRollsFilter');
+  if (!myGrBtn) return;
+  const unlocked = Boolean(state.bungieSession && state.bungieSession.access_token && hasScannedGodRollsBefore());
+  myGrBtn.classList.toggle('hidden', !unlocked);
+  if (!unlocked && state.invFilter.slot === 'godroll') {
+    state.invFilter.slot = 'all';
+    document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(p => {
+      p.classList.toggle('active', p.dataset.invfilter === 'all');
+    });
+  }
+}
+
 function disconnectBungieAccount() {
   sfx.playChirp();
   saveBungieSession(null);
   state.bungieData = null;
   state.activeInventoryView = null;
+  state.loadoutsDrawerOpen = {};
   updateBungieAuthUI();
 }
 
@@ -1472,6 +1506,7 @@ function updateBungieAuthUI() {
     if (headerPill) headerPill.classList.remove('linked');
     if (headerText) headerText.textContent = 'Sign In with Bungie';
   }
+  syncMyGodRollsButtonVisibility();
 }
 
 async function fetchBungieServerConfigStatus() {
@@ -1600,11 +1635,11 @@ function renderInventoryHeaderAndSwitcher() {
     });
     colWrap.appendChild(btn);
 
-    // Saved In-Game Loadouts Strip directly under this Character
+    // Saved In-Game Loadouts Strip directly under this Character (minimized by default until clicked)
     const loadouts = ch.loadouts || [];
     const details = document.createElement('details');
     details.className = 'char-loadouts-details';
-    if (state.loadoutsDrawerOpen[ch.characterId] !== false) {
+    if (state.loadoutsDrawerOpen[ch.characterId] === true) {
       details.setAttribute('open', '');
     }
     details.addEventListener('toggle', () => {
@@ -2515,6 +2550,7 @@ function collectInventoryAndVaultGodRolls() {
 function openGodRollScannerModal() {
   if (!state.bungieData) return;
   sfx.playTransmit();
+  markGodRollsScanned();
   state.scannerFilter = 'all';
 
   document.querySelectorAll('#scannerFilterPills .inv-pill').forEach(p => {
