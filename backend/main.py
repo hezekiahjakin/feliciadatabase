@@ -935,7 +935,7 @@ def _is_trusted_return_origin(origin: str) -> bool:
         return False
     return bool(
         re.match(
-            r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|[a-z0-9-]+\.trycloudflare\.com|[a-z0-9-]+\.onrender\.com)(:\d+)?$",
+            r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|[a-z0-9-]+\.trycloudflare\.com|[a-z0-9-]+\.onrender\.com)(:\d+)?$",
             origin.strip(),
             re.IGNORECASE,
         )
@@ -1008,7 +1008,9 @@ async def bungie_oauth_callback(request: Request, code: Optional[str] = None, st
             return_origin = ""
 
     creds = get_bungie_credentials()
-    req_origin = f"{request.url.scheme}://{request.url.netloc}".rstrip("/")
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host", request.url.netloc).split(",")[0].strip()
+    req_origin = f"{scheme}://{host}".rstrip("/")
 
     # If redirected to Render while developing locally and Render doesn't have secret set yet, forward code to local origin
     if not creds["client_secret"] and return_origin and return_origin != req_origin:
@@ -1020,10 +1022,10 @@ async def bungie_oauth_callback(request: Request, code: Optional[str] = None, st
         return HTMLResponse(
             content=f"""<!DOCTYPE html><html><body style="background:#0B0E14;color:#F8FAFC;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px;">
             <div style="max-width:520px;border:1px solid rgba(239,68,68,0.4);padding:28px;border-radius:12px;background:#111622;">
-              <h2 style="color:#F5A623;margin-top:0;">Bungie Handshake Incomplete</h2>
+              <h2 style="color:#F5A623;margin-top:0;">Bungie Sign-In Retry Needed</h2>
               <p style="color:#CBD5E1;line-height:1.5;">{str(e)}</p>
-              <p style="color:#94A3B8;font-size:13px;">Clan Admin: Open <strong>Admin Settings (⚙️)</strong> or Render Environment Variables and ensure your <code>BUNGIE_API_KEY</code> and <code>BUNGIE_CLIENT_SECRET</code> are saved.</p>
-              <a href="/" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#F5A623;color:#0B0E14;text-decoration:none;font-weight:bold;border-radius:6px;">Return to Home</a>
+              <p style="color:#94A3B8;font-size:13px;">Authorization codes are single-use and expire quickly. Click below to return home and tap <strong>Sign In with Bungie.net</strong> once more.</p>
+              <a href="/" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#F5A623;color:#0B0E14;text-decoration:none;font-weight:bold;border-radius:6px;">Return to F.E.L.I.C.I.A.</a>
             </div></body></html>""",
             status_code=500,
         )

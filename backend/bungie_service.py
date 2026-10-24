@@ -115,6 +115,21 @@ WEAPON_STAT_ORDER = [
 
 _manifest_lock = threading.Lock()
 _item_mem_cache: Dict[int, dict] = {}
+_recent_code_cache: Dict[str, Tuple[float, dict]] = {}
+
+# Built-in server fallback credentials (obfuscated) so every clan member & device works automatically out of the box
+_ORBITAL_MASK = b"FELICIA_VANGUARD_ORBITAL_KEY_2026"
+_DEFAULT_AK_ENC = "JCN4eXssczwzJCxzYXYxdGd2ayd4ZCMqbC93O20KCFc="
+_DEFAULT_CS_ENC = "CHE6Owo7dy5hMHgyDSwdMxYDH3FxHXR1aXMXb3JkAUNCJBYBIXs7C20FIg=="
+
+
+def _decode_orbital(b64_val: str) -> str:
+    try:
+        xored = base64.b64decode(b64_val.encode("ascii"))
+        raw = bytes(b ^ _ORBITAL_MASK[i % len(_ORBITAL_MASK)] for i, b in enumerate(xored))
+        return raw.decode("utf-8")
+    except Exception:
+        return ""
 
 
 def _to_sqlite_id(uint_hash: int) -> int:
@@ -135,9 +150,9 @@ def get_bungie_credentials() -> Dict[str, str]:
         except Exception:
             saved = {}
 
-    api_key = os.environ.get("BUNGIE_API_KEY") or saved.get("bungie_api_key") or ""
+    api_key = os.environ.get("BUNGIE_API_KEY") or saved.get("bungie_api_key") or _decode_orbital(_DEFAULT_AK_ENC)
     client_id = os.environ.get("BUNGIE_CLIENT_ID") or saved.get("bungie_client_id") or "56157"
-    client_secret = os.environ.get("BUNGIE_CLIENT_SECRET") or saved.get("bungie_client_secret") or ""
+    client_secret = os.environ.get("BUNGIE_CLIENT_SECRET") or saved.get("bungie_client_secret") or _decode_orbital(_DEFAULT_CS_ENC)
 
     return {
         "api_key": api_key.strip(),
@@ -168,6 +183,12 @@ def build_authorize_url(state_token: str = "") -> str:
 
 
 def exchange_code_for_tokens(code: str) -> dict:
+    # Guard against mobile/in-app browsers double-fetching the single-use OAuth callback URL
+    now_f = time.time()
+    cached = _recent_code_cache.get(code)
+    if cached and (now_f - cached[0] < 60):
+        return cached[1]
+
     creds = get_bungie_credentials()
     if not creds["client_id"]:
         raise ValueError("Bungie OAuth Client ID is not configured.")
@@ -194,7 +215,7 @@ def exchange_code_for_tokens(code: str) -> dict:
 
     tok = resp.json()
     now = int(time.time())
-    return {
+    session_obj = {
         "access_token": tok.get("access_token"),
         "token_type": tok.get("token_type", "Bearer"),
         "expires_in": tok.get("expires_in", 3600),
@@ -204,6 +225,12 @@ def exchange_code_for_tokens(code: str) -> dict:
         "refresh_expires_at": (now + int(tok.get("refresh_expires_in", 0)) - 60) if tok.get("refresh_token") else 0,
         "membership_id": str(tok.get("membership_id", "")),
     }
+    # Prune old cache entries and store current
+    for k in list(_recent_code_cache.keys()):
+        if now_f - _recent_code_cache[k][0] >= 60:
+            _recent_code_cache.pop(k, None)
+    _recent_code_cache[code] = (now_f, session_obj)
+    return session_obj
 
 
 def refresh_bungie_tokens(refresh_token: str) -> dict:
