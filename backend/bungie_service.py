@@ -692,42 +692,46 @@ def _enrich_item(
                 total_armor_stats += val
 
     # Calculate Gear Tier (Tier 1 through Tier 5 tracking, matching Destiny 2 in-game, light.gg & DIM)
-    api_gear_tier = inst.get("gearTier") or raw_item.get("gearTier")
-    gear_tier: Optional[int] = None
-    if api_gear_tier is not None and isinstance(api_gear_tier, (int, float)) and 1 <= int(api_gear_tier) <= 5:
-        gear_tier = int(api_gear_tier)
+    # NOTE: In Destiny 2, Exotics and Artifacts NEVER have the Tier system.
+    if tier_name == "Exotic" or category == "Artifact":
+        gear_tier = None
     else:
-        # Fallback appraisal based on category, stats, perks, and crafting/masterwork state
-        if category == "Armor":
-            is_artifice = any("artifice" in m.get("name", "").lower() for m in mods_list) or any("artifice" in p.get("name", "").lower() for p in active_perks)
-            if total_armor_stats >= 64 or is_artifice or (tier_name == "Exotic" and total_armor_stats >= 60):
-                gear_tier = 5
-            elif total_armor_stats >= 60:
-                gear_tier = 4
-            elif total_armor_stats >= 56:
-                gear_tier = 3
-            elif total_armor_stats >= 50:
-                gear_tier = 2
-            elif total_armor_stats > 0:
-                gear_tier = 1
-            else:
-                gear_tier = 5 if tier_name == "Exotic" else (4 if tier_name == "Legendary" else 2)
-        elif category == "Weapon":
-            w_name_low = d.get("name", "").lower()
-            is_adept = any(tag in w_name_low for tag in ["(adept)", "(timelost)", "(harrowed)"])
-            enhanced_count = sum(1 for p in active_perks if "(enhanced)" in p.get("name", "").lower() or "enhanced" in p.get("description", "").lower())
-            is_crafted = bool(state_bits & 8)
-            is_mw = bool(state_bits & 4)
-            if tier_name == "Exotic" or is_adept or enhanced_count >= 2:
-                gear_tier = 5
-            elif is_crafted or enhanced_count >= 1:
-                gear_tier = 4
-            elif is_mw:
-                gear_tier = 3
-            elif tier_name == "Legendary":
-                gear_tier = 2
-            else:
-                gear_tier = 1
+        api_gear_tier = inst.get("gearTier") or raw_item.get("gearTier")
+        gear_tier = None
+        if api_gear_tier is not None and isinstance(api_gear_tier, (int, float)) and 1 <= int(api_gear_tier) <= 5:
+            gear_tier = int(api_gear_tier)
+        else:
+            # Fallback appraisal based on category, stats, perks, and crafting/masterwork state
+            if category == "Armor":
+                is_artifice = any("artifice" in m.get("name", "").lower() for m in mods_list) or any("artifice" in p.get("name", "").lower() for p in active_perks)
+                if total_armor_stats >= 64 or is_artifice:
+                    gear_tier = 5
+                elif total_armor_stats >= 60:
+                    gear_tier = 4
+                elif total_armor_stats >= 56:
+                    gear_tier = 3
+                elif total_armor_stats >= 50:
+                    gear_tier = 2
+                elif total_armor_stats > 0:
+                    gear_tier = 1
+                else:
+                    gear_tier = 4 if tier_name == "Legendary" else 2
+            elif category == "Weapon":
+                w_name_low = d.get("name", "").lower()
+                is_adept = any(tag in w_name_low for tag in ["(adept)", "(timelost)", "(harrowed)"])
+                enhanced_count = sum(1 for p in active_perks if "(enhanced)" in p.get("name", "").lower() or "enhanced" in p.get("description", "").lower())
+                is_crafted = bool(state_bits & 8)
+                is_mw = bool(state_bits & 4)
+                if is_adept or enhanced_count >= 2:
+                    gear_tier = 5
+                elif is_crafted or enhanced_count >= 1:
+                    gear_tier = 4
+                elif is_mw:
+                    gear_tier = 3
+                elif tier_name == "Legendary":
+                    gear_tier = 2
+                else:
+                    gear_tier = 1
 
     return {
         "itemInstanceId": instance_id,

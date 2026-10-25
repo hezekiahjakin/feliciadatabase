@@ -307,11 +307,14 @@
     "element": "Kinetic",
     "frame": "Lightweight Frame (140 RPM)",
     "source": "Crucible Competitive Playlist",
+    "tier": "Legendary",
+    "template": "legendary",
     "pve": {
       "barrel": "Smallbore",
       "mag": "Tactical Mag",
       "perk1": "Rapid Hit",
       "perk2": "Explosive Payload",
+      "originTrait": "Any Grip",
       "masterwork": "Reload Speed",
       "notes": "Lightweight bonus +20 Mobility and fast handling makes it snappy for kinetic primary ad clearing."
     },
@@ -319,7 +322,8 @@
       "barrel": "Smallbore / Hammer-Forged",
       "mag": "Accurized Rounds",
       "perk1": "Slideshot",
-      "perk2": "Opening Shot / Eye of the Storm / Precision Instrument",
+      "perk2": "Precision Instrument / Eye of the Storm / Precision Instrument",
+      "originTrait": "Any Grip",
       "masterwork": "Range",
       "notes": "Fastest feeling hand cannon in Destiny 2. Slideshot refunds ammo and boosts range + stability continuously in skirmishes."
     }

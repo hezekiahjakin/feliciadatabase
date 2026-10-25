@@ -1821,23 +1821,27 @@ function renderInventoryHeaderAndSwitcher() {
 }
 
 function resolveItemGearTier(item) {
-  if (!item || item.category === 'Artifact' || item.slot === 'Artifact') return null;
+  if (!item || item.category === 'Artifact' || item.slot === 'Artifact' || item.isExotic || item.tierName === 'Exotic' || item.tierType === 6) {
+    if (item) item.gearTier = null;
+    return null;
+  }
   const rawTier = parseInt(item.gearTier, 10);
   if (!isNaN(rawTier) && rawTier >= 1 && rawTier <= 5) {
     return rawTier;
   }
 
   // Client-side fallback evaluator matching Destiny 2 / Light.gg / DIM
+  // NOTE: In Destiny 2, Exotics and Seasonal Artifacts NEVER have the Tier system.
   if (item.category === 'Armor') {
     const totalStats = item.totalStats || (item.stats || []).reduce((acc, s) => acc + (s.value || 0), 0);
     const isArtifice = (item.activePerks || []).some(p => (p.name || '').toLowerCase().includes('artifice')) ||
                        (item.mods || []).some(m => (m.name || '').toLowerCase().includes('artifice'));
-    if (totalStats >= 64 || isArtifice || (item.isExotic && totalStats >= 60)) return 5;
+    if (totalStats >= 64 || isArtifice) return 5;
     if (totalStats >= 60) return 4;
     if (totalStats >= 56) return 3;
     if (totalStats >= 50) return 2;
     if (totalStats > 0) return 1;
-    return item.isExotic ? 5 : (item.tierName === 'Legendary' ? 4 : 2);
+    return item.tierName === 'Legendary' ? 4 : 2;
   }
 
   if (item.category === 'Weapon') {
@@ -1846,7 +1850,7 @@ function resolveItemGearTier(item) {
     const enhancedCount = (item.activePerks || []).filter(p =>
       (p.name || '').toLowerCase().includes('(enhanced)') || (p.description || '').toLowerCase().includes('enhanced')
     ).length;
-    if (item.isExotic || isAdept || enhancedCount >= 2) return 5;
+    if (isAdept || enhancedCount >= 2) return 5;
     if (item.isCrafted || enhancedCount >= 1) return 4;
     if (item.isMasterworked) return 3;
     if (item.tierName === 'Legendary') return 2;
@@ -1967,10 +1971,11 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     ? `<span class="compendium-set-pill">⛊ ${escapeHtml(item.compendiumSet.name)}</span>`
     : '';
 
-  const resolvedTier = resolveItemGearTier(item);
+  const isExotic = item.isExotic || item.tierName === 'Exotic';
+  const resolvedTier = isExotic ? null : resolveItemGearTier(item);
   item.gearTier = resolvedTier;
-  const tierStars = renderTierStarsHtml(resolvedTier);
-  const tierPill = (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
+  const tierStars = (!isExotic && resolvedTier) ? renderTierStarsHtml(resolvedTier) : '';
+  const tierPill = (!isExotic && resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
     ? `<span class="gear-tier-pill t${resolvedTier}">T${resolvedTier}</span>`
     : '';
 
@@ -2234,12 +2239,13 @@ function openItemInspectModal(item) {
     const modal = document.getElementById('modalInspectItem');
     if (!modal) return;
 
-    const resolvedTier = resolveItemGearTier(item);
+    const isExotic = item.isExotic || item.tierName === 'Exotic';
+    const resolvedTier = isExotic ? null : resolveItemGearTier(item);
     item.gearTier = resolvedTier;
 
     const banner = document.getElementById('inspectBanner');
     if (banner) {
-      banner.className = `inspect-banner ${item.isExotic ? 'tier-exotic' : 'tier-legendary'}`;
+      banner.className = `inspect-banner ${isExotic ? 'tier-exotic' : 'tier-legendary'}`;
     }
 
     const iconEl = document.getElementById('inspectItemIcon');
@@ -2252,6 +2258,8 @@ function openItemInspectModal(item) {
     if (tierBadge) {
       if (item.category === 'Artifact') {
         tierBadge.textContent = 'SEASONAL';
+      } else if (isExotic) {
+        tierBadge.textContent = 'EXOTIC';
       } else if (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5) {
         tierBadge.textContent = `TIER ${resolvedTier} • ${(item.tierName || 'Legendary').toUpperCase()}`;
       } else {
@@ -2261,7 +2269,7 @@ function openItemInspectModal(item) {
 
     const tierStarsWrap = document.getElementById('inspectTierStars');
     if (tierStarsWrap) {
-      tierStarsWrap.innerHTML = resolvedTier ? renderTierStarsHtml(resolvedTier).replace(/^<div[^>]*>|<\/div>$/g, '') : '';
+      tierStarsWrap.innerHTML = (!isExotic && resolvedTier) ? renderTierStarsHtml(resolvedTier).replace(/^<div[^>]*>|<\/div>$/g, '') : '';
     }
 
     const elemBadge = document.getElementById('inspectElemBadge');
@@ -2292,7 +2300,7 @@ function openItemInspectModal(item) {
     const sublineEl = document.getElementById('inspectSubline');
     if (sublineEl) {
       const tNum = parseInt(resolvedTier, 10);
-      const tierPrefix = (Number.isInteger(tNum) && tNum >= 1 && tNum <= 5) ? `Tier ${tNum} (${'✦'.repeat(tNum)}) • ` : '';
+      const tierPrefix = (!isExotic && Number.isInteger(tNum) && tNum >= 1 && tNum <= 5) ? `Tier ${tNum} (${'✦'.repeat(tNum)}) • ` : '';
       if (item.category === 'Artifact') {
         sublineEl.textContent = `${item.powerBonus ? `+${item.powerBonus} Bonus Power • ` : ''}Seasonal Artifact`;
       } else if (item.category === 'Armor' && item.armorEvaluation) {
@@ -3284,10 +3292,11 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
     primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one">${lockBtnLabel}</button>`;
   }
 
-  const resolvedTier = resolveItemGearTier(it);
+  const isExotic = it.isExotic || it.tierName === 'Exotic';
+  const resolvedTier = isExotic ? null : resolveItemGearTier(it);
   it.gearTier = resolvedTier;
-  const scannerTierStars = renderTierStarsHtml(resolvedTier);
-  const scannerTierPill = (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
+  const scannerTierStars = (!isExotic && resolvedTier) ? renderTierStarsHtml(resolvedTier) : '';
+  const scannerTierPill = (!isExotic && resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
     ? `<span class="gear-tier-pill t${resolvedTier}">T${resolvedTier}</span>`
     : '';
 
