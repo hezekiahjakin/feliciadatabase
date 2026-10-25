@@ -371,6 +371,7 @@ def _slim_item_def(raw: dict) -> dict:
         "isInstanceItem": inv.get("isInstanceItem", False),
         "plugCategoryIdentifier": plug.get("plugCategoryIdentifier", "") if plug else "",
         "socketCategories": socket_cats,
+        "preview": raw.get("preview", {}),
     }
 
 
@@ -967,7 +968,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     m_id = membership["destinyMembershipId"]
 
     profile = _bungie_get(
-        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,104,200,201,205,206,300,304,305,310",
+        f"/Destiny2/{m_type}/Profile/{m_id}/?components=100,102,104,200,201,202,205,206,300,304,305,310",
         creds["api_key"],
         access_token,
     )
@@ -976,6 +977,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     char_equip_raw = profile.get("characterEquipment", {}).get("data", {})
     char_inv_raw = profile.get("characterInventories", {}).get("data", {})
     char_loadouts_raw = profile.get("characterLoadouts", {}).get("data", {})
+    char_progs_raw = profile.get("characterProgressions", {}).get("data", {})
     vault_raw = profile.get("profileInventory", {}).get("data", {}).get("items", [])
     seasonal_raw = profile.get("profileProgression", {}).get("data", {}).get("seasonalArtifact", {})
 
@@ -986,6 +988,28 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
     # Gather every item hash, socket plug hash, loadout plug hash, and artifact perk for 1-shot SQLite batch resolution
     all_hashes: Set[int] = set()
+
+    # Track character-specific artifact progressions (Component 202)
+    char_artifact_prog: Dict[str, dict] = {}
+    for cid_p, cp in char_progs_raw.items():
+        c_art = cp.get("seasonalArtifact", {})
+        if c_art:
+            c_perks = []
+            for t in c_art.get("tiers", []):
+                for uph in t.get("unlockedPlugHashes", []):
+                    if uph:
+                        u_int = int(uph)
+                        c_perks.append(u_int)
+                        all_hashes.add(u_int)
+            c_ih = int(c_art.get("artifactItemHash", 0))
+            if c_ih:
+                all_hashes.add(c_ih)
+            char_artifact_prog[cid_p] = {
+                "artifactItemHash": c_ih,
+                "powerBonus": int(c_art.get("powerBonus", 0)),
+                "pointsAcquired": int(c_art.get("pointsAcquired", 0)),
+                "unlockedPlugHashes": c_perks,
+            }
 
     art_item_hash = int(seasonal_raw.get("artifactItemHash", 0)) if seasonal_raw else 0
     art_power_bonus = int(seasonal_raw.get("powerBonus", 0)) if seasonal_raw else 0
@@ -998,6 +1022,17 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                     u_int = int(uph)
                     active_perk_hashes.append(u_int)
                     all_hashes.add(u_int)
+    for c_info in char_artifact_prog.values():
+        for uph in c_info.get("unlockedPlugHashes", []):
+            if uph not in active_perk_hashes:
+                active_perk_hashes.append(uph)
+                all_hashes.add(uph)
+        if not art_power_bonus and c_info.get("powerBonus"):
+            art_power_bonus = c_info["powerBonus"]
+        if not art_points and c_info.get("pointsAcquired"):
+            art_points = c_info["pointsAcquired"]
+        if not art_item_hash and c_info.get("artifactItemHash"):
+            art_item_hash = c_info["artifactItemHash"]
     if art_item_hash:
         all_hashes.add(art_item_hash)
 
@@ -1032,6 +1067,88 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     _collect_item_hashes(vault_gear_candidates)
 
     defs = resolve_item_definitions(all_hashes, creds["api_key"])
+
+    # Ensure all artifact perk definitions from preview.derivedItemCategories are also resolved
+    artifact_perk_hashes: Set[int] = set()
+    for ih, d in list(defs.items()):
+        if int(d.get("bucketTypeHash", 0)) == BUCKET_SEASONAL_ARTIFACT or d.get("itemType") == 28:
+            cats = d.get("preview", {}).get("derivedItemCategories", [])
+            for c in cats:
+                for pit in c.get("items", []):
+                    ph = pit.get("itemHash")
+                    if ph:
+                        artifact_perk_hashes.add(int(ph))
+
+    if artifact_perk_hashes:
+        extra_defs = resolve_item_definitions(artifact_perk_hashes, creds["api_key"])
+        defs.update(extra_defs)
+
+    def _resolve_artifact_perks_for_item(
+        art_item: dict,
+        owner_cid: str = "",
+        saved_plug_hashes: Optional[List[int]] = None,
+    ) -> List[dict]:
+        perks_found: List[dict] = []
+        seen_names = set()
+
+        def _add_perk(p_hash: int):
+            pdef = defs.get(int(p_hash))
+            if not pdef or not pdef.get("name") or pdef["name"] in seen_names:
+                return
+            if pdef["name"].startswith("Act ") or "Reset Artifact" in pdef["name"]:
+                return
+            seen_names.add(pdef["name"])
+            perks_found.append({
+                "hash": int(p_hash),
+                "name": pdef["name"],
+                "icon": pdef.get("icon", ""),
+                "description": pdef.get("description", ""),
+            })
+
+        # 1. Saved loadout plug hashes
+        if saved_plug_hashes:
+            for ph in saved_plug_hashes:
+                pdef = defs.get(int(ph))
+                if pdef and (pdef.get("itemTypeDisplayName") == "Artifact Perk" or pdef.get("plugCategoryIdentifier") == "artifact_perks" or int(ph) in active_perk_hashes):
+                    _add_perk(ph)
+
+        # 2. Sockets on artifact instance
+        iid = str(art_item.get("itemInstanceId", ""))
+        if iid and iid in sockets_map:
+            for sk in sockets_map[iid].get("sockets", []):
+                ph = sk.get("plugHash")
+                if ph:
+                    pdef = defs.get(int(ph))
+                    if pdef and (pdef.get("itemTypeDisplayName") == "Artifact Perk" or pdef.get("plugCategoryIdentifier") == "artifact_perks"):
+                        _add_perk(ph)
+
+        # 3. Unlocked plug hashes from character progression
+        if owner_cid and owner_cid in char_artifact_prog:
+            for uph in char_artifact_prog[owner_cid].get("unlockedPlugHashes", []):
+                _add_perk(uph)
+
+        # 4. Unlocked plug hashes from profile progression
+        for uph in active_perk_hashes:
+            _add_perk(uph)
+
+        # 5. Preview derivedItemCategories if still empty
+        if not perks_found:
+            ih = int(art_item.get("itemHash", 0))
+            idef = defs.get(ih) or {}
+            cats = idef.get("preview", {}).get("derivedItemCategories", [])
+            for c in cats:
+                for pit in c.get("items", []):
+                    ph = pit.get("itemHash")
+                    if ph:
+                        pdef = defs.get(int(ph))
+                        if pdef and pdef.get("itemTypeDisplayName") == "Artifact Perk":
+                            _add_perk(ph)
+                            if len(perks_found) >= 7:
+                                break
+                if len(perks_found) >= 7:
+                    break
+
+        return perks_found
 
     # Build character summaries & inventories
     characters_list = []
@@ -1074,18 +1191,9 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             enriched = _enrich_item(raw_eq, defs, instances, stats_map, sockets_map, reusable_map, "character", cid, True)
             if enriched:
                 if enriched.get("category") == "Artifact":
-                    art_perks = []
-                    for uph in active_perk_hashes:
-                        pdef = defs.get(uph)
-                        if pdef and pdef.get("name"):
-                            art_perks.append({
-                                "name": pdef["name"],
-                                "icon": pdef.get("icon", ""),
-                                "description": pdef.get("description", ""),
-                            })
-                    enriched["powerBonus"] = art_power_bonus
-                    enriched["pointsAcquired"] = art_points
-                    enriched["activePerks"] = art_perks
+                    enriched["activePerks"] = _resolve_artifact_perks_for_item(enriched, cid)
+                    enriched["powerBonus"] = char_artifact_prog.get(cid, {}).get("powerBonus") or art_power_bonus or 1
+                    enriched["pointsAcquired"] = char_artifact_prog.get(cid, {}).get("pointsAcquired") or art_points or len(enriched["activePerks"])
                     equipped_artifact = enriched
 
                 equipped_items.append(enriched)
@@ -1094,16 +1202,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
         if not equipped_artifact and art_item_hash and art_item_hash in defs:
             art_def = defs[art_item_hash]
-            art_perks = []
-            for uph in active_perk_hashes:
-                pdef = defs.get(uph)
-                if pdef and pdef.get("name"):
-                    art_perks.append({
-                        "name": pdef["name"],
-                        "icon": pdef.get("icon", ""),
-                        "description": pdef.get("description", ""),
-                    })
-            equipped_artifact = {
+            fallback_art = {
                 "itemInstanceId": "",
                 "itemHash": art_item_hash,
                 "name": art_def.get("name", "Seasonal Artifact"),
@@ -1112,11 +1211,12 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                 "slot": "Artifact",
                 "typeName": "Seasonal Artifact",
                 "tierName": "Seasonal",
-                "powerBonus": art_power_bonus,
-                "pointsAcquired": art_points,
-                "activePerks": art_perks,
+                "powerBonus": char_artifact_prog.get(cid, {}).get("powerBonus") or art_power_bonus or 1,
+                "pointsAcquired": char_artifact_prog.get(cid, {}).get("pointsAcquired") or art_points or 0,
                 "isEquipped": True,
             }
+            fallback_art["activePerks"] = _resolve_artifact_perks_for_item(fallback_art, cid)
+            equipped_artifact = fallback_art
 
         bag_items = []
         postmaster_items = []
@@ -1140,6 +1240,10 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             loc = "postmaster" if is_pm else "character"
             enriched = _enrich_item(raw_inv, defs, instances, stats_map, sockets_map, reusable_map, loc, cid, False)
             if enriched:
+                if enriched.get("category") == "Artifact":
+                    enriched["activePerks"] = _resolve_artifact_perks_for_item(enriched, cid)
+                    enriched["powerBonus"] = char_artifact_prog.get(cid, {}).get("powerBonus") or art_power_bonus or 1
+                    enriched["pointsAcquired"] = char_artifact_prog.get(cid, {}).get("pointsAcquired") or art_points or len(enriched["activePerks"])
                 if is_pm:
                     postmaster_items.append(enriched)
                 else:
@@ -1170,6 +1274,10 @@ def fetch_guardian_inventory(access_token: str) -> dict:
     for raw_v in vault_gear_candidates:
         enriched = _enrich_item(raw_v, defs, instances, stats_map, sockets_map, reusable_map, "vault", "", False)
         if enriched:
+            if enriched.get("category") == "Artifact":
+                enriched["activePerks"] = _resolve_artifact_perks_for_item(enriched)
+                enriched["powerBonus"] = art_power_bonus or 1
+                enriched["pointsAcquired"] = art_points or len(enriched["activePerks"])
             vault_items.append(enriched)
             if enriched.get("itemInstanceId"):
                 gear_by_instance[enriched["itemInstanceId"]] = enriched
@@ -1206,9 +1314,18 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             ld_subclass = None
             ld_weapons = []
             ld_armor = []
+            ld_artifact = None
+            ld_art_plug_hashes: List[int] = []
             exotic_armor = None
             exotic_weapon = None
             missing_count = 0
+
+            # Gather any artifact plug hashes saved across this loadout's items
+            for li_k in ld_items:
+                for ph_k in li_k.get("plugItemHashes", []) or []:
+                    pdef_k = defs.get(int(ph_k))
+                    if pdef_k and (pdef_k.get("itemTypeDisplayName") == "Artifact Perk" or pdef_k.get("plugCategoryIdentifier") == "artifact_perks" or int(ph_k) in active_perk_hashes):
+                        ld_art_plug_hashes.append(int(ph_k))
 
             for li in active_refs:
                 iid = str(li.get("itemInstanceId", ""))
@@ -1242,11 +1359,21 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                         ld_armor.append(slim_g)
                         if g["isExotic"] and not exotic_armor:
                             exotic_armor = slim_g
+                    elif g["category"] == "Artifact":
+                        ld_artifact = dict(g)
                 else:
                     missing_count += 1
 
             ld_weapons.sort(key=lambda w: weapon_slot_order.get(w["slot"], 99))
             ld_armor.sort(key=lambda a: armor_slot_order.get(a["slot"], 99))
+
+            final_art = dict(ld_artifact) if ld_artifact else (dict(ch_obj["artifact"]) if ch_obj.get("artifact") else None)
+            if final_art:
+                final_art["activePerks"] = _resolve_artifact_perks_for_item(
+                    final_art,
+                    cid,
+                    saved_plug_hashes=ld_art_plug_hashes or None,
+                )
 
             saved_lds.append({
                 "loadoutIndex": idx,
@@ -1255,7 +1382,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                 "iconPath": ld_icon,
                 "colorPath": ld_color,
                 "subclass": ld_subclass,
-                "artifact": ch_obj.get("artifact"),
+                "artifact": final_art,
                 "exoticItem": exotic_armor or exotic_weapon,
                 "weapons": ld_weapons,
                 "armor": ld_armor,

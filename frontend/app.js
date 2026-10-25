@@ -2077,11 +2077,17 @@ function openItemInspectModal(item) {
   if (pipEl) pipEl.classList.toggle('hidden', !item.isCrafted);
 
   const tierBadge = document.getElementById('inspectTierBadge');
-  if (tierBadge) tierBadge.textContent = item.tierName || 'Legendary';
+  if (tierBadge) tierBadge.textContent = item.category === 'Artifact' ? 'SEASONAL' : (item.tierName || 'Legendary');
 
   const elemBadge = document.getElementById('inspectElemBadge');
   if (elemBadge) {
-    elemBadge.textContent = item.category === 'Weapon' ? item.element : `${item.classRestriction !== 'Any' ? item.classRestriction + ' ' : ''}Armor`;
+    if (item.category === 'Artifact') {
+      elemBadge.textContent = 'ARTIFACT';
+    } else if (item.category === 'Weapon') {
+      elemBadge.textContent = item.element;
+    } else {
+      elemBadge.textContent = `${item.classRestriction !== 'Any' ? item.classRestriction + ' ' : ''}Armor`;
+    }
   }
 
   const locBadge = document.getElementById('inspectLocBadge');
@@ -2127,60 +2133,85 @@ function openItemInspectModal(item) {
   if (actionsGrid) {
     actionsGrid.innerHTML = '';
     const chars = state.bungieData?.characters || [];
+    const activeChar = getActiveCharacter();
 
-    chars.forEach(ch => {
-      const isAlreadyOnThisChar = item.location === 'character' && item.characterId === ch.characterId;
-      if (!isAlreadyOnThisChar) {
-        const sendBtn = document.createElement('button');
-        sendBtn.type = 'button';
-        sendBtn.className = 'btn-item-action';
-        sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
-        sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
-        actionsGrid.appendChild(sendBtn);
-      } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className || item.category === 'Artifact')) {
+    if (item.category === 'Artifact') {
+      // Artifacts are account-wide in modern Destiny 2:
+      // If equipped on the active character: ONLY "Ask F.E.L.I.C.I.A."
+      // If not equipped on the active character: "Equip Artifact" + "Ask F.E.L.I.C.I.A."
+      const isEquippedOnActive = item.isEquipped && (!activeChar || item.characterId === activeChar.characterId);
+      if (!isEquippedOnActive && activeChar) {
         const equipBtn = document.createElement('button');
         equipBtn.type = 'button';
         equipBtn.className = 'btn-item-action';
-        equipBtn.innerHTML = `<span>⚡</span> Equip on ${escapeHtml(ch.className)}`;
-        equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', ch.characterId, ch.className));
+        equipBtn.innerHTML = `<span>⚡</span> Equip Artifact`;
+        equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', activeChar.characterId, activeChar.className));
         actionsGrid.appendChild(equipBtn);
       }
-    });
 
-    if (item.location !== 'vault') {
-      const vaultBtn = document.createElement('button');
-      vaultBtn.type = 'button';
-      vaultBtn.className = 'btn-item-action';
-      vaultBtn.innerHTML = `<span>🏛️</span> Send to Vault`;
-      vaultBtn.addEventListener('click', () => executeItemTransfer(item, 'vault', '', 'Vault'));
-      actionsGrid.appendChild(vaultBtn);
-    }
-
-    if (item.itemInstanceId && item.location !== 'postmaster') {
-      const lockBtn = document.createElement('button');
-      lockBtn.type = 'button';
-      lockBtn.className = 'btn-item-action';
-      const syncLockBtnLabel = () => {
-        lockBtn.innerHTML = item.isLocked ? `<span>🔒</span> Locked (Unlock)` : `<span>🔓</span> Lock Item`;
-      };
-      syncLockBtnLabel();
-      lockBtn.addEventListener('click', async () => {
-        lockBtn.disabled = true;
-        await toggleSingleItemLock(item, !item.isLocked);
-        syncLockBtnLabel();
-        lockBtn.disabled = false;
+      // Signature Action: Ask F.E.L.I.C.I.A.
+      const askBtn = document.createElement('button');
+      askBtn.type = 'button';
+      askBtn.className = 'btn-item-action btn-ask-felicia';
+      askBtn.id = 'btnTriggerAskFelicia';
+      askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
+      askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
+      actionsGrid.appendChild(askBtn);
+    } else {
+      chars.forEach(ch => {
+        const isAlreadyOnThisChar = item.location === 'character' && item.characterId === ch.characterId;
+        if (!isAlreadyOnThisChar) {
+          const sendBtn = document.createElement('button');
+          sendBtn.type = 'button';
+          sendBtn.className = 'btn-item-action';
+          sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
+          sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
+          actionsGrid.appendChild(sendBtn);
+        } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className)) {
+          const equipBtn = document.createElement('button');
+          equipBtn.type = 'button';
+          equipBtn.className = 'btn-item-action';
+          equipBtn.innerHTML = `<span>⚡</span> Equip on ${escapeHtml(ch.className)}`;
+          equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', ch.characterId, ch.className));
+          actionsGrid.appendChild(equipBtn);
+        }
       });
-      actionsGrid.appendChild(lockBtn);
-    }
 
-    // Signature Action: Ask F.E.L.I.C.I.A.
-    const askBtn = document.createElement('button');
-    askBtn.type = 'button';
-    askBtn.className = 'btn-item-action btn-ask-felicia';
-    askBtn.id = 'btnTriggerAskFelicia';
-    askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
-    askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
-    actionsGrid.appendChild(askBtn);
+      if (item.location !== 'vault') {
+        const vaultBtn = document.createElement('button');
+        vaultBtn.type = 'button';
+        vaultBtn.className = 'btn-item-action';
+        vaultBtn.innerHTML = `<span>🏛️</span> Send to Vault`;
+        vaultBtn.addEventListener('click', () => executeItemTransfer(item, 'vault', '', 'Vault'));
+        actionsGrid.appendChild(vaultBtn);
+      }
+
+      if (item.itemInstanceId && item.location !== 'postmaster') {
+        const lockBtn = document.createElement('button');
+        lockBtn.type = 'button';
+        lockBtn.className = 'btn-item-action';
+        const syncLockBtnLabel = () => {
+          lockBtn.innerHTML = item.isLocked ? `<span>🔒</span> Locked (Unlock)` : `<span>🔓</span> Lock Item`;
+        };
+        syncLockBtnLabel();
+        lockBtn.addEventListener('click', async () => {
+          lockBtn.disabled = true;
+          await toggleSingleItemLock(item, !item.isLocked);
+          syncLockBtnLabel();
+          lockBtn.disabled = false;
+        });
+        actionsGrid.appendChild(lockBtn);
+      }
+
+      // Signature Action: Ask F.E.L.I.C.I.A.
+      const askBtn = document.createElement('button');
+      askBtn.type = 'button';
+      askBtn.className = 'btn-item-action btn-ask-felicia';
+      askBtn.id = 'btnTriggerAskFelicia';
+      askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
+      askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
+      actionsGrid.appendChild(askBtn);
+    }
   }
 
   // Render Frame & Perk Columns (or Compendium Set Box for Armor)
@@ -2224,15 +2255,28 @@ function openItemInspectModal(item) {
       const perksArr = item.activePerks || [];
       if (perksArr.length > 0) {
         const artWrap = document.createElement('div');
-        artWrap.className = 'artifact-perks-wrap';
-        perksArr.forEach(p => {
-          const pChip = document.createElement('div');
-          pChip.className = 'artifact-perk-chip';
-          pChip.title = p.description || p.name;
-          const pImg = p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : '';
-          pChip.innerHTML = `${pImg}<span>${escapeHtml(p.name)}</span>`;
-          artWrap.appendChild(pChip);
-        });
+        artWrap.innerHTML = `
+          <div class="dim-artifact-strip">
+            ${item.icon ? `
+              <div class="dim-artifact-icon-wrap" title="${escapeHtml(item.name)} (Seasonal Artifact)">
+                <img src="https://www.bungie.net${item.icon}" alt="${escapeHtml(item.name)}">
+              </div>
+            ` : ''}
+            ${perksArr.map(p => `
+              <div class="dim-artifact-perk" title="${escapeHtml(p.name)}${p.description ? ': ' + escapeHtml(p.description) : ''}">
+                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="${escapeHtml(p.name)}">` : ''}
+              </div>
+            `).join('')}
+          </div>
+          <div class="artifact-perks-wrap">
+            ${perksArr.map(p => `
+              <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
+                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : ''}
+                <span>${escapeHtml(p.name)}</span>
+              </span>
+            `).join('')}
+          </div>
+        `;
         perkColsEl.appendChild(artWrap);
       } else {
         perkColsEl.innerHTML = `<div style="color:#C084FC; font-size:13px;">Equippable Seasonal Artifact</div>`;
@@ -2597,7 +2641,9 @@ function openSavedLoadoutModal(character, loadout) {
 
       artCard.innerHTML = `
         <div class="saved-loadout-artifact-header">
-          ${aIcon}
+          <div class="dim-artifact-icon-wrap" style="margin-right:10px;">
+            ${aIcon}
+          </div>
           <div>
             <div style="font-family:var(--font-tactical); font-size:11px; color:#C084FC; font-weight:700; letter-spacing:0.8px;">SEASONAL ARTIFACT</div>
             <div style="font-family:var(--font-display); font-size:15px; font-weight:700; color:#FFFFFF;">
@@ -2606,6 +2652,13 @@ function openSavedLoadoutModal(character, loadout) {
           </div>
         </div>
         ${perksArr.length > 0 ? `
+          <div class="dim-artifact-strip">
+            ${perksArr.map(p => `
+              <div class="dim-artifact-perk" title="${escapeHtml(p.name)}${p.description ? ': ' + escapeHtml(p.description) : ''}">
+                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="${escapeHtml(p.name)}">` : ''}
+              </div>
+            `).join('')}
+          </div>
           <div class="artifact-perks-wrap">
             ${perksArr.map(p => `
               <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
