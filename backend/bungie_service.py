@@ -2105,28 +2105,39 @@ def evaluate_item_against_godrolls(item: dict, god_rolls: List[dict]) -> dict:
             m_labels: List[str] = []
             m_perks: List[str] = []
 
-            for key, label in [("perk1", "Trait 1"), ("perk2", "Trait 2")]:
-                wanted = _split_godroll_options(mode_spec.get(key, ""))
+            for key, label in [("perk1", "Trait 1"), ("perk2", "Trait 2"), ("perk3", "Secondary Trait")]:
+                val = mode_spec.get(key, "")
+                if not val:
+                    continue
+                wanted = _split_godroll_options(val)
                 hit_idx = next((idx for idx, w in enumerate(wanted) if w in all_item_perk_norms), None)
                 if hit_idx is not None:
                     w = wanted[hit_idx]
                     t_hits += 1
                     if hit_idx == 0:
                         pri_bonus += 1
-                    m_labels.append(f"{label}: {mode_spec.get(key)}")
-                    m_perks.append(norm_to_display.get(w, mode_spec.get(key, "")))
+                    m_labels.append(f"{label}: {val}")
+                    m_perks.append(norm_to_display.get(w, val))
 
-            for key, label in [("barrel", "Barrel"), ("mag", "Magazine")]:
-                wanted = _split_godroll_options(mode_spec.get(key, ""))
+            for key, label in [("barrel", "Barrel"), ("mag", "Magazine"), ("stock", "Stock / Grip"), ("originTrait", "Origin Trait")]:
+                val = mode_spec.get(key, "")
+                if not val:
+                    continue
+                wanted = _split_godroll_options(val)
                 hit = next((w for w in wanted if w in all_item_perk_norms), None)
                 if hit:
                     b_hits += 1
-                    m_labels.append(f"{label}: {mode_spec.get(key)}")
+                    m_labels.append(f"{label}: {val}")
 
-            wanted_mw = _split_godroll_options(mode_spec.get("masterwork", ""))
-            if mw_norm and any(w in mw_norm or mw_norm in w for w in wanted_mw):
-                b_hits += 1
-                m_labels.append(f"MW: {mode_spec.get('masterwork')}")
+            cat_or_mw = mode_spec.get("catalyst") or mode_spec.get("masterwork", "")
+            if cat_or_mw:
+                wanted_mw = _split_godroll_options(cat_or_mw)
+                if mw_norm and any(w in mw_norm or mw_norm in w for w in wanted_mw):
+                    b_hits += 1
+                    m_labels.append(f"MW/Catalyst: {cat_or_mw}")
+                elif any(w in all_item_perk_norms for w in wanted_mw):
+                    b_hits += 1
+                    m_labels.append(f"Catalyst: {cat_or_mw}")
 
             return t_hits, b_hits, pri_bonus, m_labels, m_perks
 

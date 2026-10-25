@@ -225,6 +225,8 @@ class GodRollItem(BaseModel):
     element: str  # Kinetic, Solar, Arc, Void, Strand, Stasis
     frame: Optional[str] = ""
     source: Optional[str] = ""
+    tier: Optional[str] = "Legendary"  # Legendary or Exotic
+    template: Optional[str] = "legendary"  # legendary or exotic
     pve: Optional[Dict[str, Any]] = {}
     pvp: Optional[Dict[str, Any]] = {}
 
@@ -874,6 +876,8 @@ def save_godroll_endpoint(item: GodRollItem, background_tasks: BackgroundTasks):
         "element": item.element,
         "frame": item.frame or "",
         "source": item.source or "",
+        "tier": item.tier or ("Exotic" if item.template == "exotic" else "Legendary"),
+        "template": item.template or "legendary",
         "pve": item.pve or {},
         "pvp": item.pvp or {}
     }

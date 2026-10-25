@@ -1085,15 +1085,28 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       </div>
       <form id="formEditGodRoll" class="modal-body">
         <input type="hidden" id="editRollId" value="">
+        <input type="hidden" id="rollTemplate" value="legendary">
+
+        <div class="roll-template-switcher">
+          <span class="switcher-label">✦ SELECT ROLL TEMPLATE:</span>
+          <div class="template-toggle-group">
+            <button type="button" class="btn-template-tab active" data-template="legendary" id="btnTemplateLegendary">
+              🛡️ Standard Legendary (w/ Origin Trait)
+            </button>
+            <button type="button" class="btn-template-tab" data-template="exotic" id="btnTemplateExotic">
+              👑 Exotic / Craftable (Grip, Intrinsic, Catalyst Refit)
+            </button>
+          </div>
+        </div>
         
         <div class="form-row form-grid-2">
           <div class="form-group">
             <label class="form-label" for="rollWeaponName">Weapon Name *</label>
-            <input type="text" id="rollWeaponName" class="hud-input" required placeholder="e.g. Zaouli's Bane (Harrowed)">
+            <input type="text" id="rollWeaponName" class="hud-input" required placeholder="e.g. Zaouli's Bane / Outbreak Perfected">
           </div>
           <div class="form-group">
             <label class="form-label" for="rollSource">Source / Activity</label>
-            <input type="text" id="rollSource" class="hud-input" placeholder="e.g. King's Fall Raid (Craftable)">
+            <input type="text" id="rollSource" class="hud-input" placeholder="e.g. King's Fall Raid / Zero Hour (Craftable)">
           </div>
         </div>
 
@@ -1108,7 +1121,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           </div>
           <div class="form-group">
             <label class="form-label" for="rollType">Weapon Type *</label>
-            <input type="text" id="rollType" class="hud-input" required placeholder="e.g. Hand Cannon">
+            <input type="text" id="rollType" class="hud-input" required placeholder="e.g. Hand Cannon / Pulse Rifle">
           </div>
           <div class="form-group">
             <label class="form-label" for="rollElement">Element *</label>
@@ -1122,74 +1135,174 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" for="rollFrame">Archetype / Frame</label>
-            <input type="text" id="rollFrame" class="hud-input" placeholder="e.g. Adaptive Frame (140 RPM)">
+            <label class="form-label" for="rollFrame">Archetype / Frame / Intrinsic</label>
+            <input type="text" id="rollFrame" class="hud-input" placeholder="e.g. Adaptive Frame / The Corruption Spreads IV">
           </div>
         </div>
 
-        <!-- PVE ROLL SECTION -->
-        <div class="godroll-form-section pve-section">
-          <h4 class="form-section-title">⚔️ PVE GOD ROLL SPECIFICATION</h4>
-          <div class="form-row form-grid-3">
-            <div class="form-group">
-              <label class="form-label" for="pveBarrel">Barrel / String</label>
-              <input type="text" id="pveBarrel" class="hud-input" placeholder="e.g. Smallbore / Corkscrew Rifling">
+        <!-- ========================================== -->
+        <!-- TEMPLATE A: STANDARD LEGENDARY WEAPON FIELDS -->
+        <!-- ========================================== -->
+        <div id="templateLegendaryFields" class="template-fields-group">
+          <!-- PVE ROLL SECTION -->
+          <div class="godroll-form-section pve-section">
+            <h4 class="form-section-title">⚔️ PVE GOD ROLL SPECIFICATION (LEGENDARY)</h4>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pveBarrel">Barrel / String / Sights</label>
+                <input type="text" id="pveBarrel" class="hud-input" placeholder="e.g. Smallbore / Corkscrew Rifling">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveMag">Magazine / Battery / Arrow</label>
+                <input type="text" id="pveMag" class="hud-input" placeholder="e.g. Tactical Mag / Flared Magwell">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveMasterwork">Masterwork Stat</label>
+                <input type="text" id="pveMasterwork" class="hud-input" placeholder="e.g. Reload Speed / Handling">
+              </div>
+            </div>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pvePerk1">Trait 1 (Perk 1) *</label>
+                <input type="text" id="pvePerk1" class="hud-input" required placeholder="e.g. Enhanced Explosive Payload">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvePerk2">Trait 2 (Perk 2) *</label>
+                <input type="text" id="pvePerk2" class="hud-input" required placeholder="e.g. Enhanced Incandescent">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveOriginTrait">Origin Trait</label>
+                <input type="text" id="pveOriginTrait" class="hud-input" placeholder="e.g. Nadir Focus / Wild Style / Bray Inheritance">
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="pveMag">Magazine / Battery / Arrow</label>
-              <input type="text" id="pveMag" class="hud-input" placeholder="e.g. Tactical Mag / Flared Magwell">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="pveMasterwork">Masterwork</label>
-              <input type="text" id="pveMasterwork" class="hud-input" placeholder="e.g. Reload Speed">
+              <label class="form-label" for="pveNotes">PVE Tactical Insight / Synergies</label>
+              <textarea id="pveNotes" class="hud-textarea" rows="2" placeholder="Why this roll is top-tier in PVE, build interactions, ad-clear or boss DPS notes..."></textarea>
             </div>
           </div>
-          <div class="form-row form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="pvePerk1">Trait 1 (Perk 1) *</label>
-              <input type="text" id="pvePerk1" class="hud-input" required placeholder="e.g. Enhanced Explosive Payload">
+
+          <!-- PVP ROLL SECTION -->
+          <div class="godroll-form-section pvp-section">
+            <h4 class="form-section-title">🎯 PVP GOD ROLL SPECIFICATION (LEGENDARY)</h4>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pvpBarrel">Barrel / Sights</label>
+                <input type="text" id="pvpBarrel" class="hud-input" placeholder="e.g. Hammer-Forged Rifling">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpMag">Magazine / Ammo</label>
+                <input type="text" id="pvpMag" class="hud-input" placeholder="e.g. Accurized Rounds / Ricochet Rounds">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpMasterwork">Masterwork Stat</label>
+                <input type="text" id="pvpMasterwork" class="hud-input" placeholder="e.g. Range / Handling">
+              </div>
+            </div>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pvpPerk1">Trait 1 (Perk 1) *</label>
+                <input type="text" id="pvpPerk1" class="hud-input" required placeholder="e.g. Opening Shot / Keep Away">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpPerk2">Trait 2 (Perk 2) *</label>
+                <input type="text" id="pvpPerk2" class="hud-input" required placeholder="e.g. Eye of the Storm / Precision Instrument">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpOriginTrait">Origin Trait</label>
+                <input type="text" id="pvpOriginTrait" class="hud-input" placeholder="e.g. Nadir Focus / Suros Synergy">
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="pvePerk2">Trait 2 (Perk 2) *</label>
-              <input type="text" id="pvePerk2" class="hud-input" required placeholder="e.g. Enhanced Incandescent">
+              <label class="form-label" for="pvpNotes">PVP Tactical Insight / Dueling Notes</label>
+              <textarea id="pvpNotes" class="hud-textarea" rows="2" placeholder="Crucible dueling advantages, TTK boosts, flinch mitigation, range breakpoints..."></textarea>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="pveNotes">PVE Tactical Insight / Synergies</label>
-            <textarea id="pveNotes" class="hud-textarea" rows="2" placeholder="Why this roll is top-tier in PVE, build interactions, ad-clear or boss DPS notes..."></textarea>
           </div>
         </div>
 
-        <!-- PVP ROLL SECTION -->
-        <div class="godroll-form-section pvp-section">
-          <h4 class="form-section-title">🎯 PVP GOD ROLL SPECIFICATION</h4>
-          <div class="form-row form-grid-3">
-            <div class="form-group">
-              <label class="form-label" for="pvpBarrel">Barrel / Sights</label>
-              <input type="text" id="pvpBarrel" class="hud-input" placeholder="e.g. Hammer-Forged Rifling">
+        <!-- ========================================== -->
+        <!-- TEMPLATE B: EXOTIC / CRAFTABLE WEAPON FIELDS -->
+        <!-- ========================================== -->
+        <div id="templateExoticFields" class="template-fields-group hidden">
+          <!-- PVE EXOTIC ROLL SECTION -->
+          <div class="godroll-form-section pve-section">
+            <h4 class="form-section-title">👑 PVE EXOTIC / CRAFTABLE GOD ROLL SPECIFICATION</h4>
+            <div class="form-row form-grid-4">
+              <div class="form-group">
+                <label class="form-label" for="pveBarrelExotic">Barrel / Blade / Sights</label>
+                <input type="text" id="pveBarrelExotic" class="hud-input" placeholder="e.g. Arrowhead Brake / Smallbore">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveMagExotic">Magazine / Battery / Ammo</label>
+                <input type="text" id="pveMagExotic" class="hud-input" placeholder="e.g. Tactical Mag / Flared Magwell">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveStockExotic">Stock / Grip</label>
+                <input type="text" id="pveStockExotic" class="hud-input" placeholder="e.g. Fitted Stock / Hand-Laid Stock">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveCatalystExotic">Exotic Catalyst / Refit</label>
+                <input type="text" id="pveCatalystExotic" class="hud-input" placeholder="e.g. Disease Vector / Reload Refit">
+              </div>
+            </div>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pvePerk1Exotic">Trait 1 (Col 3 Perk) *</label>
+                <input type="text" id="pvePerk1Exotic" class="hud-input" placeholder="e.g. Rewind Rounds / Rapid Hit">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvePerk2Exotic">Trait 2 / Secondary Trait</label>
+                <input type="text" id="pvePerk2Exotic" class="hud-input" placeholder="e.g. Parasitism (Intrinsic) / Headseeker">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pveOriginTraitExotic">Origin Trait / Intrinsic</label>
+                <input type="text" id="pveOriginTraitExotic" class="hud-input" placeholder="e.g. The Corruption Spreads IV / Nanites">
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="pvpMag">Magazine / Ammo</label>
-              <input type="text" id="pvpMag" class="hud-input" placeholder="e.g. Accurized Rounds / Ricochet Rounds">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="pvpMasterwork">Masterwork</label>
-              <input type="text" id="pvpMasterwork" class="hud-input" placeholder="e.g. Range">
+              <label class="form-label" for="pveNotesExotic">PVE Tactical Insight / Synergies</label>
+              <textarea id="pveNotesExotic" class="hud-textarea" rows="2" placeholder="Why this exotic setup dominates in PVE, boss DPS loops, champion counters, nanite synergy..."></textarea>
             </div>
           </div>
-          <div class="form-row form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="pvpPerk1">Trait 1 (Perk 1) *</label>
-              <input type="text" id="pvpPerk1" class="hud-input" required placeholder="e.g. Opening Shot / Keep Away">
+
+          <!-- PVP EXOTIC ROLL SECTION -->
+          <div class="godroll-form-section pvp-section">
+            <h4 class="form-section-title">👑 PVP EXOTIC / CRAFTABLE GOD ROLL SPECIFICATION</h4>
+            <div class="form-row form-grid-4">
+              <div class="form-group">
+                <label class="form-label" for="pvpBarrelExotic">Barrel / Blade / Sights</label>
+                <input type="text" id="pvpBarrelExotic" class="hud-input" placeholder="e.g. Hammer-Forged Rifling">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpMagExotic">Magazine / Battery / Ammo</label>
+                <input type="text" id="pvpMagExotic" class="hud-input" placeholder="e.g. Accurized Rounds">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpStockExotic">Stock / Grip</label>
+                <input type="text" id="pvpStockExotic" class="hud-input" placeholder="e.g. Short-Action Stock / Fitted Stock">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpCatalystExotic">Exotic Catalyst / Refit</label>
+                <input type="text" id="pvpCatalystExotic" class="hud-input" placeholder="e.g. Disease Vector / Range Refit">
+              </div>
+            </div>
+            <div class="form-row form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="pvpPerk1Exotic">Trait 1 (Col 3 Perk) *</label>
+                <input type="text" id="pvpPerk1Exotic" class="hud-input" placeholder="e.g. Headseeker / Rapid Hit / Keep Away">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpPerk2Exotic">Trait 2 / Secondary Trait</label>
+                <input type="text" id="pvpPerk2Exotic" class="hud-input" placeholder="e.g. Parasitism (Intrinsic) / Eye of the Storm">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pvpOriginTraitExotic">Origin Trait / Intrinsic</label>
+                <input type="text" id="pvpOriginTraitExotic" class="hud-input" placeholder="e.g. The Corruption Spreads IV">
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="pvpPerk2">Trait 2 (Perk 2) *</label>
-              <input type="text" id="pvpPerk2" class="hud-input" required placeholder="e.g. Eye of the Storm / Precision Instrument">
+              <label class="form-label" for="pvpNotesExotic">PVP Tactical Insight / Dueling Notes</label>
+              <textarea id="pvpNotesExotic" class="hud-textarea" rows="2" placeholder="Crucible dueling advantages, burst consistency, TTK breakpoints, flinch resistance..."></textarea>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="pvpNotes">PVP Tactical Insight / Dueling Notes</label>
-            <textarea id="pvpNotes" class="hud-textarea" rows="2" placeholder="Crucible dueling advantages, TTK boosts, flinch mitigation, range breakpoints..."></textarea>
           </div>
         </div>
 
@@ -1391,6 +1504,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261025_v22"></script>
+  <script type="module" src="app.js?v=20261025_v23"></script>
 </body>
 </html>

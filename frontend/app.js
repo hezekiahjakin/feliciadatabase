@@ -1084,13 +1084,14 @@ function renderGodRollsGrid() {
     if (slotQ !== 'all' && w.slot?.toLowerCase() !== slotQ.toLowerCase()) return false;
     if (typeQ !== 'all' && !w.type?.toLowerCase().includes(typeQ.toLowerCase())) return false;
     if (searchQ) {
+      if (searchQ === 'exotic' && (w.tier?.toLowerCase() === 'exotic' || w.template === 'exotic')) return true;
       const matchName = w.name?.toLowerCase().includes(searchQ);
       const matchType = w.type?.toLowerCase().includes(searchQ);
       const matchElem = w.element?.toLowerCase().includes(searchQ);
       const matchFrame = w.frame?.toLowerCase().includes(searchQ);
       const matchSource = w.source?.toLowerCase().includes(searchQ);
-      const matchPvePerks = (w.pve?.perk1 + ' ' + w.pve?.perk2 + ' ' + w.pve?.barrel + ' ' + w.pve?.mag).toLowerCase().includes(searchQ);
-      const matchPvpPerks = (w.pvp?.perk1 + ' ' + w.pvp?.perk2 + ' ' + w.pvp?.barrel + ' ' + w.pvp?.mag).toLowerCase().includes(searchQ);
+      const matchPvePerks = (w.pve?.perk1 + ' ' + w.pve?.perk2 + ' ' + w.pve?.barrel + ' ' + w.pve?.mag + ' ' + w.pve?.stock + ' ' + w.pve?.originTrait + ' ' + w.pve?.catalyst).toLowerCase().includes(searchQ);
+      const matchPvpPerks = (w.pvp?.perk1 + ' ' + w.pvp?.perk2 + ' ' + w.pvp?.barrel + ' ' + w.pvp?.mag + ' ' + w.pvp?.stock + ' ' + w.pvp?.originTrait + ' ' + w.pvp?.catalyst).toLowerCase().includes(searchQ);
       if (!matchName && !matchType && !matchElem && !matchFrame && !matchSource && !matchPvePerks && !matchPvpPerks) {
         return false;
       }
@@ -1120,10 +1121,14 @@ function renderGodRollsGrid() {
 
     const slotClass = (weapon.slot || 'kinetic').toLowerCase();
     const elemClass = (weapon.element || 'kinetic').toLowerCase();
+    const isExotic = weapon.tier === 'Exotic' || weapon.template === 'exotic' || Boolean(pve.stock || pve.catalyst);
+
+    const exoticBadge = isExotic ? `<span class="gr-badge gr-tier-exotic">👑 EXOTIC</span>` : '';
 
     card.innerHTML = `
       <div class="gr-card-header">
         <div class="gr-badge-row">
+          ${exoticBadge}
           <span class="gr-badge gr-slot ${slotClass}">${weapon.slot || 'Kinetic'}</span>
           <span class="gr-badge gr-elem ${elemClass}">${weapon.element || 'Kinetic'}</span>
           <span class="gr-badge gr-frame">${weapon.frame || weapon.type}</span>
@@ -1139,11 +1144,7 @@ function renderGodRollsGrid() {
             <span class="gr-mode-title">PVE GOD ROLL</span>
           </div>
           <div class="gr-perks-list">
-            <div class="gr-perk-row"><span class="perk-label">Barrel</span><span class="perk-val">${pve.barrel || 'User choice'}</span></div>
-            <div class="gr-perk-row"><span class="perk-label">Mag</span><span class="perk-val">${pve.mag || 'User choice'}</span></div>
-            <div class="gr-perk-row highlight"><span class="perk-label">Trait 1</span><span class="perk-val primary">${pve.perk1 || 'User choice'}</span></div>
-            <div class="gr-perk-row highlight"><span class="perk-label">Trait 2</span><span class="perk-val primary">${pve.perk2 || 'User choice'}</span></div>
-            <div class="gr-perk-row"><span class="perk-label">Masterwork</span><span class="perk-val mw">${pve.masterwork || 'Reload Speed'}</span></div>
+            ${renderGodRollPerkRows(pve, false)}
           </div>
           ${pve.notes ? `<div class="gr-insight-note">"${pve.notes}"</div>` : ''}
         </div>
@@ -1154,11 +1155,7 @@ function renderGodRollsGrid() {
             <span class="gr-mode-title">PVP GOD ROLL</span>
           </div>
           <div class="gr-perks-list">
-            <div class="gr-perk-row"><span class="perk-label">Barrel</span><span class="perk-val">${pvp.barrel || 'Hammer-Forged'}</span></div>
-            <div class="gr-perk-row"><span class="perk-label">Mag</span><span class="perk-val">${pvp.mag || 'Accurized Rounds'}</span></div>
-            <div class="gr-perk-row highlight"><span class="perk-label">Trait 1</span><span class="perk-val primary-pvp">${pvp.perk1 || 'User choice'}</span></div>
-            <div class="gr-perk-row highlight"><span class="perk-label">Trait 2</span><span class="perk-val primary-pvp">${pvp.perk2 || 'User choice'}</span></div>
-            <div class="gr-perk-row"><span class="perk-label">Masterwork</span><span class="perk-val mw">${pvp.masterwork || 'Range'}</span></div>
+            ${renderGodRollPerkRows(pvp, true)}
           </div>
           ${pvp.notes ? `<div class="gr-insight-note">"${pvp.notes}"</div>` : ''}
         </div>
@@ -1195,23 +1192,99 @@ function renderGodRollsGrid() {
   });
 }
 
+function renderGodRollPerkRows(modeObj, isPvp = false) {
+  const m = modeObj || {};
+  let html = '';
+  if (m.barrel) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Barrel / Sights</span><span class="perk-val">${escapeHtml(m.barrel)}</span></div>`;
+  }
+  if (m.mag) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Mag / Ammo</span><span class="perk-val">${escapeHtml(m.mag)}</span></div>`;
+  }
+  if (m.stock) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Stock / Grip</span><span class="perk-val">${escapeHtml(m.stock)}</span></div>`;
+  }
+  if (m.perk1) {
+    html += `<div class="gr-perk-row highlight"><span class="perk-label">Trait 1</span><span class="perk-val ${isPvp ? 'primary-pvp' : 'primary'}">${escapeHtml(m.perk1)}</span></div>`;
+  }
+  if (m.perk2) {
+    html += `<div class="gr-perk-row highlight"><span class="perk-label">Trait 2 / Sec</span><span class="perk-val ${isPvp ? 'primary-pvp' : 'primary'}">${escapeHtml(m.perk2)}</span></div>`;
+  }
+  if (m.originTrait) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Origin / Intrinsic</span><span class="perk-val origin">${escapeHtml(m.originTrait)}</span></div>`;
+  }
+  if (m.catalyst) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Catalyst / Refit</span><span class="perk-val mw">${escapeHtml(m.catalyst)}</span></div>`;
+  } else if (m.masterwork) {
+    html += `<div class="gr-perk-row"><span class="perk-label">Masterwork</span><span class="perk-val mw">${escapeHtml(m.masterwork)}</span></div>`;
+  }
+  return html || `<div class="gr-perk-row"><span class="perk-label">Perks</span><span class="perk-val">Standard Setup</span></div>`;
+}
+
+function setGodRollTemplate(tmpl, silent = false) {
+  const isExotic = tmpl === 'exotic';
+  const tmplInput = document.getElementById('rollTemplate');
+  if (tmplInput) tmplInput.value = isExotic ? 'exotic' : 'legendary';
+
+  const btnLeg = document.getElementById('btnTemplateLegendary');
+  const btnExo = document.getElementById('btnTemplateExotic');
+  if (btnLeg) btnLeg.classList.toggle('active', !isExotic);
+  if (btnExo) btnExo.classList.toggle('active', isExotic);
+
+  const legFields = document.getElementById('templateLegendaryFields');
+  const exoFields = document.getElementById('templateExoticFields');
+  if (legFields) legFields.classList.toggle('hidden', isExotic);
+  if (exoFields) exoFields.classList.toggle('hidden', !isExotic);
+
+  // Manage required attributes
+  const pveP1 = document.getElementById('pvePerk1');
+  const pveP2 = document.getElementById('pvePerk2');
+  const pvpP1 = document.getElementById('pvpPerk1');
+  const pvpP2 = document.getElementById('pvpPerk2');
+  const pveP1Ex = document.getElementById('pvePerk1Exotic');
+  const pvpP1Ex = document.getElementById('pvpPerk1Exotic');
+
+  if (pveP1) pveP1.required = !isExotic;
+  if (pveP2) pveP2.required = !isExotic;
+  if (pvpP1) pvpP1.required = !isExotic;
+  if (pvpP2) pvpP2.required = !isExotic;
+
+  if (pveP1Ex) pveP1Ex.required = isExotic;
+  if (pvpP1Ex) pvpP1Ex.required = isExotic;
+
+  if (!silent) {
+    try { sfx.playChirp(); } catch (e) {}
+  }
+}
+
 function openEditGodRollModal(weapon = null) {
   const modal = document.getElementById('modalEditGodRoll');
   const titleEl = document.getElementById('editGodRollModalTitle');
   if (!modal) return;
 
+  const isExotic = Boolean(
+    weapon?.template === 'exotic' ||
+    weapon?.tier === 'Exotic' ||
+    weapon?.pve?.stock ||
+    weapon?.pve?.catalyst ||
+    weapon?.pvp?.stock ||
+    weapon?.pvp?.catalyst
+  );
+
   document.getElementById('editRollId').value = weapon?.id || '';
   document.getElementById('rollWeaponName').value = weapon?.name || '';
   document.getElementById('rollSource').value = weapon?.source || '';
   document.getElementById('rollSlot').value = weapon?.slot || 'Kinetic';
-  document.getElementById('rollType').value = weapon?.type || 'Hand Cannon';
+  document.getElementById('rollType').value = weapon?.type || (isExotic ? 'Pulse Rifle' : 'Hand Cannon');
   document.getElementById('rollElement').value = weapon?.element || 'Kinetic';
   document.getElementById('rollFrame').value = weapon?.frame || '';
 
+  // Legendary fields
   document.getElementById('pveBarrel').value = weapon?.pve?.barrel || '';
   document.getElementById('pveMag').value = weapon?.pve?.mag || '';
   document.getElementById('pvePerk1').value = weapon?.pve?.perk1 || '';
   document.getElementById('pvePerk2').value = weapon?.pve?.perk2 || '';
+  document.getElementById('pveOriginTrait').value = weapon?.pve?.originTrait || '';
   document.getElementById('pveMasterwork').value = weapon?.pve?.masterwork || '';
   document.getElementById('pveNotes').value = weapon?.pve?.notes || '';
 
@@ -1219,8 +1292,30 @@ function openEditGodRollModal(weapon = null) {
   document.getElementById('pvpMag').value = weapon?.pvp?.mag || '';
   document.getElementById('pvpPerk1').value = weapon?.pvp?.perk1 || '';
   document.getElementById('pvpPerk2').value = weapon?.pvp?.perk2 || '';
+  document.getElementById('pvpOriginTrait').value = weapon?.pvp?.originTrait || '';
   document.getElementById('pvpMasterwork').value = weapon?.pvp?.masterwork || '';
   document.getElementById('pvpNotes').value = weapon?.pvp?.notes || '';
+
+  // Exotic fields
+  document.getElementById('pveBarrelExotic').value = weapon?.pve?.barrel || '';
+  document.getElementById('pveMagExotic').value = weapon?.pve?.mag || '';
+  document.getElementById('pveStockExotic').value = weapon?.pve?.stock || '';
+  document.getElementById('pveCatalystExotic').value = weapon?.pve?.catalyst || '';
+  document.getElementById('pvePerk1Exotic').value = weapon?.pve?.perk1 || '';
+  document.getElementById('pvePerk2Exotic').value = weapon?.pve?.perk2 || '';
+  document.getElementById('pveOriginTraitExotic').value = weapon?.pve?.originTrait || '';
+  document.getElementById('pveNotesExotic').value = weapon?.pve?.notes || '';
+
+  document.getElementById('pvpBarrelExotic').value = weapon?.pvp?.barrel || '';
+  document.getElementById('pvpMagExotic').value = weapon?.pvp?.mag || '';
+  document.getElementById('pvpStockExotic').value = weapon?.pvp?.stock || '';
+  document.getElementById('pvpCatalystExotic').value = weapon?.pvp?.catalyst || '';
+  document.getElementById('pvpPerk1Exotic').value = weapon?.pvp?.perk1 || '';
+  document.getElementById('pvpPerk2Exotic').value = weapon?.pvp?.perk2 || '';
+  document.getElementById('pvpOriginTraitExotic').value = weapon?.pvp?.originTrait || '';
+  document.getElementById('pvpNotesExotic').value = weapon?.pvp?.notes || '';
+
+  setGodRollTemplate(isExotic ? 'exotic' : 'legendary', true);
 
   if (titleEl) {
     titleEl.textContent = weapon ? `✦ WEAPON ARMORY // EDIT '${weapon.name.toUpperCase()}'` : '✦ WEAPON ARMORY // ADD NEW WEAPON ROLL';
@@ -4576,6 +4671,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Roll Template Switcher Buttons
+  const btnTemplateLeg = document.getElementById('btnTemplateLegendary');
+  const btnTemplateExo = document.getElementById('btnTemplateExotic');
+  if (btnTemplateLeg) {
+    btnTemplateLeg.addEventListener('click', () => setGodRollTemplate('legendary'));
+  }
+  if (btnTemplateExo) {
+    btnTemplateExo.addEventListener('click', () => setGodRollTemplate('exotic'));
+  }
+
+  // Smart template detector when typing weapon name
+  const rollWeaponNameInput = document.getElementById('rollWeaponName');
+  if (rollWeaponNameInput) {
+    rollWeaponNameInput.addEventListener('input', (e) => {
+      const val = (e.target.value || '').toLowerCase().trim();
+      const knownExotics = [
+        'outbreak perfected', 'dead man\'s tale', 'hawkmoon', 'revision zero', 
+        'wish-keeper', 'vexcalibur', 'ergo sum', 'osteo striga', 'quicksilver storm',
+        'conditional finality', 'witherhoard', 'gjallarhorn', 'izanagi', 'anarchy', 'divinity'
+      ];
+      const isKnown = knownExotics.some(ex => val.includes(ex)) || val.includes('exotic');
+      const curTmpl = document.getElementById('rollTemplate')?.value;
+      if (isKnown && curTmpl !== 'exotic') {
+        const p1 = document.getElementById('pvePerk1')?.value.trim();
+        if (!p1) {
+          setGodRollTemplate('exotic', true);
+        }
+      }
+    });
+  }
+
   // Save God Roll Form Submit
   if (formEditGodRoll) {
     formEditGodRoll.addEventListener('submit', async (e) => {
@@ -4587,24 +4713,50 @@ document.addEventListener('DOMContentLoaded', () => {
       const type = document.getElementById('rollType').value.trim();
       const element = document.getElementById('rollElement').value;
       const frame = document.getElementById('rollFrame').value.trim();
+      const activeTemplate = document.getElementById('rollTemplate')?.value || 'legendary';
 
-      const pve = {
-        barrel: document.getElementById('pveBarrel').value.trim(),
-        mag: document.getElementById('pveMag').value.trim(),
-        perk1: document.getElementById('pvePerk1').value.trim(),
-        perk2: document.getElementById('pvePerk2').value.trim(),
-        masterwork: document.getElementById('pveMasterwork').value.trim() || 'Reload Speed',
-        notes: document.getElementById('pveNotes').value.trim()
-      };
-
-      const pvp = {
-        barrel: document.getElementById('pvpBarrel').value.trim(),
-        mag: document.getElementById('pvpMag').value.trim(),
-        perk1: document.getElementById('pvpPerk1').value.trim(),
-        perk2: document.getElementById('pvpPerk2').value.trim(),
-        masterwork: document.getElementById('pvpMasterwork').value.trim() || 'Range',
-        notes: document.getElementById('pvpNotes').value.trim()
-      };
+      let pve, pvp;
+      if (activeTemplate === 'exotic') {
+        pve = {
+          barrel: document.getElementById('pveBarrelExotic').value.trim(),
+          mag: document.getElementById('pveMagExotic').value.trim(),
+          stock: document.getElementById('pveStockExotic').value.trim(),
+          catalyst: document.getElementById('pveCatalystExotic').value.trim(),
+          perk1: document.getElementById('pvePerk1Exotic').value.trim(),
+          perk2: document.getElementById('pvePerk2Exotic').value.trim(),
+          originTrait: document.getElementById('pveOriginTraitExotic').value.trim(),
+          notes: document.getElementById('pveNotesExotic').value.trim()
+        };
+        pvp = {
+          barrel: document.getElementById('pvpBarrelExotic').value.trim(),
+          mag: document.getElementById('pvpMagExotic').value.trim(),
+          stock: document.getElementById('pvpStockExotic').value.trim(),
+          catalyst: document.getElementById('pvpCatalystExotic').value.trim(),
+          perk1: document.getElementById('pvpPerk1Exotic').value.trim(),
+          perk2: document.getElementById('pvpPerk2Exotic').value.trim(),
+          originTrait: document.getElementById('pvpOriginTraitExotic').value.trim(),
+          notes: document.getElementById('pvpNotesExotic').value.trim()
+        };
+      } else {
+        pve = {
+          barrel: document.getElementById('pveBarrel').value.trim(),
+          mag: document.getElementById('pveMag').value.trim(),
+          perk1: document.getElementById('pvePerk1').value.trim(),
+          perk2: document.getElementById('pvePerk2').value.trim(),
+          originTrait: document.getElementById('pveOriginTrait').value.trim(),
+          masterwork: document.getElementById('pveMasterwork').value.trim() || 'Reload Speed',
+          notes: document.getElementById('pveNotes').value.trim()
+        };
+        pvp = {
+          barrel: document.getElementById('pvpBarrel').value.trim(),
+          mag: document.getElementById('pvpMag').value.trim(),
+          perk1: document.getElementById('pvpPerk1').value.trim(),
+          perk2: document.getElementById('pvpPerk2').value.trim(),
+          originTrait: document.getElementById('pvpOriginTrait').value.trim(),
+          masterwork: document.getElementById('pvpMasterwork').value.trim() || 'Range',
+          notes: document.getElementById('pvpNotes').value.trim()
+        };
+      }
 
       const payload = {
         id: rollId || undefined,
@@ -4614,6 +4766,8 @@ document.addEventListener('DOMContentLoaded', () => {
         type,
         element,
         frame,
+        tier: activeTemplate === 'exotic' ? 'Exotic' : 'Legendary',
+        template: activeTemplate,
         pve,
         pvp
       };
