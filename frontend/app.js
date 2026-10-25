@@ -1725,6 +1725,16 @@ function renderInventoryHeaderAndSwitcher() {
   switcher.appendChild(vaultBtn);
 }
 
+function renderTierStarsHtml(tierNumber) {
+  const t = parseInt(tierNumber, 10);
+  if (!t || isNaN(t) || t < 1 || t > 5) return '';
+  let starsHtml = '';
+  for (let i = 0; i < t; i++) {
+    starsHtml += `<svg class="gear-tier-star" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0 L6.2 3.8 L10 5 L6.2 6.2 L5 10 L3.8 6.2 L0 5 L3.8 3.8 Z" fill="#FDE047" stroke="#000" stroke-width="0.7"/></svg>`;
+  }
+  return `<div class="gear-tier-stars" title="Tier ${t} (${t} ${t === 1 ? 'Star' : 'Stars'})" aria-label="Tier ${t}">${starsHtml}</div>`;
+}
+
 function itemMatchesFilter(item) {
   const f = state.invFilter;
   if (f.slot === 'weapons' && item.category !== 'Weapon') return false;
@@ -1755,6 +1765,14 @@ function itemMatchesFilter(item) {
 
   const q = (f.search || '').trim().toLowerCase();
   if (!q) return true;
+
+  if (item.gearTier) {
+    const tNum = String(item.gearTier);
+    if (q === `t${tNum}` || q === `tier ${tNum}` || q === `tier:${tNum}` || q === `t:${tNum}` ||
+        q.includes(`t${tNum}`) || q.includes(`tier ${tNum}`)) {
+      return true;
+    }
+  }
 
   if ((item.name || '').toLowerCase().includes(q)) return true;
   if ((item.typeName || '').toLowerCase().includes(q)) return true;
@@ -1818,6 +1836,11 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     ? `<span class="compendium-set-pill">⛊ ${escapeHtml(item.compendiumSet.name)}</span>`
     : '';
 
+  const tierStars = renderTierStarsHtml(item.gearTier);
+  const tierPill = (item.gearTier && item.gearTier >= 1 && item.gearTier <= 5)
+    ? `<span class="gear-tier-pill t${item.gearTier}">T${item.gearTier}</span>`
+    : '';
+
   const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner">◈</span>` : '';
   const lockCorner = item.isLocked ? `<span class="gear-lock-pip" aria-label="Locked">🔒</span>` : '';
   let subDetail = escapeHtml(item.typeName || item.slot);
@@ -1830,6 +1853,7 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
   btn.innerHTML = `
     <div class="gear-icon-frame">
       <img src="${iconSrc}" alt="${escapeHtml(item.name)}" width="48" height="48" loading="lazy">
+      ${tierStars}
       ${craftedCorner}
       ${lockCorner}
     </div>
@@ -1838,6 +1862,7 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
       <div class="gear-sub">
         ${elemDot}
         <span class="gear-power">${item.power ? `✦ ${item.power}` : (item.powerBonus ? `+${item.powerBonus}` : '')}</span>
+        ${tierPill}
         <span>• ${subDetail}</span>
       </div>
       ${setBadge}
@@ -2077,7 +2102,20 @@ function openItemInspectModal(item) {
   if (pipEl) pipEl.classList.toggle('hidden', !item.isCrafted);
 
   const tierBadge = document.getElementById('inspectTierBadge');
-  if (tierBadge) tierBadge.textContent = item.category === 'Artifact' ? 'SEASONAL' : (item.tierName || 'Legendary');
+  if (tierBadge) {
+    if (item.category === 'Artifact') {
+      tierBadge.textContent = 'SEASONAL';
+    } else if (item.gearTier && item.gearTier >= 1 && item.gearTier <= 5) {
+      tierBadge.textContent = `TIER ${item.gearTier} • ${(item.tierName || 'Legendary').toUpperCase()}`;
+    } else {
+      tierBadge.textContent = item.tierName || 'Legendary';
+    }
+  }
+
+  const tierStarsWrap = document.getElementById('inspectTierStars');
+  if (tierStarsWrap) {
+    tierStarsWrap.innerHTML = item.gearTier ? renderTierStarsHtml(item.gearTier).replace(/^<div[^>]*>|<\/div>$/g, '') : '';
+  }
 
   const elemBadge = document.getElementById('inspectElemBadge');
   if (elemBadge) {
@@ -2106,13 +2144,14 @@ function openItemInspectModal(item) {
 
   const sublineEl = document.getElementById('inspectSubline');
   if (sublineEl) {
+    const tierPrefix = item.gearTier ? `Tier ${item.gearTier} (${'✦'.repeat(item.gearTier)}) • ` : '';
     if (item.category === 'Artifact') {
       sublineEl.textContent = `${item.powerBonus ? `+${item.powerBonus} Bonus Power • ` : ''}Seasonal Artifact`;
     } else if (item.category === 'Armor' && item.armorEvaluation) {
-      sublineEl.textContent = `${item.armorEvaluation.verdictLabel} • ${item.slot} (${item.totalStats || 0} Total Stats)`;
+      sublineEl.textContent = `${tierPrefix}${item.armorEvaluation.verdictLabel} • ${item.slot} (${item.totalStats || 0} Total Stats)`;
     } else {
       const fName = item.frame?.name ? `${item.frame.name} • ` : '';
-      sublineEl.textContent = `${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
+      sublineEl.textContent = `${tierPrefix}${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
     }
   }
 
@@ -3111,16 +3150,23 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
     primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one">${lockBtnLabel}</button>`;
   }
 
+  const scannerTierStars = renderTierStarsHtml(it.gearTier);
+  const scannerTierPill = (it.gearTier && it.gearTier >= 1 && it.gearTier <= 5)
+    ? `<span class="gear-tier-pill t${it.gearTier}">T${it.gearTier}</span>`
+    : '';
+
   row.innerHTML = `
     <div class="scanner-item-main">
       ${checkboxHtml}
       <div class="scanner-item-icon">
         <img src="${iconSrc}" alt="${escapeHtml(it.name)}" width="52" height="52" loading="lazy">
+        ${scannerTierStars}
       </div>
       <div class="scanner-item-info">
         <div class="scanner-item-top">
           <span class="scanner-item-name">${escapeHtml(it.name)}</span>
           <span style="color:#FACC15; font-family:var(--font-tactical); font-weight:700; font-size:12.5px;">✦ ${it.power || ''}</span>
+          ${scannerTierPill}
           <span class="scanner-loc-pill">${escapeHtml(entry.locLabel)}</span>
           ${rankBadge}
           ${modeBadge}
