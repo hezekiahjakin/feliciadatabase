@@ -926,17 +926,24 @@ def evaluate_armor_roll(item: dict) -> dict:
         explanation = f"Sub-Tier 5 armor ({total_stats} Total Stats). Inferior to endgame Tier 5 set standards—safe to dismantle."
     else:
         # Tier 5: Health classification
-        # Zero Health rule: Health <= 2 is PVE God Roll! Health > 2 is PVP God Roll!
-        if health_stat <= 2:
+        # PVP standard: 10+ Health stat counts as PVP spike!
+        # PVE standard: Under 10 Health counts as PVE (0-2 Health is pure Zero-Health God Roll; 3-9 is PVE Low Health).
+        if health_stat >= 10:
+            roll_type = "PVP_GOD_ROLL"
+            verdict_code = "PVP_GOD_ROLL"
+            verdict_label = f"PVP GOD ROLL (Tier 5, {health_stat} Health)"
+            explanation = f"High Health spike ({health_stat} >= 10) provides maximum ADS flinch resistance and rapid shield recovery for Crucible duels."
+        elif health_stat <= 2:
             roll_type = "PVE_GOD_ROLL"
             verdict_code = "PVE_GOD_ROLL"
             verdict_label = "PVE GOD ROLL (Tier 5, Zero Health)"
             explanation = "Zero Health stat waste—100% of armor stat budget concentrated in rapid ability cooldowns and lethal firepower (Grenade, Melee, Super, Weapons, Class)."
         else:
-            roll_type = "PVP_GOD_ROLL"
-            verdict_code = "PVP_GOD_ROLL"
-            verdict_label = f"PVP GOD ROLL (Tier 5, {health_stat} Health)"
-            explanation = f"High Health stat ({health_stat}) provides maximum ADS flinch resistance and rapid shield recovery for Crucible duels."
+            # 3 to 9 Health: Under 10 Health -> PVE Low Health tier (or unranked for PvP)
+            roll_type = "PVE_GOD_ROLL"
+            verdict_code = "PVE_GOD_ROLL"
+            verdict_label = f"PVE ARMOR (Tier 5, {health_stat} Health)"
+            explanation = f"Low Health ({health_stat} < 10)—suitable for PvE engagements where health stat investment is minimal. Pure 0-2 Health remains optimal for PvE."
 
     return {
         "isTier5": is_tier_5,
@@ -2444,17 +2451,17 @@ def analyze_arsenal_duplicates_and_trash(inventory_data: dict, god_rolls: List[d
             "matchSource": "compendium_sets" if ev.get("compendiumSet") else "armor_stat_matrix",
             "verdictCode": verdict_code,
             "verdictLabel": ev["verdictLabel"],
-            "pveTraitHits": 2 if is_pve else (0 if not is_tier_5 else 1),
+            "pveTraitHits": 2 if (is_pve and ev["healthStat"] <= 2) else (1 if is_pve else 0),
             "pvpTraitHits": 2 if is_pvp else (0 if not is_tier_5 else 1),
-            "pveScore": 95 if is_pve else (50 if is_tier_5 else 20),
-            "pvpScore": 95 if is_pvp else (50 if is_tier_5 else 20),
-            "bestScore": 95 if is_tier_5 else 20,
+            "pveScore": (98 if ev["healthStat"] <= 2 else 85) if is_pve else (50 if is_tier_5 else 20),
+            "pvpScore": (90 + min(ev["healthStat"], 10)) if is_pvp else (30 if is_tier_5 else 10),
+            "bestScore": 98 if (is_pve and ev["healthStat"] <= 2) else (95 if is_pvp else (85 if is_pve else 20)),
             "pveSortScore": float(a.get("totalStats") or 0) - float(ev["healthStat"]) * 0.5,
             "pvpSortScore": float(a.get("totalStats") or 0) + float(ev["healthStat"]) * 1.5,
             "familyTotalCopies": 1,
             "familyGodRollCount": 0,
-            "isBestGodRoll": is_tier_5,
-            "isBestPve": is_pve,
+            "isBestGodRoll": is_tier_5 and (ev["healthStat"] <= 2 or is_pvp),
+            "isBestPve": is_pve and (ev["healthStat"] <= 2),
             "isBestPvp": is_pvp,
             "isOutclassedDuplicate": False,
             "duplicateRank": 1 if is_tier_5 else 0,
@@ -2509,7 +2516,7 @@ def analyze_arsenal_duplicates_and_trash(inventory_data: dict, god_rolls: List[d
                     l_grc = loser["godRollCheck"]
                     l_grc["isOutclassedDuplicate"] = True
                     l_grc["comparisonSummary"] = (
-                        f"Outclassed by #1 PVE Roll ({pve_winner.get('totalStats')} vs {loser.get('totalStats')} stats)"
+                        f"Outclassed by #1 PVE Roll ({pve_winner.get('totalStats')} vs {loser.get('totalStats')} stats, {pve_winner['armorEvaluation']['healthStat']} vs {loser['armorEvaluation']['healthStat']} Health)"
                     )
                     if not loser.get("isEquipped") and not l_grc["inSavedLoadout"] and not loser.get("isExotic"):
                         l_grc["dismantleCandidate"] = True

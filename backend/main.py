@@ -165,6 +165,7 @@ EXPERTISE & DOMAIN KNOWLEDGE:
       * NEVER recommend investing points into the **Health** stat (or slotting `Health Font`) for ANY **PVE** build (Grandmasters, Raids, Dungeons, Nightfalls, Strikes, Solo/Fireteam Ops, etc.)!
       * Health is **NOT important at all in PVE**—leave **Health at 0 / ignore completely** in PVE (survivability in PVE comes from innate 34.5% PVE combatant DR, Chest Resistance mods, and subclass verbs like Devour, Restoration, Frost Armor, Woven Mail, and Overshield). Put ALL PVE stat investment into **Grenade**, **Melee**, **Weapons**, **Super**, and **Class**!
       * ONLY recommend investing in **Health** when the build or question is explicitly for **PVP (Crucible / Trials of Osiris / Iron Banner)**!
+      * ARMOR APPRAISAL STANDARD: ONLY armor with **10+ Health** stat qualifies as **PVP Armor** (high-health spike for flinch resistance)! Any armor with **under 10 Health** is classified as **PVE Armor** (with 0 Health being the coveted Tier 5 PvE God Roll). Never call armor with under 10 Health "PvP armor"!
     - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "Resilience", "Strength", "Discipline", "Intellect", "Recovery", or "Mobility" as character stats. Refer ONLY to Health, Melee, Grenade, Super, Class, and Weapons (and modern Font mods: Super Font, Grenade Font, Melee Font, Weapons Font, Class Font; only mention Health Font for PVP).
 
 RESPONSE GUIDELINES:
@@ -1419,17 +1420,17 @@ def _local_item_appraisal_fallback(item: dict, gr_eval: dict) -> str:
         spike_desc = " & ".join(f"{s['name']} ({s['value']})" for s in top_stats) if top_stats else "Balanced"
         perks_txt = ", ".join(p["name"] for p in item.get("activePerks", [])) or "Standard Armor Frame"
 
-        has_health_spike = any(s.get("name") == "Health" for s in top_stats)
-        pvp_note = " *(Note: Health spikes are strictly for PVP Crucible/Trials—for PVE builds you want spikes in Grenade, Melee, Weapons, Super, or Class instead!)*" if has_health_spike else ""
+        has_health_spike = any(s.get("name") == "Health" and int(s.get("value", 0)) >= 10 for s in item.get("stats", []))
+        pvp_note = " *(Note: 10+ Health spikes are strictly for PVP Crucible/Trials—for PVE builds you want 0 Health and spikes in Grenade, Melee, Weapons, Super, or Class instead!)*" if has_health_spike else ""
 
         if item.get("isExotic"):
             verdict = "KEEP — EXOTIC ARMOR PIECE"
             advice = f"Exotic armor piece with spikes in **{spike_desc}** ({total} total base/slotted stats). Keep if those spikes align with your 100–200 stat build targets!{pvp_note}"
         elif total >= 65:
-            verdict = "KEEP — HIGH-STAT PVP ARMOR" if has_health_spike else "KEEP — HIGH-STAT ENDGAME ARMOR"
+            verdict = "KEEP — HIGH-STAT PVP ARMOR (10+ HEALTH)" if has_health_spike else "KEEP — HIGH-STAT ENDGAME PVE ARMOR"
             advice = f"Strong **{total}** total roll with primary spikes in **{spike_desc}**. Excellent candidate for pushing your primary stats toward the 150–200 ceiling.{pvp_note}"
         elif total >= 60:
-            verdict = "SOLID WORKHORSE ARMOR"
+            verdict = "SOLID WORKHORSE PVP ARMOR" if has_health_spike else "SOLID WORKHORSE PVE ARMOR"
             advice = f"Respectable **{total}** total roll peaking in **{spike_desc}**. Worth holding onto unless you already have higher spiky set pieces.{pvp_note}"
         else:
             verdict = "SAFE TO TRASH (SHARD IT)"
@@ -1593,7 +1594,7 @@ async def appraise_bungie_item_endpoint(req: Request):
         f"1. **Verdict Header:** State clearly right away whether this roll is a **GOD ROLL (KEEP & LOCK)**, **SOLID KEEP**, or **TRASH / SAFE TO SHARD**.\n"
         f"2. **⚔️ PVE Breakdown:** How good is this specific roll (and its 2-Piece / 4-Piece Armor Set Bonus or Exotic perk if Armor!) for Grandmasters, Raids, Dungeons, or Ad Clear/Boss DPS?\n"
         f"3. **🎯 PVP Breakdown:** How good is this specific roll for Crucible / Trials of Osiris?\n"
-        f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! (If inspecting Armor: remember Health spikes are ONLY valuable for PVP—for PVE builds, prioritize Grenade, Melee, Weapons, Super, and Class, NEVER Health!) Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
+        f"4. **Final Recommendation:** If multi-perk columns have a better selectable option, tell them which perks to select; otherwise tell them cleanly to lock it or shard it! (If inspecting Armor: remember only Health spikes of 10+ are valuable for PVP—for PVE builds, prioritize 0 Health and spikes in Grenade, Melee, Weapons, Super, and Class, NEVER Health! Armor with <10 Health is for PvE, not PvP!) Remember: NEVER use old stat names in parentheses—only Health, Melee, Grenade, Super, Class, Weapons on the 0-200 scale."
     )
 
     ai_reply = await run_in_threadpool(query_gemini_api, prompt, [], FELICIA_SYSTEM_PROMPT)

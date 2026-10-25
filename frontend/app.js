@@ -1795,7 +1795,12 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE+PVP ROLL' : '★ PVE + PVP GOD ROLL'}</span>`;
   } else if (vc === 'PVE_GOD_ROLL') {
     if (item.category === 'Armor') {
-      godBadge = `<span class="godroll-mini-tag pve-god-armor">★ PVE TIER 5 (0 HEALTH)</span>`;
+      const hp = aev.healthStat || 0;
+      if (hp <= 2) {
+        godBadge = `<span class="godroll-mini-tag pve-god-armor">★ PVE TIER 5 (0 HEALTH)</span>`;
+      } else {
+        godBadge = `<span class="godroll-mini-tag pve-god-armor">🛡️ PVE TIER 5 (${hp} HP)</span>`;
+      }
     } else {
       godBadge = `<span class="godroll-mini-tag">${hasMultipleGods ? '👑 #1 PVE GOD ROLL' : '★ PVE GOD ROLL'}</span>`;
     }
@@ -2924,7 +2929,11 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
   if (entry.verdictCode === 'DUAL_GOD_ROLL') {
     modeBadge = `<span class="scanner-mode-tag dual">★ PVE + PVP GOD ROLL</span>`;
   } else if (entry.verdictCode === 'PVE_GOD_ROLL') {
-    modeBadge = `<span class="scanner-mode-tag pve">⚔️ PVE GOD ROLL</span>`;
+    if (it.category === 'Armor' && (it.armorEvaluation?.healthStat || 0) > 2) {
+      modeBadge = `<span class="scanner-mode-tag pve">🛡️ PVE ARMOR (${it.armorEvaluation.healthStat} HP)</span>`;
+    } else {
+      modeBadge = `<span class="scanner-mode-tag pve">⚔️ PVE GOD ROLL</span>`;
+    }
   } else if (entry.verdictCode === 'PVP_GOD_ROLL') {
     modeBadge = `<span class="scanner-mode-tag pvp">🎯 PVP GOD ROLL</span>`;
   }
@@ -2961,8 +2970,16 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
   if (it.category === 'Armor') {
     const aev = it.armorEvaluation || {};
     perkTags.push(`<span class="scanner-perk-chip">✦ Total: <strong>${it.totalStats || 0} Stats</strong></span>`);
-    const hpStyle = (aev.healthStat || 0) <= 2 ? 'color:#6EE7B7; border-color:rgba(52,211,153,0.4);' : 'color:#FDA4AF; border-color:rgba(244,63,94,0.4);';
-    const hpText = (aev.healthStat || 0) <= 2 ? '0 Health (PVE God Roll)' : `${aev.healthStat} Health (PVP Spike)`;
+    const hpVal = aev.healthStat || 0;
+    let hpStyle = 'color:#6EE7B7; border-color:rgba(52,211,153,0.4);';
+    let hpText = '0 Health (PVE God Roll)';
+    if (hpVal >= 10) {
+      hpStyle = 'color:#FDA4AF; border-color:rgba(244,63,94,0.4);';
+      hpText = `${hpVal} Health (PVP Spike 10+)`;
+    } else if (hpVal > 2) {
+      hpStyle = 'color:#A7F3D0; border-color:rgba(167,243,208,0.35);';
+      hpText = `${hpVal} Health (PvE Low Health)`;
+    }
     perkTags.push(`<span class="scanner-perk-chip" style="${hpStyle}"><strong>${hpText}</strong></span>`);
     if (it.compendiumSet) {
       perkTags.push(`<span class="scanner-perk-chip" style="color:#FDE047; border-color:rgba(245,166,35,0.45);">⛊ <strong>${escapeHtml(it.compendiumSet.name)}</strong> (2pc: ${escapeHtml(it.compendiumSet.perk2pc?.name || '')})</span>`);
