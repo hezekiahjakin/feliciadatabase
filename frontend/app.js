@@ -1820,6 +1820,42 @@ function renderInventoryHeaderAndSwitcher() {
   switcher.appendChild(vaultBtn);
 }
 
+function resolveItemGearTier(item) {
+  if (!item || item.category === 'Artifact' || item.slot === 'Artifact') return null;
+  const rawTier = parseInt(item.gearTier, 10);
+  if (!isNaN(rawTier) && rawTier >= 1 && rawTier <= 5) {
+    return rawTier;
+  }
+
+  // Client-side fallback evaluator matching Destiny 2 / Light.gg / DIM
+  if (item.category === 'Armor') {
+    const totalStats = item.totalStats || (item.stats || []).reduce((acc, s) => acc + (s.value || 0), 0);
+    const isArtifice = (item.activePerks || []).some(p => (p.name || '').toLowerCase().includes('artifice')) ||
+                       (item.mods || []).some(m => (m.name || '').toLowerCase().includes('artifice'));
+    if (totalStats >= 64 || isArtifice || (item.isExotic && totalStats >= 60)) return 5;
+    if (totalStats >= 60) return 4;
+    if (totalStats >= 56) return 3;
+    if (totalStats >= 50) return 2;
+    if (totalStats > 0) return 1;
+    return item.isExotic ? 5 : (item.tierName === 'Legendary' ? 4 : 2);
+  }
+
+  if (item.category === 'Weapon') {
+    const nameLow = (item.name || '').toLowerCase();
+    const isAdept = nameLow.includes('(adept)') || nameLow.includes('(timelost)') || nameLow.includes('(harrowed)');
+    const enhancedCount = (item.activePerks || []).filter(p =>
+      (p.name || '').toLowerCase().includes('(enhanced)') || (p.description || '').toLowerCase().includes('enhanced')
+    ).length;
+    if (item.isExotic || isAdept || enhancedCount >= 2) return 5;
+    if (item.isCrafted || enhancedCount >= 1) return 4;
+    if (item.isMasterworked) return 3;
+    if (item.tierName === 'Legendary') return 2;
+    return 1;
+  }
+
+  return null;
+}
+
 function renderTierStarsHtml(tierNumber) {
   const t = parseInt(tierNumber, 10);
   if (!t || isNaN(t) || t < 1 || t > 5) return '';
@@ -1931,9 +1967,11 @@ function createGearCardElement(item, { isEquippedCard = false, deferOffscreen = 
     ? `<span class="compendium-set-pill">⛊ ${escapeHtml(item.compendiumSet.name)}</span>`
     : '';
 
-  const tierStars = renderTierStarsHtml(item.gearTier);
-  const tierPill = (item.gearTier && item.gearTier >= 1 && item.gearTier <= 5)
-    ? `<span class="gear-tier-pill t${item.gearTier}">T${item.gearTier}</span>`
+  const resolvedTier = resolveItemGearTier(item);
+  item.gearTier = resolvedTier;
+  const tierStars = renderTierStarsHtml(resolvedTier);
+  const tierPill = (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
+    ? `<span class="gear-tier-pill t${resolvedTier}">T${resolvedTier}</span>`
     : '';
 
   const craftedCorner = item.isCrafted ? `<span class="gear-crafted-corner">◈</span>` : '';
@@ -2177,316 +2215,324 @@ function findFallbackEquipId(characterId, slotName, excludeInstanceId) {
   return candidates[0]?.itemInstanceId || '';
 }
 
+function getActiveCharacter() {
+  const chars = state.bungieData?.characters || [];
+  if (!chars.length) return null;
+  if (state.activeInventoryView && state.activeInventoryView !== 'vault') {
+    const found = chars.find(c => c.characterId === state.activeInventoryView);
+    if (found) return found;
+  }
+  return chars[0] || null;
+}
+
 function openItemInspectModal(item) {
-  sfx.playChirp();
-  state.inspectedItem = item;
-  state.lastAppraisalReply = '';
+  try {
+    sfx.playChirp();
+    state.inspectedItem = item;
+    state.lastAppraisalReply = '';
 
-  const modal = document.getElementById('modalInspectItem');
-  if (!modal) return;
+    const modal = document.getElementById('modalInspectItem');
+    if (!modal) return;
 
-  const banner = document.getElementById('inspectBanner');
-  if (banner) {
-    banner.className = `inspect-banner ${item.isExotic ? 'tier-exotic' : 'tier-legendary'}`;
-  }
+    const resolvedTier = resolveItemGearTier(item);
+    item.gearTier = resolvedTier;
 
-  const iconEl = document.getElementById('inspectItemIcon');
-  if (iconEl) iconEl.src = item.icon ? `https://www.bungie.net${item.icon}` : 'icon-192.png';
-
-  const pipEl = document.getElementById('inspectCraftedPip');
-  if (pipEl) pipEl.classList.toggle('hidden', !item.isCrafted);
-
-  const tierBadge = document.getElementById('inspectTierBadge');
-  if (tierBadge) {
-    if (item.category === 'Artifact') {
-      tierBadge.textContent = 'SEASONAL';
-    } else if (item.gearTier && item.gearTier >= 1 && item.gearTier <= 5) {
-      tierBadge.textContent = `TIER ${item.gearTier} • ${(item.tierName || 'Legendary').toUpperCase()}`;
-    } else {
-      tierBadge.textContent = item.tierName || 'Legendary';
+    const banner = document.getElementById('inspectBanner');
+    if (banner) {
+      banner.className = `inspect-banner ${item.isExotic ? 'tier-exotic' : 'tier-legendary'}`;
     }
-  }
 
-  const tierStarsWrap = document.getElementById('inspectTierStars');
-  if (tierStarsWrap) {
-    tierStarsWrap.innerHTML = item.gearTier ? renderTierStarsHtml(item.gearTier).replace(/^<div[^>]*>|<\/div>$/g, '') : '';
-  }
+    const iconEl = document.getElementById('inspectItemIcon');
+    if (iconEl) iconEl.src = item.icon ? `https://www.bungie.net${item.icon}` : 'icon-192.png';
 
-  const elemBadge = document.getElementById('inspectElemBadge');
-  if (elemBadge) {
-    if (item.category === 'Artifact') {
-      elemBadge.textContent = 'ARTIFACT';
-    } else if (item.category === 'Weapon') {
-      elemBadge.textContent = item.element;
-    } else {
-      elemBadge.textContent = `${item.classRestriction !== 'Any' ? item.classRestriction + ' ' : ''}Armor`;
-    }
-  }
+    const pipEl = document.getElementById('inspectCraftedPip');
+    if (pipEl) pipEl.classList.toggle('hidden', !item.isCrafted);
 
-  const locBadge = document.getElementById('inspectLocBadge');
-  if (locBadge) {
-    if (item.location === 'vault') {
-      locBadge.textContent = 'IN VAULT';
-    } else {
-      const ownerChar = (state.bungieData?.characters || []).find(c => c.characterId === item.characterId);
-      const cName = ownerChar ? ownerChar.className.toUpperCase() : 'CHARACTER';
-      locBadge.textContent = item.isEquipped ? `EQUIPPED • ${cName}` : `${item.location === 'postmaster' ? 'POSTMASTER' : 'INVENTORY'} • ${cName}`;
-    }
-  }
-
-  const nameEl = document.getElementById('inspectItemName');
-  if (nameEl) nameEl.textContent = item.name;
-
-  const sublineEl = document.getElementById('inspectSubline');
-  if (sublineEl) {
-    const tierPrefix = item.gearTier ? `Tier ${item.gearTier} (${'✦'.repeat(item.gearTier)}) • ` : '';
-    if (item.category === 'Artifact') {
-      sublineEl.textContent = `${item.powerBonus ? `+${item.powerBonus} Bonus Power • ` : ''}Seasonal Artifact`;
-    } else if (item.category === 'Armor' && item.armorEvaluation) {
-      sublineEl.textContent = `${tierPrefix}${item.armorEvaluation.verdictLabel} • ${item.slot} (${item.totalStats || 0} Total Stats)`;
-    } else {
-      const fName = item.frame?.name ? `${item.frame.name} • ` : '';
-      sublineEl.textContent = `${tierPrefix}${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
-    }
-  }
-
-  const powerEl = document.getElementById('inspectPowerVal');
-  if (powerEl) powerEl.textContent = item.power || (item.powerBonus ? `+${item.powerBonus}` : '—');
-
-  // Hide previous feedback & appraisal panel until requested
-  const feedbackEl = document.getElementById('inspectTransferFeedback');
-  if (feedbackEl) {
-    feedbackEl.classList.add('hidden');
-    feedbackEl.classList.remove('error');
-  }
-  const feliciaPanel = document.getElementById('inspectFeliciaPanel');
-  if (feliciaPanel) feliciaPanel.classList.add('hidden');
-
-  // Populate Action Buttons: Send to Hunter / Warlock / Titan / Vault + 4th "Ask F.E.L.I.C.I.A."
-  const actionsGrid = document.getElementById('inspectActionsGrid');
-  if (actionsGrid) {
-    actionsGrid.innerHTML = '';
-    const chars = state.bungieData?.characters || [];
-    const activeChar = getActiveCharacter();
-
-    if (item.category === 'Artifact') {
-      // Artifacts are account-wide in modern Destiny 2:
-      // If equipped on the active character: ONLY "Ask F.E.L.I.C.I.A."
-      // If not equipped on the active character: "Equip Artifact" + "Ask F.E.L.I.C.I.A."
-      const isEquippedOnActive = item.isEquipped && (!activeChar || item.characterId === activeChar.characterId);
-      if (!isEquippedOnActive && activeChar) {
-        const equipBtn = document.createElement('button');
-        equipBtn.type = 'button';
-        equipBtn.className = 'btn-item-action';
-        equipBtn.innerHTML = `<span>⚡</span> Equip Artifact`;
-        equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', activeChar.characterId, activeChar.className));
-        actionsGrid.appendChild(equipBtn);
+    const tierBadge = document.getElementById('inspectTierBadge');
+    if (tierBadge) {
+      if (item.category === 'Artifact') {
+        tierBadge.textContent = 'SEASONAL';
+      } else if (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5) {
+        tierBadge.textContent = `TIER ${resolvedTier} • ${(item.tierName || 'Legendary').toUpperCase()}`;
+      } else {
+        tierBadge.textContent = item.tierName || 'Legendary';
       }
+    }
 
-      // Signature Action: Ask F.E.L.I.C.I.A.
-      const askBtn = document.createElement('button');
-      askBtn.type = 'button';
-      askBtn.className = 'btn-item-action btn-ask-felicia';
-      askBtn.id = 'btnTriggerAskFelicia';
-      askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
-      askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
-      actionsGrid.appendChild(askBtn);
-    } else {
-      chars.forEach(ch => {
-        const isAlreadyOnThisChar = item.location === 'character' && item.characterId === ch.characterId;
-        if (!isAlreadyOnThisChar) {
-          const sendBtn = document.createElement('button');
-          sendBtn.type = 'button';
-          sendBtn.className = 'btn-item-action';
-          sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
-          sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
-          actionsGrid.appendChild(sendBtn);
-        } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className)) {
+    const tierStarsWrap = document.getElementById('inspectTierStars');
+    if (tierStarsWrap) {
+      tierStarsWrap.innerHTML = resolvedTier ? renderTierStarsHtml(resolvedTier).replace(/^<div[^>]*>|<\/div>$/g, '') : '';
+    }
+
+    const elemBadge = document.getElementById('inspectElemBadge');
+    if (elemBadge) {
+      if (item.category === 'Artifact') {
+        elemBadge.textContent = 'ARTIFACT';
+      } else if (item.category === 'Weapon') {
+        elemBadge.textContent = item.element;
+      } else {
+        elemBadge.textContent = `${item.classRestriction !== 'Any' ? item.classRestriction + ' ' : ''}Armor`;
+      }
+    }
+
+    const locBadge = document.getElementById('inspectLocBadge');
+    if (locBadge) {
+      if (item.location === 'vault') {
+        locBadge.textContent = 'IN VAULT';
+      } else {
+        const ownerChar = (state.bungieData?.characters || []).find(c => c.characterId === item.characterId);
+        const cName = ownerChar ? ownerChar.className.toUpperCase() : 'CHARACTER';
+        locBadge.textContent = item.isEquipped ? `EQUIPPED • ${cName}` : `${item.location === 'postmaster' ? 'POSTMASTER' : 'INVENTORY'} • ${cName}`;
+      }
+    }
+
+    const nameEl = document.getElementById('inspectItemName');
+    if (nameEl) nameEl.textContent = item.name;
+
+    const sublineEl = document.getElementById('inspectSubline');
+    if (sublineEl) {
+      const tNum = parseInt(resolvedTier, 10);
+      const tierPrefix = (Number.isInteger(tNum) && tNum >= 1 && tNum <= 5) ? `Tier ${tNum} (${'✦'.repeat(tNum)}) • ` : '';
+      if (item.category === 'Artifact') {
+        sublineEl.textContent = `${item.powerBonus ? `+${item.powerBonus} Bonus Power • ` : ''}Seasonal Artifact`;
+      } else if (item.category === 'Armor' && item.armorEvaluation) {
+        sublineEl.textContent = `${tierPrefix}${item.armorEvaluation.verdictLabel} • ${item.slot} (${item.totalStats || 0} Total Stats)`;
+      } else {
+        const fName = item.frame?.name ? `${item.frame.name} • ` : '';
+        sublineEl.textContent = `${tierPrefix}${fName}${item.typeName || item.slot} (${item.slot} Slot)`;
+      }
+    }
+
+    const powerEl = document.getElementById('inspectPowerVal');
+    if (powerEl) powerEl.textContent = item.power || (item.powerBonus ? `+${item.powerBonus}` : '—');
+
+    // Hide previous feedback & appraisal panel until requested
+    const feedbackEl = document.getElementById('inspectTransferFeedback');
+    if (feedbackEl) {
+      feedbackEl.classList.add('hidden');
+      feedbackEl.classList.remove('error');
+    }
+    const feliciaPanel = document.getElementById('inspectFeliciaPanel');
+    if (feliciaPanel) feliciaPanel.classList.add('hidden');
+
+    // Populate Action Buttons: Send to Hunter / Warlock / Titan / Vault + Signature "Ask F.E.L.I.C.I.A."
+    const actionsGrid = document.getElementById('inspectActionsGrid');
+    if (actionsGrid) {
+      actionsGrid.innerHTML = '';
+      const chars = state.bungieData?.characters || [];
+      const activeChar = getActiveCharacter();
+
+      if (item.category === 'Artifact') {
+        // Artifacts are account-wide in modern Destiny 2:
+        // If equipped on the active character: ONLY "Ask F.E.L.I.C.I.A."
+        // If not equipped on the active character: "Equip Artifact" + "Ask F.E.L.I.C.I.A."
+        const isEquippedOnActive = item.isEquipped && (!activeChar || item.characterId === activeChar.characterId);
+        if (!isEquippedOnActive && activeChar) {
           const equipBtn = document.createElement('button');
           equipBtn.type = 'button';
           equipBtn.className = 'btn-item-action';
-          equipBtn.innerHTML = `<span>⚡</span> Equip on ${escapeHtml(ch.className)}`;
-          equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', ch.characterId, ch.className));
+          equipBtn.innerHTML = `<span>⚡</span> Equip Artifact`;
+          equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', activeChar.characterId, activeChar.className));
           actionsGrid.appendChild(equipBtn);
         }
-      });
 
-      if (item.location !== 'vault') {
-        const vaultBtn = document.createElement('button');
-        vaultBtn.type = 'button';
-        vaultBtn.className = 'btn-item-action';
-        vaultBtn.innerHTML = `<span>🏛️</span> Send to Vault`;
-        vaultBtn.addEventListener('click', () => executeItemTransfer(item, 'vault', '', 'Vault'));
-        actionsGrid.appendChild(vaultBtn);
-      }
+        // Signature Action: Ask F.E.L.I.C.I.A.
+        const askBtn = document.createElement('button');
+        askBtn.type = 'button';
+        askBtn.className = 'btn-item-action btn-ask-felicia';
+        askBtn.id = 'btnTriggerAskFelicia';
+        askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
+        askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
+        actionsGrid.appendChild(askBtn);
+      } else {
+        chars.forEach(ch => {
+          const isAlreadyOnThisChar = item.location === 'character' && item.characterId === ch.characterId;
+          if (!isAlreadyOnThisChar) {
+            const sendBtn = document.createElement('button');
+            sendBtn.type = 'button';
+            sendBtn.className = 'btn-item-action';
+            sendBtn.innerHTML = `<span>${classGlyph(ch.className)}</span> Send to ${escapeHtml(ch.className)}`;
+            sendBtn.addEventListener('click', () => executeItemTransfer(item, 'character', ch.characterId, ch.className));
+            actionsGrid.appendChild(sendBtn);
+          } else if (!item.isEquipped && (item.classRestriction === 'Any' || item.classRestriction === ch.className)) {
+            const equipBtn = document.createElement('button');
+            equipBtn.type = 'button';
+            equipBtn.className = 'btn-item-action';
+            equipBtn.innerHTML = `<span>⚡</span> Equip on ${escapeHtml(ch.className)}`;
+            equipBtn.addEventListener('click', () => executeItemTransfer(item, 'equip', ch.characterId, ch.className));
+            actionsGrid.appendChild(equipBtn);
+          }
+        });
 
-      if (item.itemInstanceId && item.location !== 'postmaster') {
-        const lockBtn = document.createElement('button');
-        lockBtn.type = 'button';
-        lockBtn.className = 'btn-item-action';
-        const syncLockBtnLabel = () => {
-          lockBtn.innerHTML = item.isLocked ? `<span>🔒</span> Locked (Unlock)` : `<span>🔓</span> Lock Item`;
-        };
-        syncLockBtnLabel();
-        lockBtn.addEventListener('click', async () => {
-          lockBtn.disabled = true;
-          await toggleSingleItemLock(item, !item.isLocked);
+        if (item.location !== 'vault') {
+          const vaultBtn = document.createElement('button');
+          vaultBtn.type = 'button';
+          vaultBtn.className = 'btn-item-action';
+          vaultBtn.innerHTML = `<span>🏛️</span> Send to Vault`;
+          vaultBtn.addEventListener('click', () => executeItemTransfer(item, 'vault', '', 'Vault'));
+          actionsGrid.appendChild(vaultBtn);
+        }
+
+        if (item.itemInstanceId && item.location !== 'postmaster') {
+          const lockBtn = document.createElement('button');
+          lockBtn.type = 'button';
+          lockBtn.className = 'btn-item-action';
+          const syncLockBtnLabel = () => {
+            lockBtn.innerHTML = item.isLocked ? `<span>🔒</span> Locked (Unlock)` : `<span>🔓</span> Lock Item`;
+          };
           syncLockBtnLabel();
-          lockBtn.disabled = false;
-        });
-        actionsGrid.appendChild(lockBtn);
+          lockBtn.addEventListener('click', async () => {
+            lockBtn.disabled = true;
+            await toggleSingleItemLock(item, !item.isLocked);
+            syncLockBtnLabel();
+            lockBtn.disabled = false;
+          });
+          actionsGrid.appendChild(lockBtn);
+        }
+
+        // Signature Action: Ask F.E.L.I.C.I.A.
+        const askBtn = document.createElement('button');
+        askBtn.type = 'button';
+        askBtn.className = 'btn-item-action btn-ask-felicia';
+        askBtn.id = 'btnTriggerAskFelicia';
+        askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
+        askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
+        actionsGrid.appendChild(askBtn);
       }
-
-      // Signature Action: Ask F.E.L.I.C.I.A.
-      const askBtn = document.createElement('button');
-      askBtn.type = 'button';
-      askBtn.className = 'btn-item-action btn-ask-felicia';
-      askBtn.id = 'btnTriggerAskFelicia';
-      askBtn.innerHTML = `<span>❖</span> Ask F.E.L.I.C.I.A.`;
-      askBtn.addEventListener('click', () => triggerAskFeliciaOnItem(item));
-      actionsGrid.appendChild(askBtn);
     }
-  }
 
-  // Render Frame & Perk Columns (or Compendium Set Box for Armor)
-  const frameBox = document.getElementById('inspectFrameBox');
-  if (frameBox) {
-    if (item.compendiumSet) {
-      frameBox.classList.remove('hidden');
-      frameBox.innerHTML = `
-        <div style="width:100%;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
-            <span style="font-family:var(--font-tactical); font-weight:700; color:#FDE047; font-size:13px;">⛊ ${escapeHtml(item.compendiumSet.name)} SET</span>
-            <span style="font-size:11px; color:#94A3B8;">${escapeHtml(item.compendiumSet.source || '')}</span>
-          </div>
-          <div style="font-size:12px; color:#CBD5E1; margin-bottom:5px; line-height:1.4;">
-            <strong style="color:#67E8F9;">2-Piece: ${escapeHtml(item.compendiumSet.perk2pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk2pc?.desc || '')}
-          </div>
-          <div style="font-size:12px; color:#CBD5E1; line-height:1.4;">
-            <strong style="color:#A78BFA;">4-Piece: ${escapeHtml(item.compendiumSet.perk4pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk4pc?.desc || '')}
-          </div>
-        </div>
-      `;
-    } else if (item.frame && item.frame.name) {
-      frameBox.classList.remove('hidden');
-      const fIcon = item.frame.icon ? `<img src="https://www.bungie.net${item.frame.icon}" alt="">` : '';
-      frameBox.innerHTML = `
-        ${fIcon}
-        <div>
-          <div style="font-family:var(--font-tactical); font-weight:700; color:#F8FAFC; font-size:13.5px;">${escapeHtml(item.frame.name)}</div>
-          <div style="font-size:12px; color:#94A3B8;">${escapeHtml(item.frame.description || '')}</div>
-        </div>
-      `;
-    } else {
-      frameBox.classList.add('hidden');
-    }
-  }
-
-  const perkColsEl = document.getElementById('inspectPerkColumns');
-  if (perkColsEl) {
-    perkColsEl.innerHTML = '';
-    if (item.category === 'Artifact') {
-      const perksArr = item.activePerks || [];
-      if (perksArr.length > 0) {
-        const artWrap = document.createElement('div');
-        artWrap.innerHTML = `
-          <div class="dim-artifact-strip">
-            ${item.icon ? `
-              <div class="dim-artifact-icon-wrap" title="${escapeHtml(item.name)} (Seasonal Artifact)">
-                <img src="https://www.bungie.net${item.icon}" alt="${escapeHtml(item.name)}">
-              </div>
-            ` : ''}
-            ${perksArr.map(p => `
-              <div class="dim-artifact-perk" title="${escapeHtml(p.name)}${p.description ? ': ' + escapeHtml(p.description) : ''}">
-                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="${escapeHtml(p.name)}">` : ''}
-              </div>
-            `).join('')}
-          </div>
-          <div class="artifact-perks-wrap">
-            ${perksArr.map(p => `
-              <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
-                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : ''}
-                <span>${escapeHtml(p.name)}</span>
-              </span>
-            `).join('')}
+    // Render Frame & Perk Columns (or Compendium Set Box for Armor)
+    const frameBox = document.getElementById('inspectFrameBox');
+    if (frameBox) {
+      if (item.compendiumSet) {
+        frameBox.classList.remove('hidden');
+        frameBox.innerHTML = `
+          <div style="width:100%;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+              <span style="font-family:var(--font-tactical); font-weight:700; color:#FDE047; font-size:13px;">⛊ ${escapeHtml(item.compendiumSet.name)} SET</span>
+              <span style="font-size:11px; color:#94A3B8;">${escapeHtml(item.compendiumSet.source || '')}</span>
+            </div>
+            <div style="font-size:12px; color:#CBD5E1; margin-bottom:5px; line-height:1.4;">
+              <strong style="color:#67E8F9;">2-Piece: ${escapeHtml(item.compendiumSet.perk2pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk2pc?.desc || '')}
+            </div>
+            <div style="font-size:12px; color:#CBD5E1; line-height:1.4;">
+              <strong style="color:#A78BFA;">4-Piece: ${escapeHtml(item.compendiumSet.perk4pc?.name || '')}</strong> — ${escapeHtml(item.compendiumSet.perk4pc?.desc || '')}
+            </div>
           </div>
         `;
-        perkColsEl.appendChild(artWrap);
+      } else if (item.frame && item.frame.name) {
+        frameBox.classList.remove('hidden');
+        const fIcon = item.frame.icon ? `<img src="https://www.bungie.net${item.frame.icon}" alt="">` : '';
+        frameBox.innerHTML = `
+          ${fIcon}
+          <div>
+            <div style="font-family:var(--font-tactical); font-weight:700; color:#F8FAFC; font-size:13.5px;">${escapeHtml(item.frame.name)}</div>
+            <div style="font-size:12px; color:#94A3B8;">${escapeHtml(item.frame.description || '')}</div>
+          </div>
+        `;
       } else {
-        perkColsEl.innerHTML = `<div style="color:#C084FC; font-size:13px;">Equippable Seasonal Artifact</div>`;
+        frameBox.classList.add('hidden');
       }
-    } else if ((item.perkColumns || []).length === 0) {
-      perkColsEl.innerHTML = `<div style="color:#64748B; font-size:13px;">Standard / Intrinsic Configuration</div>`;
-    } else {
-      item.perkColumns.forEach(col => {
-        const stack = document.createElement('div');
-        stack.className = 'perk-col-stack';
-        col.forEach(opt => {
-          const chip = document.createElement('div');
-          chip.className = `perk-chip ${opt.selected ? 'active' : ''}`;
-          chip.title = opt.description || opt.name;
-          const pImg = opt.icon ? `<img src="https://www.bungie.net${opt.icon}" alt="">` : '';
-          chip.innerHTML = `${pImg}<span>${escapeHtml(opt.name)}</span>`;
-          stack.appendChild(chip);
+    }
+
+    const perkColsEl = document.getElementById('inspectPerkColumns');
+    if (perkColsEl) {
+      perkColsEl.innerHTML = '';
+      if (item.category === 'Artifact') {
+        const perksArr = item.activePerks || [];
+        if (perksArr.length > 0) {
+          const artWrap = document.createElement('div');
+          artWrap.innerHTML = `
+            <div class="artifact-perks-wrap" style="padding-top:4px; border-top:none;">
+              ${perksArr.map(p => `
+                <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
+                  ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : ''}
+                  <span>${escapeHtml(p.name)}</span>
+                </span>
+              `).join('')}
+            </div>
+          `;
+          perkColsEl.appendChild(artWrap);
+        } else {
+          perkColsEl.innerHTML = `<div style="color:#C084FC; font-size:13px;">Equippable Seasonal Artifact</div>`;
+        }
+      } else if ((item.perkColumns || []).length === 0) {
+        perkColsEl.innerHTML = `<div style="color:#64748B; font-size:13px;">Standard / Intrinsic Configuration</div>`;
+      } else {
+        item.perkColumns.forEach(col => {
+          const stack = document.createElement('div');
+          stack.className = 'perk-col-stack';
+          col.forEach(opt => {
+            const chip = document.createElement('div');
+            chip.className = `perk-chip ${opt.selected ? 'active' : ''}`;
+            chip.title = opt.description || opt.name;
+            const pImg = opt.icon ? `<img src="https://www.bungie.net${opt.icon}" alt="">` : '';
+            chip.innerHTML = `${pImg}<span>${escapeHtml(opt.name)}</span>`;
+            stack.appendChild(chip);
+          });
+          perkColsEl.appendChild(stack);
         });
-        perkColsEl.appendChild(stack);
+      }
+    }
+
+    const mwRow = document.getElementById('inspectMwRow');
+    if (mwRow) {
+      if (item.masterwork && item.masterwork.name) {
+        mwRow.classList.remove('hidden');
+        const mIcon = item.masterwork.icon ? `<img src="https://www.bungie.net${item.masterwork.icon}" alt="">` : '';
+        mwRow.innerHTML = `${mIcon}<span><strong>Masterwork:</strong> ${escapeHtml(item.masterwork.name)}</span>`;
+      } else {
+        mwRow.classList.add('hidden');
+      }
+    }
+
+    // Render Stat Bars
+    const statsListEl = document.getElementById('inspectStatsList');
+    if (statsListEl) {
+      statsListEl.innerHTML = '';
+      const maxScale = item.category === 'Armor' ? 45 : 100;
+      (item.stats || []).forEach(st => {
+        const noBarStats = ['RPM', 'Magazine', 'Charge Time', 'Draw Time', 'Recoil Direction'];
+        const row = document.createElement('div');
+        row.className = 'inspect-stat-row';
+        if (noBarStats.includes(st.name)) {
+          row.innerHTML = `
+            <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
+            <span style="color:#64748B; font-size:11px;">————</span>
+            <span class="inspect-stat-val">${st.value}</span>
+          `;
+        } else {
+          const pct = Math.max(0, Math.min(100, Math.round((st.value / maxScale) * 100)));
+          row.innerHTML = `
+            <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
+            <div class="inspect-stat-bar-bg"><div class="inspect-stat-bar-fill" style="width:${pct}%"></div></div>
+            <span class="inspect-stat-val">${st.value}</span>
+          `;
+        }
+        statsListEl.appendChild(row);
       });
-    }
-  }
 
-  const mwRow = document.getElementById('inspectMwRow');
-  if (mwRow) {
-    if (item.masterwork && item.masterwork.name) {
-      mwRow.classList.remove('hidden');
-      const mIcon = item.masterwork.icon ? `<img src="https://www.bungie.net${item.masterwork.icon}" alt="">` : '';
-      mwRow.innerHTML = `${mIcon}<span><strong>Masterwork:</strong> ${escapeHtml(item.masterwork.name)}</span>`;
-    } else {
-      mwRow.classList.add('hidden');
-    }
-  }
-
-  // Render Stat Bars
-  const statsListEl = document.getElementById('inspectStatsList');
-  if (statsListEl) {
-    statsListEl.innerHTML = '';
-    const maxScale = item.category === 'Armor' ? 45 : 100;
-    (item.stats || []).forEach(st => {
-      const noBarStats = ['RPM', 'Magazine', 'Charge Time', 'Draw Time', 'Recoil Direction'];
-      const row = document.createElement('div');
-      row.className = 'inspect-stat-row';
-      if (noBarStats.includes(st.name)) {
-        row.innerHTML = `
-          <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
-          <span style="color:#64748B; font-size:11px;">————</span>
-          <span class="inspect-stat-val">${st.value}</span>
+      if (item.category === 'Armor' && item.totalStats) {
+        const totalRow = document.createElement('div');
+        totalRow.className = 'inspect-stat-row';
+        totalRow.style.marginTop = '6px';
+        totalRow.style.paddingTop = '6px';
+        totalRow.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+        totalRow.innerHTML = `
+          <span class="inspect-stat-name" style="color:var(--vanguard-amber); font-weight:700;">Total Stats</span>
+          <span></span>
+          <span class="inspect-stat-val" style="color:var(--vanguard-amber); font-size:15px;">${item.totalStats}</span>
         `;
-      } else {
-        const pct = Math.max(0, Math.min(100, Math.round((st.value / maxScale) * 100)));
-        row.innerHTML = `
-          <span class="inspect-stat-name">${escapeHtml(st.name)}</span>
-          <div class="inspect-stat-bar-bg"><div class="inspect-stat-bar-fill" style="width:${pct}%"></div></div>
-          <span class="inspect-stat-val">${st.value}</span>
-        `;
+        statsListEl.appendChild(totalRow);
       }
-      statsListEl.appendChild(row);
-    });
-
-    if (item.category === 'Armor' && item.totalStats) {
-      const totalRow = document.createElement('div');
-      totalRow.className = 'inspect-stat-row';
-      totalRow.style.marginTop = '6px';
-      totalRow.style.paddingTop = '6px';
-      totalRow.style.borderTop = '1px solid rgba(255,255,255,0.1)';
-      totalRow.innerHTML = `
-        <span class="inspect-stat-name" style="color:var(--vanguard-amber); font-weight:700;">Total Stats</span>
-        <span></span>
-        <span class="inspect-stat-val" style="color:var(--vanguard-amber); font-size:15px;">${item.totalStats}</span>
-      `;
-      statsListEl.appendChild(totalRow);
     }
-  }
 
-  modal.showModal();
+    if (!modal.open) {
+      modal.showModal();
+    }
+  } catch (err) {
+    console.error('[Open Inspect Item Modal Error]', err);
+  }
 }
 
 async function executeItemTransfer(item, targetType, targetCharacterId, targetLabel) {
@@ -2786,14 +2832,7 @@ function openSavedLoadoutModal(character, loadout) {
           </div>
         </div>
         ${perksArr.length > 0 ? `
-          <div class="dim-artifact-strip">
-            ${perksArr.map(p => `
-              <div class="dim-artifact-perk" title="${escapeHtml(p.name)}${p.description ? ': ' + escapeHtml(p.description) : ''}">
-                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="${escapeHtml(p.name)}">` : ''}
-              </div>
-            `).join('')}
-          </div>
-          <div class="artifact-perks-wrap">
+          <div class="artifact-perks-wrap" style="padding-top:8px; border-top:none;">
             ${perksArr.map(p => `
               <span class="artifact-perk-chip" title="${escapeHtml(p.description || '')}">
                 ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : ''}
@@ -3245,9 +3284,11 @@ function buildScannerEntryCard(entry, { viewMode = 'best', byInstanceId = new Ma
     primaryActionBtnHtml = `<button type="button" class="btn-lock-toggle ${it.isLocked ? 'is-locked' : ''}" data-role="lock-one">${lockBtnLabel}</button>`;
   }
 
-  const scannerTierStars = renderTierStarsHtml(it.gearTier);
-  const scannerTierPill = (it.gearTier && it.gearTier >= 1 && it.gearTier <= 5)
-    ? `<span class="gear-tier-pill t${it.gearTier}">T${it.gearTier}</span>`
+  const resolvedTier = resolveItemGearTier(it);
+  it.gearTier = resolvedTier;
+  const scannerTierStars = renderTierStarsHtml(resolvedTier);
+  const scannerTierPill = (resolvedTier && resolvedTier >= 1 && resolvedTier <= 5)
+    ? `<span class="gear-tier-pill t${resolvedTier}">T${resolvedTier}</span>`
     : '';
 
   row.innerHTML = `
