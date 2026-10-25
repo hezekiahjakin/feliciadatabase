@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261025_v25">
+  <link rel="stylesheet" href="styles.css?v=20261025_v26">
 </head>
 <body class="theme-vanguard">
 
@@ -23,7 +23,7 @@
         <span class="vanguard-logo">❖</span>
       </div>
       <div class="brand-text">
-        <h1 class="brand-title">F.E.L.I.C.I.A. <span class="badge-v1">v1.0</span></h1>
+        <h1 class="brand-title">F.E.L.I.C.I.A. <span class="badge-v1">v2.0</span></h1>
         <p class="brand-sub">FIRETEAM EVALUATION &amp; LOGISTICS INTELLIGENCE CONSTRUCT</p>
       </div>
     </div>
@@ -201,65 +201,6 @@
               <div class="construct-tag">CONSTRUCT DESIGN: <span id="designNameBadge">VANGUARD GHOST</span></div>
               <div class="construct-mood" id="constructMood">STATUS: STANDBY // SCANNING</div>
             </div>
-            <!-- Subclass Filter Bar -->
-            <div class="shader-bar subclass-bar">
-              <button class="shader-chip subclass-chip" data-subclass="stasis" data-shader="stasis" title="Stasis (Dark Blue)">✦ Stasis</button>
-              <button class="shader-chip subclass-chip" data-subclass="void" data-shader="void" title="Void (Purple)">✦ Void</button>
-              <button class="shader-chip subclass-chip" data-subclass="arc" data-shader="arc" title="Arc (Cyan)">✦ Arc</button>
-              <button class="shader-chip subclass-chip active" data-subclass="solar" data-shader="solar" title="Solar (Amber)">✦ Solar</button>
-              <button class="shader-chip subclass-chip" data-subclass="strand" data-shader="strand" title="Strand (Green)">✦ Strand</button>
-              <button class="shader-chip subclass-chip prismatic-chip" data-subclass="prismatic" data-shader="prismatic" title="Prismatic (Multi-color)">✧ Prismatic</button>
-            </div>
-          </div>
-
-          <!-- Tactical Filters / Loadout Context -->
-          <div class="tactical-config-card">
-            <div class="config-header">
-              <span class="config-title">TACTICAL CONTEXT</span>
-              <span class="accent-line"></span>
-            </div>
-            
-            <div class="context-grid">
-              <div class="form-group">
-                <label>GUARDIAN CLASS</label>
-                <div class="class-selector">
-                  <button class="btn-class active" data-class="Warlock">
-                    <span class="class-glyph">▲</span> Warlock
-                  </button>
-                  <button class="btn-class" data-class="Titan">
-                    <span class="class-glyph">■</span> Titan
-                  </button>
-                  <button class="btn-class" data-class="Hunter">
-                    <span class="class-glyph">◆</span> Hunter
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label>OPERATIONAL ACTIVITY</label>
-                <select id="selectActivity" class="input-tactical select-tactical">
-                  <option value="Grandmaster+" selected>Grandmaster+</option>
-                  <option value="Dungeon / Raid">Dungeon / Raid</option>
-                  <option value="PVP">PVP</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Dynamic Tactical Inquiries Dropdown -->
-            <div class="form-group" style="margin-top: 2px;">
-              <label>TACTICAL INQUIRY FOCUS</label>
-              <div class="inquiry-row" style="display: flex; gap: 8px;">
-                <select id="selectTacticalInquiry" class="input-tactical select-tactical" style="flex: 1;">
-                  <option value="Ability Focused">Ability Focused</option>
-                  <option value="Survivability">Survivability</option>
-                  <option value="Healing Loop">Healing Loop</option>
-                </select>
-                <button type="button" class="btn-tactical btn-primary btn-ask-inquiry" id="btnAskInquiry" title="Ask F.E.L.I.C.I.A. for this specific build evaluation">
-                  <span>Query Construct</span> ➔
-                </button>
-              </div>
-            </div>
-
           </div>
 
         </div>
@@ -1504,6 +1445,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261025_v25"></script>
+  <script type="module" src="app.js?v=20261025_v26"></script>
 </body>
 </html>

@@ -653,8 +653,82 @@ function renderMarkdown(md) {
 }
 
 /* ==========================================================================
-   CHAT COMMS ENGINE
+   CHAT COMMS ENGINE & INVENTORY CONTEXT
    ========================================================================== */
+function buildChatInventoryContext() {
+  if (!state.bungieData) return null;
+
+  const summarizeItem = (item, loc = '') => {
+    if (!item) return null;
+    const isExotic = Boolean(item.isExotic || item.tierName === 'Exotic');
+    const perksList = (item.perks || [])
+      .map(p => (typeof p === 'string' ? p : p?.name))
+      .filter(p => p && !['Default Shader', 'Empty Mod Socket', 'Kill Tracker'].includes(p));
+
+    const selectedArtifactPerks = (item.artifactSelectedPerks || item.selectedPerks || []).map(p => (typeof p === 'string' ? p : p?.name)).filter(Boolean);
+
+    return {
+      name: item.name,
+      slot: item.slot || (item.category === 'Artifact' ? 'Artifact' : ''),
+      category: item.category || '',
+      element: item.element || item.damageType || '',
+      typeName: item.typeName || '',
+      isExotic: isExotic,
+      isGodRoll: Boolean(item.godRollCheck?.isGodRoll || item.isGodRoll),
+      godVerdict: item.godRollCheck?.verdictCode || '',
+      compendiumSet: item.compendiumSet ? {
+        name: item.compendiumSet.name,
+        perk_2pc_name: item.compendiumSet.perk_2pc_name,
+        perk_4pc_name: item.compendiumSet.perk_4pc_name
+      } : null,
+      armorEval: item.armorEvaluation ? {
+        isPvp: item.armorEvaluation.isPvp,
+        isPve: item.armorEvaluation.isPve,
+        isTrash: item.armorEvaluation.isTrash,
+        health: item.armorEvaluation.health ?? item.stats?.Health ?? 0,
+        totalStats: item.totalStats || item.armorEvaluation.totalStats || 0
+      } : null,
+      stats: item.stats || null,
+      totalStats: item.totalStats || 0,
+      perks: perksList.slice(0, 5),
+      artifactPerks: selectedArtifactPerks.slice(0, 7),
+      location: loc
+    };
+  };
+
+  const chars = (state.bungieData.characters || []).map(ch => {
+    const isCurrentActive = ch.characterId === state.activeInventoryView;
+    const eq = ch.equipment || [];
+    const inv = ch.inventory || [];
+    const eqArtifact = ch.artifact || eq.find(i => i.category === 'Artifact' || i.slot === 'Artifact');
+
+    return {
+      characterId: ch.characterId,
+      className: ch.className,
+      subclass: ch.subclass?.name || '',
+      stats: ch.stats || {},
+      isActive: isCurrentActive,
+      equippedWeapons: eq.filter(i => i.category === 'Weapon').map(i => summarizeItem(i, 'equipped')),
+      carriedWeapons: inv.filter(i => i.category === 'Weapon').map(i => summarizeItem(i, 'inventory')),
+      equippedArmor: eq.filter(i => i.category === 'Armor').map(i => summarizeItem(i, 'equipped')),
+      carriedArmor: inv.filter(i => i.category === 'Armor').map(i => summarizeItem(i, 'inventory')),
+      equippedArtifact: eqArtifact ? summarizeItem(eqArtifact, 'equipped') : null
+    };
+  });
+
+  const vaultItems = state.bungieData.vault?.items || [];
+  const vaultWeapons = vaultItems.filter(i => i.category === 'Weapon').map(i => summarizeItem(i, 'vault'));
+  const vaultArmor = vaultItems.filter(i => i.category === 'Armor').map(i => summarizeItem(i, 'vault'));
+
+  return {
+    playerName: state.bungieData.player?.fullBungieName || 'Guardian',
+    activeCharacterId: state.activeInventoryView !== 'vault' ? state.activeInventoryView : (chars[0]?.characterId || null),
+    characters: chars,
+    vaultWeapons: vaultWeapons,
+    vaultArmor: vaultArmor
+  };
+}
+
 async function sendChatMessage(userText) {
   if (!userText || !userText.trim()) return;
   const text = userText.trim();
@@ -680,11 +754,8 @@ async function sendChatMessage(userText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: text,
-        history: state.chatHistory.slice(-8),
-        guardian_class: state.guardianClass,
-        activity: state.activity,
-        subclass: state.subclass,
-        tactical_inquiry: state.tacticalInquiry
+        history: state.chatHistory.slice(-10),
+        inventory_context: buildChatInventoryContext()
       })
     });
 
@@ -696,6 +767,16 @@ async function sendChatMessage(userText) {
     
     // Play receive audio
     sfx.playReceive();
+
+    // Dynamically update Ghost shader & subclass if conversation shifted
+    if (data.effective_subclass) {
+      const subLower = String(data.effective_subclass).toLowerCase();
+      if (['arc', 'solar', 'void', 'strand', 'stasis', 'prismatic'].includes(subLower)) {
+        state.shader = subLower;
+        state.subclass = subLower;
+        updateConstructMood(`SUBCLASS LINKED // ${data.effective_subclass.toUpperCase()}`);
+      }
+    }
 
     // Append F.E.L.I.C.I.A.'s Scottish reply
     appendMessage('felicia', 'F.E.L.I.C.I.A.', reply, data.snippets_used);
@@ -747,7 +828,7 @@ function appendMessage(role, sender, text, snippets = []) {
     <div class="msg-bubble">
       <div class="msg-header">
         <span class="msg-sender">${sender}</span>
-        <span class="msg-tag">${isFelicia ? 'SCOTTISH CONSTRUCT' : state.guardianClass.toUpperCase()}</span>
+        <span class="msg-tag">${isFelicia ? 'SCOTTISH CONSTRUCT' : (getActiveCharacter()?.className || state.guardianClass || 'GUARDIAN').toUpperCase()}</span>
         ${voiceBtn}
       </div>
       <div class="msg-content">
@@ -3911,75 +3992,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
-  // Guardian Class selector buttons
-  document.querySelectorAll('.btn-class').forEach(btn => {
-    btn.addEventListener('click', () => {
-      sfx.playChirp();
-      document.querySelectorAll('.btn-class').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.guardianClass = btn.dataset.class;
-    });
-  });
-
-  // Operational Activity & Tactical Inquiries
-  const selectActivity = document.getElementById('selectActivity');
-  const selectTacticalInquiry = document.getElementById('selectTacticalInquiry');
-  const btnAskInquiry = document.getElementById('btnAskInquiry');
-
-  function populateInquiries(activity) {
-    if (!selectTacticalInquiry) return;
-    selectTacticalInquiry.innerHTML = '';
-    const items = ACTIVITY_INQUIRIES[activity] || ACTIVITY_INQUIRIES['Grandmaster+'];
-    items.forEach((item, index) => {
-      const opt = document.createElement('option');
-      opt.value = item;
-      opt.textContent = item;
-      if (index === 0) opt.selected = true;
-      selectTacticalInquiry.appendChild(opt);
-    });
-    state.tacticalInquiry = items[0] || '';
-  }
-
-  if (selectActivity) {
-    selectActivity.addEventListener('change', (e) => {
-      sfx.playChirp();
-      state.activity = e.target.value;
-      populateInquiries(state.activity);
-    });
-    // Initial population on page load
-    populateInquiries(selectActivity.value || state.activity);
-  }
-
-  if (selectTacticalInquiry) {
-    selectTacticalInquiry.addEventListener('change', (e) => {
-      sfx.playChirp();
-      state.tacticalInquiry = e.target.value;
-    });
-  }
-
-  if (btnAskInquiry) {
-    btnAskInquiry.addEventListener('click', () => {
-      sfx.playTransmit();
-      const prompt = `F.E.L.I.C.I.A., evaluate and craft the best ${state.subclass.toUpperCase()} ${state.guardianClass} build for ${state.activity} with a focus on ${state.tacticalInquiry}.`;
-      const chatInput = document.getElementById('chatInput');
-      if (chatInput) {
-        chatInput.value = prompt;
-      }
-      sendChatMessage(prompt);
-    });
-  }
-
-  // Subclass Filter Chips (Stasis, Void, Arc, Solar, Strand, Prismatic)
-  document.querySelectorAll('.subclass-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      sfx.playChirp();
-      document.querySelectorAll('.subclass-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      state.subclass = chip.dataset.subclass || 'solar';
-      state.shader = chip.dataset.shader || state.subclass;
-    });
-  });
 
   // Design Switcher in Settings
   document.querySelectorAll('.design-card').forEach(card => {

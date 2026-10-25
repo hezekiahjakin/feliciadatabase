@@ -741,18 +741,43 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
+SUBCLASS_NAME_TO_ELEMENT = {
+    # Hunter
+    "gunslinger": "Solar",
+    "nightstalker": "Void",
+    "arcstrider": "Arc",
+    "revenant": "Stasis",
+    "threadrunner": "Strand",
+    "prismatic hunter": "Prismatic",
+    # Warlock
+    "dawnblade": "Solar",
+    "voidwalker": "Void",
+    "stormcaller": "Arc",
+    "shadebinder": "Stasis",
+    "broodweaver": "Strand",
+    "prismatic warlock": "Prismatic",
+    # Titan
+    "sunbreaker": "Solar",
+    "sentinel": "Void",
+    "striker": "Arc",
+    "behemoth": "Stasis",
+    "berserker": "Strand",
+    "prismatic titan": "Prismatic",
+}
+
+
 def detect_tactical_intent(
     message: str,
-    fallback_class: Optional[str] = "Warlock",
-    fallback_subclass: Optional[str] = "Solar",
-    fallback_activity: Optional[str] = "Grandmaster+",
-    fallback_inquiry: Optional[str] = "Ability Focused",
+    fallback_class: Optional[str] = None,
+    fallback_subclass: Optional[str] = None,
+    fallback_activity: Optional[str] = None,
+    fallback_inquiry: Optional[str] = None,
+    history: Optional[List[Dict[str, str]]] = None,
+    inventory_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Detect explicit class, subclass, activity, and build/gear intent directly from the Guardian's message."""
+    """Detect explicit class, subclass, activity, and build/gear intent directly from the Guardian's message and conversation history."""
     ml = (message or "").lower()
 
-    # 1. Detect Guardian Class from message text first
-    explicit_class: Optional[str] = None
     class_signals = {
         "Warlock": [
             r"\bwarlocks?\b", r"\bvoidwalker\b", r"\bdawnblade\b", r"\bstormcaller\b",
@@ -780,13 +805,7 @@ def detect_tactical_intent(
             r"\borpheus rig\b", r"\bkhepri'?s sting\b", r"\bmask of fealty\b",
         ],
     }
-    for cls_name, patterns in class_signals.items():
-        if any(re.search(pat, ml) for pat in patterns):
-            explicit_class = cls_name
-            break
 
-    # 2. Detect Subclass Element from message text first
-    explicit_subclass: Optional[str] = None
     subclass_signals = {
         "Prismatic": [r"\bprismatic\b", r"\btranscenden(t|ce)\b", r"\bsolipsism\b", r"\bstoicism\b", r"\brelativism\b", r"\bspirit of\b"],
         "Void": [r"\bvoid\b", r"\bvoidwalker\b", r"\bnightstalker\b", r"\bsentinel\b", r"\bdevour\b", r"\bvolatile\b", r"\bnova bomb\b", r"\bshadowshot\b", r"\btwilight arsenal\b", r"\bbriarbinds\b", r"\bcontraverse\b", r"\bchild of the old gods\b", r"\bchaos accelerant\b", r"\bsoul siphon\b", r"\bon the prowl\b"],
@@ -795,12 +814,22 @@ def detect_tactical_intent(
         "Stasis": [r"\bstasis\b", r"\bshadebinder\b", r"\bbehemoth\b", r"\bfrost armor\b", r"\bbleak watcher\b", r"\bshatterdive\b", r"\bglacial quake\b", r"\bwinter'?s wrath\b", r"\bsilence and squall\b", r"\bicefall\b"],
         "Strand": [r"\bstrand\b", r"\bbroodweaver\b", r"\bthreadrunner\b", r"\bberserker\b", r"\bwoven mail\b", r"\bsuspend\b", r"\bthreadling\b", r"\btangle\b", r"\bneedlestorm\b", r"\bbladefury\b", r"\bsilkstrike\b", r"\bbanner of war\b"],
     }
+
+    # 1. Detect Guardian Class from current message text
+    explicit_class: Optional[str] = None
+    for cls_name, patterns in class_signals.items():
+        if any(re.search(pat, ml) for pat in patterns):
+            explicit_class = cls_name
+            break
+
+    # 2. Detect Subclass Element from current message text
+    explicit_subclass: Optional[str] = None
     for sub_name, patterns in subclass_signals.items():
         if any(re.search(pat, ml) for pat in patterns):
             explicit_subclass = sub_name
             break
 
-    # 3. Detect Activity
+    # 3. Detect Activity from current message text
     explicit_activity: Optional[str] = None
     if any(k in ml for k in ["pvp", "crucible", "trials", "comp", "competitive", "iron banner"]):
         explicit_activity = "PVP"
@@ -808,6 +837,66 @@ def detect_tactical_intent(
         explicit_activity = "Dungeon / Raid"
     elif any(k in ml for k in ["gm", "grandmaster", "nightfall", "master", "conquest", "endgame", "pve"]):
         explicit_activity = "Grandmaster+"
+
+    # 4. If any context is missing, scan previous conversation turns in reverse
+    context_class: Optional[str] = None
+    context_subclass: Optional[str] = None
+    context_activity: Optional[str] = None
+
+    if history:
+        for turn in reversed(history):
+            text = (turn.get("content") or turn.get("user") or turn.get("felicia") or "").lower()
+            if not text:
+                continue
+            if not explicit_class and not context_class:
+                for cls_name, patterns in class_signals.items():
+                    if any(re.search(pat, text) for pat in patterns):
+                        context_class = cls_name
+                        break
+            if not explicit_subclass and not context_subclass:
+                for sub_name, patterns in subclass_signals.items():
+                    if any(re.search(pat, text) for pat in patterns):
+                        context_subclass = sub_name
+                        break
+            if not explicit_activity and not context_activity:
+                if any(k in text for k in ["pvp", "crucible", "trials", "comp", "competitive", "iron banner"]):
+                    context_activity = "PVP"
+                elif any(k in text for k in ["raid", "dungeon", "boss", "dps"]):
+                    context_activity = "Dungeon / Raid"
+                elif any(k in text for k in ["gm", "grandmaster", "nightfall", "master", "conquest", "endgame", "pve"]):
+                    context_activity = "Grandmaster+"
+
+            if (explicit_class or context_class) and (explicit_subclass or context_subclass) and (explicit_activity or context_activity):
+                break
+
+    explicit_class = explicit_class or context_class
+    explicit_subclass = explicit_subclass or context_subclass
+    explicit_activity = explicit_activity or context_activity
+
+    # 5. Fallback to active inventory character if not specified in text or history
+    active_char = None
+    if inventory_context:
+        chars = inventory_context.get("characters") or []
+        act_id = inventory_context.get("activeCharacterId")
+        if act_id:
+            active_char = next((c for c in chars if c.get("characterId") == act_id), None)
+        if not active_char and chars:
+            active_char = next((c for c in chars if c.get("isActive")), chars[0])
+
+    if not explicit_class and active_char:
+        ch_cls = (active_char.get("className") or "").strip().capitalize()
+        if ch_cls in GUARDIAN_CLASSES:
+            explicit_class = ch_cls
+
+    if not explicit_subclass and active_char:
+        ch_sub = (active_char.get("subclass") or "").strip().lower()
+        if ch_sub in SUBCLASS_NAME_TO_ELEMENT:
+            explicit_subclass = SUBCLASS_NAME_TO_ELEMENT[ch_sub]
+        else:
+            for s_name in SUBCLASS_ELEMENTS:
+                if s_name.lower() in ch_sub:
+                    explicit_subclass = s_name
+                    break
 
     effective_class = explicit_class or (fallback_class or "Warlock").strip().capitalize()
     if effective_class not in GUARDIAN_CLASSES:
@@ -819,13 +908,23 @@ def detect_tactical_intent(
 
     effective_activity = explicit_activity or (fallback_activity or "Grandmaster+")
 
+    inventory_phrases = [
+        "in my inventory", "in my vault", "what i have", "out of what i have", "my gear",
+        "my guns", "my armor", "what i already have", "from what i have", "what guns would fit that",
+        "what weapons would fit that", "what guns in my inventory", "can you help out of what i have",
+        "check my inventory", "check my vault", "my loadout", "weapons i have", "armor i have",
+        "what exotic should i pull", "out of my items", "from my vault"
+    ]
+    is_inventory_query = any(phrase in ml for phrase in inventory_phrases)
+
     build_keywords = [
         "build", "loadout", "setup", "how can i", "how do i", "what should i run",
         "need a good", "best void", "best solar", "best arc", "best stasis", "best strand",
         "best prismatic", "good void", "good solar", "good arc", "good stasis", "good strand",
-        "good prismatic", "recommend a", "synergy", "pair with",
+        "good prismatic", "recommend a", "synergy", "pair with", "what guns would fit that",
+        "what weapons would fit that", "what armor", "which exotic"
     ]
-    is_build_query = any(kw in ml for kw in build_keywords) or bool(explicit_class and explicit_subclass)
+    is_build_query = any(kw in ml for kw in build_keywords) or bool(explicit_class and explicit_subclass) or is_inventory_query
 
     return {
         "effective_class": effective_class,
@@ -836,6 +935,7 @@ def detect_tactical_intent(
         "explicit_subclass": explicit_subclass,
         "explicit_activity": explicit_activity,
         "is_build_query": is_build_query,
+        "is_inventory_query": is_inventory_query,
     }
 
 
@@ -1088,17 +1188,27 @@ def search_direct_compendium_entities(db: Dict[str, Any], message: str) -> List[
 
 def build_compendium_context(
     message: str,
-    guardian_class: str = "Warlock",
-    subclass: str = "Solar",
-    activity: str = "Grandmaster+",
-    tactical_inquiry: str = "Ability Focused",
+    guardian_class: Optional[str] = None,
+    subclass: Optional[str] = None,
+    activity: Optional[str] = None,
+    tactical_inquiry: Optional[str] = None,
+    history: Optional[List[Dict[str, str]]] = None,
+    inventory_context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Assemble rich, multi-bucket Destiny 2 Data Compendium context tailored to the Guardian's message.
     Returns (formatted_context_string, detected_intent_dict).
     """
     db = get_compendium_db()
-    intent = detect_tactical_intent(message, guardian_class, subclass, activity, tactical_inquiry)
+    intent = detect_tactical_intent(
+        message,
+        fallback_class=guardian_class,
+        fallback_subclass=subclass,
+        fallback_activity=activity,
+        fallback_inquiry=tactical_inquiry,
+        history=history,
+        inventory_context=inventory_context,
+    )
     if not db:
         return "", intent
 
@@ -1370,17 +1480,27 @@ _META_FRAGMENT_PRIORITY: Dict[str, List[str]] = {
 
 def build_compendium_fallback_reply(
     message: str,
-    guardian_class: str = "Warlock",
-    subclass: str = "Solar",
-    activity: str = "Grandmaster+",
-    tactical_inquiry: str = "Ability Focused",
+    guardian_class: Optional[str] = None,
+    subclass: Optional[str] = None,
+    activity: Optional[str] = None,
+    tactical_inquiry: Optional[str] = None,
+    history: Optional[List[Dict[str, str]]] = None,
+    inventory_context: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Deterministic data-backed fallback reply using Compendium data if Gemini is ever unavailable."""
     db = get_compendium_db()
     if not db:
         return None
 
-    intent = detect_tactical_intent(message, guardian_class, subclass, activity, tactical_inquiry)
+    intent = detect_tactical_intent(
+        message,
+        fallback_class=guardian_class,
+        fallback_subclass=subclass,
+        fallback_activity=activity,
+        fallback_inquiry=tactical_inquiry,
+        history=history,
+        inventory_context=inventory_context,
+    )
     eff_class = intent["effective_class"]
     eff_sub = intent["effective_subclass"]
     eff_act = intent["effective_activity"]

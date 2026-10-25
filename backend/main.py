@@ -168,13 +168,34 @@ EXPERTISE & DOMAIN KNOWLEDGE:
       * ARMOR APPRAISAL STANDARD: ONLY armor with **10+ Health** stat qualifies as **PVP Armor** (high-health spike for flinch resistance)! Any armor with **under 10 Health** is classified as **PVE Armor** (with 0 Health being the coveted Tier 5 PvE God Roll). Never call armor with under 10 Health "PvP armor"!
     - STRICT NEGATIVE CONSTRAINT: NEVER mention legacy stat names in parentheses or anywhere else. DO NOT WRITE "Resilience", "Strength", "Discipline", "Intellect", "Recovery", or "Mobility" as character stats. Refer ONLY to Health, Melee, Grenade, Super, Class, and Weapons (and modern Font mods: Super Font, Grenade Font, Melee Font, Weapons Font, Class Font; only mention Health Font for PVP).
 
-RESPONSE GUIDELINES:
-- Whenever a Guardian asks for a build (e.g. "I'm on Warlock and need a good Void build"), deliver a complete, structured, high-impact blueprint grounded in the provided Compendium telemetry:
-  1. **Subclass & Ability Configuration** (Super, Class Ability, Melee, Grenade, 2 Aspects, and 4–5 Fragments with why they click)
-  2. **Exotic Armor Centerpiece** (Primary Exotic recommendation + 1–2 strong alternatives depending on what they own, citing exact mechanics)
-  3. **2-Piece & 4-Piece Armor Set Bonuses** (Recommend the best 4-Piece Set AND/OR a 2-Piece + 2-Piece Set combo, naming the sets, their exact 2pc/4pc perks, and where to farm them!)
-  4. **Equippable Artifact & Armor Mods** (Best Equippable Artifact + key perks, plus Helmet, Arms, Chest, Legs, and Class Item mods—never use Health Font in PVE!)
-  5. **Weapons Synergy & 0–200 Stat Targets** (Kinetic/Energy/Heavy pairing + exact 0–200 targets: for PVE focus strictly on Grenade, Melee, Weapons, Super, and Class—NEVER recommend Health for PVE; only recommend Health for PVP!)
+RESPONSE GUIDELINES FOR BUILDS & PERSONALIZED ARSENAL ADVICE:
+- Whenever a Guardian asks for a build (e.g. "what prismatic build is good for...", "best arc hunter setup", "i want a good arc warlock build for pvp out of what i already have"):
+  Deliver a complete, structured, high-impact blueprint covering all 7 essential components:
+  1. **Subclass & Ability Configuration**:
+     - Super (Name, cooldown tier, tactical role)
+     - Class Ability, Melee, Grenade, and Jump/Movement mode
+  2. **Aspects & Key Fragments**:
+     - 2 Aspects (Explain their exact combat loop and synergy)
+     - 4 to 5 Fragments (Name exact fragments and their passive/stat benefits)
+  3. **Exotic Armor Centerpiece**:
+     - The ideal Exotic Armor piece for this setup and its exact mechanics.
+     - If the Guardian's live inventory/vault telemetry is provided, tell them whether they have it (Equipped, in pocket bag, or stored in Vault). If missing, tell them EXACTLY WHERE TO GET IT (e.g. Rahool Exotic Precision Decryption, Solo Legend/Master Lost Sectors, Vex Strike Force, Monument to Lost Lights).
+  4. **Armor Set Bonuses (Compendium 2-Piece & 4-Piece Sets)**:
+     - Recommend specific Compendium Armor Sets (e.g. Bushido, Atheon's Memory, CODA, Ferropotent, Luminopotent, Exodus Down, Collective Psyche).
+     - State the exact 2-Piece and 4-Piece perk names, what they do, and where to farm them in Destiny 2.
+     - Note if they have matching pieces in their inventory or vault!
+  5. **Weapons & Synergies**:
+     - Kinetic, Energy, and Heavy weapon loadout with key synergy perks (e.g. Voltshot, Incandescent, Headstone, Destabilizing Rounds, Demolitionist, Kinetic Tremors, Bait and Switch).
+     - Prioritize weapons from the Guardian's live inventory and vault (specifying '[In Pocket]' or '[In Vault]' and noting their actual perks). If recommending weapons outside their inventory, tell them the activity source to farm it.
+  6. **Seasonal Artifact & Essential Perks**:
+     - Recommend the best Equippable Seasonal Artifact and 4–5 specific active artifact perks that amplify the build loop.
+  7. **Stat Distribution Priority (0–200 Scale)**:
+     - STRICT Zero-Health Rule for PVE: Health = 0 (dump stat); invest all points into Grenade, Melee, Weapons, Super, and Class.
+     - For PVP: Prioritize 10+ Health (pushing 150–200) for maximum flinch resistance and rapid shield recovery!
+
+- CONVERSATIONAL FREEDOM & PERSISTENT CONTEXT:
+  - You can talk about ANY topic, activity, lore, weapon, or class freely at any time. Do not assume or force arbitrary classes when the Guardian asks open questions.
+  - Follow the Guardian's conversational flow: when they ask follow-up questions (e.g. "What guns in my inventory would be good for this build?"), maintain the established subclass/class context from earlier in the chat and evaluate their live inventory!
 - NEVER mention legacy stat names in parentheses or prose.
 - Ground your numbers, perk effects, and set bonuses strictly in the provided Compendium & Armory snippets.
 """
@@ -192,10 +213,11 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict[str, str]]] = []
-    guardian_class: Optional[str] = "Warlock"  # Warlock, Titan, Hunter
-    activity: Optional[str] = "Grandmaster+"   # Grandmaster+, Dungeon / Raid, PVP
-    subclass: Optional[str] = "Solar"         # Stasis, Void, Arc, Solar, Strand, Prismatic
-    tactical_inquiry: Optional[str] = "Ability Focused"
+    guardian_class: Optional[str] = None
+    activity: Optional[str] = None
+    subclass: Optional[str] = None
+    tactical_inquiry: Optional[str] = None
+    inventory_context: Optional[Dict[str, Any]] = None
 
 class BuildItem(BaseModel):
     title: str
@@ -358,7 +380,137 @@ def format_verified_build_response(b: dict) -> str:
         f"Spot on setup, Guardian. The telemetry is solid and battle-tested. No nonsense—get this slotted in and let us take down the encounter!"
     )
 
-def local_tactical_fallback(query: str, guardian_class: str, activity: str, snippets: List[dict], subclass: str = "Solar", tactical_inquiry: str = "General") -> str:
+def format_guardian_inventory_for_chat(
+    inv_ctx: Optional[Dict[str, Any]],
+    eff_class: str,
+    eff_subclass: str,
+    eff_activity: str,
+    message: str
+) -> str:
+    """Format the Guardian's live inventory, pocket bags, and Vault arsenal into clear contextual telemetry for Felicia."""
+    if not inv_ctx or not isinstance(inv_ctx, dict):
+        return ""
+
+    chars = inv_ctx.get("characters") or []
+    if not chars:
+        return ""
+
+    target_char = None
+    for c in chars:
+        if (c.get("className") or "").lower() == eff_class.lower():
+            target_char = c
+            break
+    if not target_char:
+        act_id = inv_ctx.get("activeCharacterId")
+        if act_id:
+            target_char = next((c for c in chars if c.get("characterId") == act_id), None)
+    if not target_char and chars:
+        target_char = chars[0]
+
+    char_class_name = target_char.get("className", eff_class)
+    char_subclass_name = target_char.get("subclass", "")
+    player_name = inv_ctx.get("playerName", "Guardian")
+
+    lines = []
+    lines.append(f"★ GUARDIAN'S LIVE ARSENAL & INVENTORY TELEMETRY (DATA SYNCED):")
+    lines.append(f"• Account: {player_name} | Active Character: {char_class_name} ({char_subclass_name or eff_subclass})")
+
+    # Equipped Weapons
+    eq_weps = target_char.get("equippedWeapons") or []
+    if eq_weps:
+        lines.append("• EQUIPPED WEAPONS (CURRENT LOADOUT):")
+        for w in eq_weps:
+            perks_str = f" [Perks: {', '.join(w.get('perks', []))}]" if w.get("perks") else ""
+            gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
+            exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
+            lines.append(f"  - {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+
+    # Equipped Armor
+    eq_armor = target_char.get("equippedArmor") or []
+    if eq_armor:
+        lines.append("• EQUIPPED ARMOR:")
+        for a in eq_armor:
+            cset = a.get("compendiumSet")
+            set_str = f" [Set: {cset['name']}]" if cset else ""
+            exo_str = " [EXOTIC]" if a.get("isExotic") else ""
+            h_stat = a.get("stats", {}).get("Health") if a.get("stats") else (a.get("armorEval", {}).get("health", 0))
+            tot = a.get("totalStats") or 0
+            lines.append(f"  - {a.get('slot')}: {a.get('name')}{exo_str}{set_str} (Health: {h_stat}, Total: {tot})")
+
+    # Equipped Artifact
+    art = target_char.get("equippedArtifact")
+    if art:
+        art_perks = art.get("artifactPerks") or []
+        perks_str = f" (Active Perks: {', '.join(art_perks)})" if art_perks else ""
+        lines.append(f"• EQUIPPED SEASONAL ARTIFACT: {art.get('name')}{perks_str}")
+
+    # Carried in Pocket / Inventory
+    car_weps = target_char.get("carriedWeapons") or []
+    if car_weps:
+        lines.append(f"• CARRIED WEAPONS IN {char_class_name.upper()} BAG (IN POCKET):")
+        for w in car_weps[:10]:
+            gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
+            exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
+            perks_str = f" [{', '.join(w.get('perks', []))}]" if w.get("perks") else ""
+            lines.append(f"  - [In Pocket] {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+
+    car_armor = target_char.get("carriedArmor") or []
+    car_exotics = [a for a in car_armor if a.get("isExotic")]
+    car_sets = [a for a in car_armor if a.get("compendiumSet")]
+    if car_exotics:
+        lines.append(f"• CARRIED EXOTIC ARMOR (IN POCKET):")
+        for a in car_exotics:
+            lines.append(f"  - [In Pocket] {a.get('slot')}: {a.get('name')} (Total: {a.get('totalStats', 0)})")
+    if car_sets:
+        lines.append(f"• CARRIED COMPENDIUM ARMOR SET PIECES (IN POCKET):")
+        for a in car_sets[:6]:
+            cset = a.get("compendiumSet", {})
+            lines.append(f"  - [In Pocket] {a.get('slot')}: {a.get('name')} [Set: {cset.get('name')}]")
+
+    # Vault Arsenal
+    vault_weps = inv_ctx.get("vaultWeapons") or []
+    elem_match_weps = [w for w in vault_weps if (w.get("element") or "").lower() == eff_subclass.lower()]
+    god_weps = [w for w in vault_weps if w.get("isGodRoll") and w not in elem_match_weps]
+    exo_weps = [w for w in vault_weps if w.get("isExotic") and w not in elem_match_weps and w not in god_weps]
+    top_vault_weps = (elem_match_weps[:6] + god_weps[:6] + exo_weps[:4])[:12]
+    if top_vault_weps:
+        lines.append(f"• STORED IN VAULT (SYNERGISTIC & GOD ROLL WEAPONS):")
+        for w in top_vault_weps:
+            gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
+            exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
+            perks_str = f" [{', '.join(w.get('perks', []))}]" if w.get("perks") else ""
+            lines.append(f"  - [In Vault] {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+
+    vault_armor = inv_ctx.get("vaultArmor") or []
+    vault_exotics = [a for a in vault_armor if a.get("isExotic")]
+    vault_sets = [a for a in vault_armor if a.get("compendiumSet")]
+    if vault_exotics:
+        lines.append(f"• STORED IN VAULT (EXOTIC ARMOR PIECES):")
+        for a in vault_exotics[:8]:
+            lines.append(f"  - [In Vault] {a.get('slot')}: {a.get('name')} (Total: {a.get('totalStats', 0)})")
+    if vault_sets:
+        lines.append(f"• STORED IN VAULT (COMPENDIUM SET PIECES):")
+        for a in vault_sets[:8]:
+            cset = a.get("compendiumSet", {})
+            lines.append(f"  - [In Vault] {a.get('slot')}: {a.get('name')} [Set: {cset.get('name')}]")
+
+    lines.append("\nINVENTORY UTILIZATION DIRECTIVES:")
+    lines.append("• Whenever the Guardian asks for gear recommendations out of what they already have, prioritize the items listed above!")
+    lines.append("• Specify exactly where each recommended item is located ('[In Pocket]' or '[In Vault]').")
+    lines.append("• If an essential piece is missing from their inventory, recommend it and tell them the exact Destiny 2 acquisition source (e.g. Master Lost Sectors on Nessus, Rahool Exotic Precision Decryption, Vex Strike Force, Monument to Lost Lights, or specific Raid/Dungeon).")
+
+    return "\n" + "\n".join(lines) + "\n\n"
+
+def local_tactical_fallback(
+    query: str,
+    guardian_class: str,
+    activity: str,
+    snippets: List[dict],
+    subclass: str = "Solar",
+    tactical_inquiry: str = "General",
+    history: Optional[List[Dict[str, str]]] = None,
+    inventory_context: Optional[Dict[str, Any]] = None,
+) -> str:
     q_lower = query.lower()
     
     # Check for direct verified build match first
@@ -438,6 +590,8 @@ def local_tactical_fallback(query: str, guardian_class: str, activity: str, snip
         subclass=subclass,
         activity=activity,
         tactical_inquiry=tactical_inquiry,
+        history=history,
+        inventory_context=inventory_context,
     )
     if compendium_reply:
         return compendium_reply
@@ -546,17 +700,28 @@ def health_endpoint():
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
-    # Assemble live Destiny 2 Data Compendium telemetry & detect explicit class/subclass from message first
+    # Assemble live Destiny 2 Data Compendium telemetry & detect explicit class/subclass from message and history
     compendium_raw, intent = build_compendium_context(
         req.message,
-        guardian_class=req.guardian_class or "Warlock",
-        subclass=req.subclass or "Solar",
-        activity=req.activity or "Grandmaster+",
-        tactical_inquiry=req.tactical_inquiry or "Ability Focused",
+        guardian_class=req.guardian_class,
+        subclass=req.subclass,
+        activity=req.activity,
+        tactical_inquiry=req.tactical_inquiry,
+        history=req.history or [],
+        inventory_context=req.inventory_context,
     )
     eff_class = intent["effective_class"]
     eff_subclass = intent["effective_subclass"]
     eff_activity = intent["effective_activity"]
+
+    # Format live Guardian inventory & vault context if provided
+    inventory_block = format_guardian_inventory_for_chat(
+        req.inventory_context,
+        eff_class,
+        eff_subclass,
+        eff_activity,
+        req.message,
+    )
 
     # Retrieve relevant wiki knowledge
     all_wikis = get_all_wiki_data()
@@ -631,12 +796,18 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
                 f"  PVP God Roll: Barrel: {pvp.get('barrel')}, Mag: {pvp.get('mag')}, Perk 1: {pvp.get('perk1')}, Perk 2: {pvp.get('perk2')}, MW: {pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
             )
 
+    tactical_profile_block = ""
+    if intent["is_build_query"] or intent["is_inventory_query"] or intent["explicit_class"] or intent["explicit_subclass"]:
+        tactical_profile_block = (
+            f"TACTICAL PROFILE (DETECTED CONVERSATIONAL CONTEXT):\n"
+            f"• Guardian Class: {eff_class}\n"
+            f"• Subclass Element: {eff_subclass}\n"
+            f"• Operational Activity: {eff_activity}\n\n"
+        )
+
     enhanced_prompt = (
-        f"TACTICAL PROFILE:\n"
-        f"• Guardian Class: {eff_class}\n"
-        f"• Subclass Element: {eff_subclass}\n"
-        f"• Operational Activity: {eff_activity}\n"
-        f"• Tactical Inquiry Focus: {req.tactical_inquiry or 'General'}\n"
+        f"{tactical_profile_block}"
+        f"{inventory_block}"
         f"{verified_blueprint_context}"
         f"{compendium_block}"
         f"{knowledge_context}"
@@ -646,7 +817,16 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
     
     reply = await run_in_threadpool(query_gemini_api, enhanced_prompt, req.history or [], FELICIA_SYSTEM_PROMPT)
     if reply.startswith("ERROR_FALLBACK"):
-        reply = local_tactical_fallback(req.message, eff_class, eff_activity, top_snippets, eff_subclass, req.tactical_inquiry or "General")
+        reply = local_tactical_fallback(
+            req.message,
+            eff_class,
+            eff_activity,
+            top_snippets,
+            eff_subclass,
+            req.tactical_inquiry or "General",
+            history=req.history or [],
+            inventory_context=req.inventory_context,
+        )
     
     # Save to chat history
     history = load_json(HISTORY_PATH, [])
