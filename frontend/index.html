@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261025_v26">
+  <link rel="stylesheet" href="styles.css?v=20261027_v27">
 </head>
 <body class="theme-vanguard">
 
@@ -34,6 +34,11 @@
         <span class="pulse-dot"></span>
         <span class="status-label">CALIBRATED // ACTIVE</span>
       </div>
+
+      <button type="button" class="btn-tactical btn-advisory-pill" id="btnOpenFieldAdvisory" title="Read Clan Field Advisory & Development Notice">
+        <span class="icon">📢</span>
+        <span class="text">Field Advisory</span>
+      </button>
 
       <button type="button" class="bungie-header-pill" id="bungieHeaderBadge" title="Bungie.net Guardian Link">
         <span class="bungie-pill-dot" id="bungiePillDot"></span>
@@ -1445,6 +1450,87 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261025_v26"></script>
+  <!-- MODAL: CLAN EARLY ACCESS FIELD ADVISORY -->
+  <dialog class="hud-modal modal-advisory" id="modalFieldAdvisory" closedby="any" aria-labelledby="advisoryModalTitle">
+    <div class="modal-content advisory-modal-content">
+      
+      <div class="modal-header advisory-header">
+        <div class="modal-title-group">
+          <div class="advisory-badge-row">
+            <span class="advisory-badge warning">⚡ CONSTRUCT FIELD ADVISORY</span>
+            <span class="advisory-version-badge">v2.0 PRE-RELEASE</span>
+          </div>
+          <h3 class="modal-title advisory-title" id="advisoryModalTitle">PLEASE READ: DEVELOPMENT NOTICE</h3>
+          <span class="modal-sub">VANGUARD TACTICAL INTELLIGENCE // FIRETEAM EARLY ACCESS</span>
+        </div>
+        <button type="button" class="btn-modal-close" id="btnCloseAdvisory" title="Close Notification">&times;</button>
+      </div>
+
+      <div class="modal-body advisory-body">
+        
+        <div class="advisory-banner">
+          <span class="banner-icon">❖</span>
+          <div class="banner-text">
+            <strong>F.E.L.I.C.I.A.</strong> is still in <strong>heavy development</strong>. Not everything is finished yet or has all telemetry archives fully populated.
+          </div>
+        </div>
+
+        <div class="advisory-section operational-section">
+          <div class="advisory-section-title">
+            <span class="icon">✓</span>
+            <span>UP-TO-DATE IN THIS BUILD:</span>
+          </div>
+          <ul class="advisory-list green-bullets">
+            <li><strong>Complete Subclass &amp; Prismatic Builds:</strong> Battle-tested ability configurations, Aspects, and Fragments tailored across all 3 Guardian classes.</li>
+            <li><strong>Compendium Armor Sets:</strong> Live 2-Piece and 4-Piece set bonuses (56 sets) with verified endgame drop locations.</li>
+            <li><strong>Modern 0–200 Stat Tuning:</strong> Strict <strong>PvE Zero-Health rule</strong> (focusing stats on Grenade, Melee, Weapons, Super, Class) and 10+ Health prioritization for PvP flinch resistance.</li>
+            <li><strong>Live Bungie Inventory &amp; Vault Telemetry:</strong> Real-time gear inspection and personalized build recommendations crafted directly from what you already own.</li>
+          </ul>
+        </div>
+
+        <div class="advisory-section pending-section">
+          <div class="advisory-section-title">
+            <span class="icon">⚠</span>
+            <span>CURRENTLY MISSING OR IN PROGRESS:</span>
+          </div>
+          <p class="pending-section-sub">F.E.L.I.C.I.A. has up-to-date builds and armor sets, but is currently missing or still tuning data for the following:</p>
+          <ul class="advisory-list amber-bullets">
+            <li>
+              <strong>All Guns PvP / PvE God Rolls</strong>
+              <div class="item-desc">Database ingestion is currently ongoing to catalog optimal perk combinations for all remaining weapons.</div>
+            </li>
+            <li>
+              <strong>Loadout Customizability in Website</strong>
+              <div class="item-desc">Direct in-app subclass tweaking, mod socketing, and custom loadout drafting are actively being developed.</div>
+            </li>
+            <li>
+              <strong>Raid Guides / Dungeon Guides / New Catalyst Guides</strong>
+              <div class="item-desc">Comprehensive tactical encounter guides and newly released catalyst requirements are being compiled into the intelligence archives.</div>
+            </li>
+            <li>
+              <strong>Additional Quality-of-Life Updates</strong>
+              <div class="item-desc">Further fireteam management features and inventory optimization tools <em>(coming soon!)</em>.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="advisory-footer-note">
+          <span class="pulse-dot"></span>
+          <span>We are sharing this early preview with the clan for your direct feedback! Let us know what you think and what features you'd like to see next.</span>
+        </div>
+
+      </div>
+
+      <div class="modal-footer advisory-footer">
+        <button type="button" class="btn-tactical btn-primary btn-got-it" id="btnAckAdvisory">
+          <span class="got-it-text">GOT IT!</span>
+          <span class="got-it-arrow">➔</span>
+        </button>
+      </div>
+
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=20261027_v27"></script>
 </body>
 </html>

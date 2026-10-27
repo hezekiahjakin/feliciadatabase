@@ -1504,6 +1504,85 @@ async function loadMobileConnectInfo() {
 }
 
 /* ==========================================================================
+   FIELD ADVISORY // CLAN EARLY ACCESS NOTIFICATION
+   ========================================================================== */
+function checkAndShowFieldAdvisory(force = false) {
+  const modal = document.getElementById('modalFieldAdvisory');
+  if (!modal) return;
+  if (modal.open) return;
+
+  if (force) {
+    try {
+      modal.showModal();
+      sfx.playReceive();
+    } catch (_) {
+      modal.setAttribute('open', '');
+    }
+    return;
+  }
+
+  let acknowledged = false;
+  try {
+    acknowledged = localStorage.getItem('felicia_clan_advisory_ack_v2') === 'true';
+  } catch (_) {}
+
+  if (!acknowledged) {
+    try {
+      modal.showModal();
+      sfx.playReceive();
+    } catch (_) {
+      modal.setAttribute('open', '');
+    }
+  }
+}
+
+function initFieldAdvisoryModal() {
+  const modal = document.getElementById('modalFieldAdvisory');
+  const btnAck = document.getElementById('btnAckAdvisory');
+  const btnClose = document.getElementById('btnCloseAdvisory');
+  const btnOpen = document.getElementById('btnOpenFieldAdvisory');
+
+  if (!modal) return;
+
+  const closeAdvisory = () => {
+    sfx.playChirp();
+    try {
+      modal.close();
+    } catch (_) {
+      modal.removeAttribute('open');
+    }
+    try {
+      localStorage.setItem('felicia_clan_advisory_ack_v2', 'true');
+    } catch (_) {}
+  };
+
+  btnAck?.addEventListener('click', closeAdvisory);
+  btnClose?.addEventListener('click', closeAdvisory);
+
+  btnOpen?.addEventListener('click', () => {
+    sfx.playChirp();
+    checkAndShowFieldAdvisory(true);
+  });
+
+  // Close when clicking on dialog backdrop outside the content box
+  modal.addEventListener('click', (e) => {
+    const rect = modal.getBoundingClientRect();
+    const isInDialog = (
+      rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+      rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+    );
+    if (!isInDialog) {
+      closeAdvisory();
+    }
+  });
+
+  // Automatically check and display on initial load if not yet acknowledged
+  setTimeout(() => {
+    checkAndShowFieldAdvisory(false);
+  }, 450);
+}
+
+/* ==========================================================================
    SPEECH RECOGNITION (VOICE INPUT)
    ========================================================================== */
 function initSpeechRecognition() {
@@ -4407,6 +4486,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sfx.playReceive();
         alert(`Welcome, ${user.displayName || 'Guardian'}! Signed in with Google. Cloud Firestore connected to ping-vault-matrix.`);
         if (modalAuth) modalAuth.close();
+        checkAndShowFieldAdvisory(false);
+        checkAndShowFieldAdvisory(false);
       } catch (err) {
         console.error('[Google Sign-In Error]', err);
         alert(formatAuthErrorMessage(err, 'Google'));
@@ -4467,6 +4548,7 @@ document.addEventListener('DOMContentLoaded', () => {
           alert(`Welcome back, Guardian! Signed in as ${email}.`);
         }
         if (modalAuth) modalAuth.close();
+        checkAndShowFieldAdvisory(false);
       } catch (err) {
         if (emailAuthError) {
           emailAuthError.textContent = formatAuthErrorMessage(err, 'Email');
@@ -4537,6 +4619,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sfx.playReceive();
         alert(`Phone verified! Signed in as ${user.phoneNumber}.`);
         if (modalAuth) modalAuth.close();
+        checkAndShowFieldAdvisory(false);
       } catch (err) {
         console.error('[SMS Code Error]', err);
         if (phoneCodeError) {
@@ -5234,6 +5317,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sfx.playReceive();
       switchTabDirect('tab-inventory');
       loadBungieInventory(false);
+      checkAndShowFieldAdvisory(false);
     }
   });
 
@@ -5249,4 +5333,5 @@ document.addEventListener('DOMContentLoaded', () => {
   loadGodRolls();
   loadBuilds();
   loadMobileConnectInfo();
+  initFieldAdvisoryModal();
 });
