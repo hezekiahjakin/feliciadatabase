@@ -759,6 +759,17 @@ async function sendChatMessage(userText) {
       })
     });
 
+    if (!res.ok) {
+      let errorDetail = '';
+      try {
+        const errJson = await res.json();
+        errorDetail = errJson.reply || errJson.detail || '';
+      } catch (_) {
+        errorDetail = await res.text().catch(() => '');
+      }
+      throw new Error(errorDetail || `Vanguard uplink responded with status ${res.status}`);
+    }
+
     const data = await res.json();
     state.isThinking = false;
     if (thinkingEl) thinkingEl.classList.add('hidden');
@@ -2739,11 +2750,18 @@ async function executeItemTransfer(item, targetType, targetCharacterId, targetLa
       })
     });
 
-    const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detail || 'Bungie rejected the transfer.');
+      let errorDetail = '';
+      try {
+        const errJson = await res.json();
+        errorDetail = errJson.reply || errJson.detail || '';
+      } catch (_) {
+        errorDetail = await res.text().catch(() => '');
+      }
+      throw new Error(errorDetail || `Vanguard uplink responded with status ${res.status}`);
     }
 
+    const data = await res.json();
     if (data.refreshed_session) {
       saveBungieSession(data.refreshed_session);
     }

@@ -875,13 +875,15 @@ def detect_tactical_intent(
 
     # 5. Fallback to active inventory character if not specified in text or history
     active_char = None
-    if inventory_context:
-        chars = inventory_context.get("characters") or []
+    if inventory_context and isinstance(inventory_context, dict):
+        chars = [c for c in (inventory_context.get("characters") or []) if isinstance(c, dict)]
         act_id = inventory_context.get("activeCharacterId")
         if act_id:
             active_char = next((c for c in chars if c.get("characterId") == act_id), None)
         if not active_char and chars:
-            active_char = next((c for c in chars if c.get("isActive")), chars[0])
+            active_char = next((c for c in chars if c.get("isActive")), None)
+            if not active_char and len(chars) > 0:
+                active_char = chars[0]
 
     if not explicit_class and active_char:
         ch_cls = (active_char.get("className") or "").strip().capitalize()

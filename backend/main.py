@@ -391,7 +391,7 @@ def format_guardian_inventory_for_chat(
     if not inv_ctx or not isinstance(inv_ctx, dict):
         return ""
 
-    chars = inv_ctx.get("characters") or []
+    chars = [c for c in (inv_ctx.get("characters") or []) if isinstance(c, dict)]
     if not chars:
         return ""
 
@@ -416,59 +416,74 @@ def format_guardian_inventory_for_chat(
     lines.append(f"• Account: {player_name} | Active Character: {char_class_name} ({char_subclass_name or eff_subclass})")
 
     # Equipped Weapons
-    eq_weps = target_char.get("equippedWeapons") or []
+    eq_weps = [w for w in (target_char.get("equippedWeapons") or []) if isinstance(w, dict)]
     if eq_weps:
         lines.append("• EQUIPPED WEAPONS (CURRENT LOADOUT):")
         for w in eq_weps:
-            perks_str = f" [Perks: {', '.join(w.get('perks', []))}]" if w.get("perks") else ""
+            perks = [str(p) for p in (w.get("perks") or []) if p]
+            perks_str = f" [Perks: {', '.join(perks)}]" if perks else ""
             gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
             exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
-            lines.append(f"  - {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+            lines.append(f"  - {w.get('slot', 'Weapon')}: {w.get('name', 'Unknown')} ({w.get('element', '')} {w.get('typeName', '')}){exo_tag}{gr_tag}{perks_str}")
 
     # Equipped Armor
-    eq_armor = target_char.get("equippedArmor") or []
+    eq_armor = [a for a in (target_char.get("equippedArmor") or []) if isinstance(a, dict)]
     if eq_armor:
         lines.append("• EQUIPPED ARMOR:")
         for a in eq_armor:
-            cset = a.get("compendiumSet")
-            set_str = f" [Set: {cset['name']}]" if cset else ""
+            cset = a.get("compendiumSet") if isinstance(a.get("compendiumSet"), dict) else {}
+            set_str = f" [Set: {cset.get('name')}]" if cset.get("name") else ""
             exo_str = " [EXOTIC]" if a.get("isExotic") else ""
-            h_stat = a.get("stats", {}).get("Health") if a.get("stats") else (a.get("armorEval", {}).get("health", 0))
+            
+            # Robust Health stat extraction
+            h_stat = 0
+            stats_raw = a.get("stats")
+            if isinstance(stats_raw, dict):
+                h_stat = stats_raw.get("Health", 0)
+            elif isinstance(stats_raw, list):
+                for s in stats_raw:
+                    if isinstance(s, dict) and s.get("name") == "Health":
+                        h_stat = s.get("value", 0)
+                        break
+            elif isinstance(a.get("armorEval"), dict):
+                h_stat = a.get("armorEval", {}).get("health", 0)
+
             tot = a.get("totalStats") or 0
-            lines.append(f"  - {a.get('slot')}: {a.get('name')}{exo_str}{set_str} (Health: {h_stat}, Total: {tot})")
+            lines.append(f"  - {a.get('slot', 'Armor')}: {a.get('name', 'Unknown')}{exo_str}{set_str} (Health: {h_stat}, Total: {tot})")
 
     # Equipped Artifact
     art = target_char.get("equippedArtifact")
-    if art:
-        art_perks = art.get("artifactPerks") or []
+    if isinstance(art, dict) and art.get("name"):
+        art_perks = [str(p) for p in (art.get("artifactPerks") or []) if p]
         perks_str = f" (Active Perks: {', '.join(art_perks)})" if art_perks else ""
         lines.append(f"• EQUIPPED SEASONAL ARTIFACT: {art.get('name')}{perks_str}")
 
     # Carried in Pocket / Inventory
-    car_weps = target_char.get("carriedWeapons") or []
+    car_weps = [w for w in (target_char.get("carriedWeapons") or []) if isinstance(w, dict)]
     if car_weps:
         lines.append(f"• CARRIED WEAPONS IN {char_class_name.upper()} BAG (IN POCKET):")
         for w in car_weps[:10]:
             gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
             exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
-            perks_str = f" [{', '.join(w.get('perks', []))}]" if w.get("perks") else ""
-            lines.append(f"  - [In Pocket] {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+            perks = [str(p) for p in (w.get("perks") or []) if p]
+            perks_str = f" [{', '.join(perks)}]" if perks else ""
+            lines.append(f"  - [In Pocket] {w.get('slot', 'Weapon')}: {w.get('name', 'Unknown')} ({w.get('element', '')} {w.get('typeName', '')}){exo_tag}{gr_tag}{perks_str}")
 
-    car_armor = target_char.get("carriedArmor") or []
+    car_armor = [a for a in (target_char.get("carriedArmor") or []) if isinstance(a, dict)]
     car_exotics = [a for a in car_armor if a.get("isExotic")]
-    car_sets = [a for a in car_armor if a.get("compendiumSet")]
+    car_sets = [a for a in car_armor if isinstance(a.get("compendiumSet"), dict) and a.get("compendiumSet", {}).get("name")]
     if car_exotics:
         lines.append(f"• CARRIED EXOTIC ARMOR (IN POCKET):")
         for a in car_exotics:
-            lines.append(f"  - [In Pocket] {a.get('slot')}: {a.get('name')} (Total: {a.get('totalStats', 0)})")
+            lines.append(f"  - [In Pocket] {a.get('slot', 'Armor')}: {a.get('name', 'Unknown')} (Total: {a.get('totalStats', 0)})")
     if car_sets:
         lines.append(f"• CARRIED COMPENDIUM ARMOR SET PIECES (IN POCKET):")
         for a in car_sets[:6]:
-            cset = a.get("compendiumSet", {})
-            lines.append(f"  - [In Pocket] {a.get('slot')}: {a.get('name')} [Set: {cset.get('name')}]")
+            cset = a.get("compendiumSet") or {}
+            lines.append(f"  - [In Pocket] {a.get('slot', 'Armor')}: {a.get('name', 'Unknown')} [Set: {cset.get('name')}]")
 
     # Vault Arsenal
-    vault_weps = inv_ctx.get("vaultWeapons") or []
+    vault_weps = [w for w in (inv_ctx.get("vaultWeapons") or []) if isinstance(w, dict)]
     elem_match_weps = [w for w in vault_weps if (w.get("element") or "").lower() == eff_subclass.lower()]
     god_weps = [w for w in vault_weps if w.get("isGodRoll") and w not in elem_match_weps]
     exo_weps = [w for w in vault_weps if w.get("isExotic") and w not in elem_match_weps and w not in god_weps]
@@ -478,21 +493,22 @@ def format_guardian_inventory_for_chat(
         for w in top_vault_weps:
             gr_tag = " ★[GOD ROLL]" if w.get("isGodRoll") else ""
             exo_tag = " [EXOTIC]" if w.get("isExotic") else ""
-            perks_str = f" [{', '.join(w.get('perks', []))}]" if w.get("perks") else ""
-            lines.append(f"  - [In Vault] {w.get('slot')}: {w.get('name')} ({w.get('element')} {w.get('typeName')}){exo_tag}{gr_tag}{perks_str}")
+            perks = [str(p) for p in (w.get("perks") or []) if p]
+            perks_str = f" [{', '.join(perks)}]" if perks else ""
+            lines.append(f"  - [In Vault] {w.get('slot', 'Weapon')}: {w.get('name', 'Unknown')} ({w.get('element', '')} {w.get('typeName', '')}){exo_tag}{gr_tag}{perks_str}")
 
-    vault_armor = inv_ctx.get("vaultArmor") or []
+    vault_armor = [a for a in (inv_ctx.get("vaultArmor") or []) if isinstance(a, dict)]
     vault_exotics = [a for a in vault_armor if a.get("isExotic")]
-    vault_sets = [a for a in vault_armor if a.get("compendiumSet")]
+    vault_sets = [a for a in vault_armor if isinstance(a.get("compendiumSet"), dict) and a.get("compendiumSet", {}).get("name")]
     if vault_exotics:
         lines.append(f"• STORED IN VAULT (EXOTIC ARMOR PIECES):")
         for a in vault_exotics[:8]:
-            lines.append(f"  - [In Vault] {a.get('slot')}: {a.get('name')} (Total: {a.get('totalStats', 0)})")
+            lines.append(f"  - [In Vault] {a.get('slot', 'Armor')}: {a.get('name', 'Unknown')} (Total: {a.get('totalStats', 0)})")
     if vault_sets:
         lines.append(f"• STORED IN VAULT (COMPENDIUM SET PIECES):")
         for a in vault_sets[:8]:
-            cset = a.get("compendiumSet", {})
-            lines.append(f"  - [In Vault] {a.get('slot')}: {a.get('name')} [Set: {cset.get('name')}]")
+            cset = a.get("compendiumSet") or {}
+            lines.append(f"  - [In Vault] {a.get('slot', 'Armor')}: {a.get('name', 'Unknown')} [Set: {cset.get('name')}]")
 
     lines.append("\nINVENTORY UTILIZATION DIRECTIVES:")
     lines.append("• Whenever the Guardian asks for gear recommendations out of what they already have, prioritize the items listed above!")
@@ -700,158 +716,185 @@ def health_endpoint():
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
-    # Assemble live Destiny 2 Data Compendium telemetry & detect explicit class/subclass from message and history
-    compendium_raw, intent = build_compendium_context(
-        req.message,
-        guardian_class=req.guardian_class,
-        subclass=req.subclass,
-        activity=req.activity,
-        tactical_inquiry=req.tactical_inquiry,
-        history=req.history or [],
-        inventory_context=req.inventory_context,
-    )
-    eff_class = intent["effective_class"]
-    eff_subclass = intent["effective_subclass"]
-    eff_activity = intent["effective_activity"]
-
-    # Format live Guardian inventory & vault context if provided
-    inventory_block = format_guardian_inventory_for_chat(
-        req.inventory_context,
-        eff_class,
-        eff_subclass,
-        eff_activity,
-        req.message,
-    )
-
-    # Retrieve relevant wiki knowledge
-    all_wikis = get_all_wiki_data()
-    msg_lower = req.message.lower()
-    
-    # Filter relevant snippets (keyword match)
-    matched_snippets = []
-    for item in all_wikis:
-        score = 0
-        title_lower = item.get("title", "").lower()
-        content_lower = item.get("content", "").lower()
-        tags = [t.lower() for t in item.get("tags", [])]
-        
-        for word in msg_lower.split():
-            if len(word) > 2:
-                if word in title_lower:
-                    score += 3
-                if word in tags:
-                    score += 3
-                if word in content_lower:
-                    score += 1
-        
-        if score > 0:
-            matched_snippets.append((score, item))
-            
-    matched_snippets.sort(key=lambda x: x[0], reverse=True)
-    top_snippets = [s[1] for s in matched_snippets[:4]]
-    
-    knowledge_context = ""
-    if top_snippets:
-        knowledge_context = "\n\nRELEVANT DESTINY 2 INTEL FROM ARCHIVES:\n"
-        for idx, snip in enumerate(top_snippets, 1):
-            knowledge_context += f"--- Entry {idx}: {snip.get('title')} ({snip.get('category')}) ---\n"
-            knowledge_context += f"{snip.get('content')}\n"
-    
-    # Check for exact verified clan build match using the effective class & subclass
-    verified_build = None
-    if intent["is_build_query"]:
-        verified_build = find_verified_build(eff_subclass, eff_class, eff_activity, req.tactical_inquiry or "")
-    verified_blueprint_context = ""
-    if verified_build:
-        verified_blueprint_context = (
-            f"\n\n★ OFFICIAL CLAN VERIFIED BLUEPRINT MATCHED ({verified_build['title']}):\n"
-            f"{format_verified_build_response(verified_build)}\n\n"
-            f"NOTE: Use this battle-tested clan blueprint as a baseline if it fits the Guardian's exact request, and enrich it with any newer 2-Piece / 4-Piece Armor Set Bonuses or Compendium details below!"
+    try:
+        # Assemble live Destiny 2 Data Compendium telemetry & detect explicit class/subclass from message and history
+        compendium_raw, intent = build_compendium_context(
+            req.message,
+            guardian_class=req.guardian_class,
+            subclass=req.subclass,
+            activity=req.activity,
+            tactical_inquiry=req.tactical_inquiry,
+            history=req.history or [],
+            inventory_context=req.inventory_context,
         )
+        eff_class = intent["effective_class"]
+        eff_subclass = intent["effective_subclass"]
+        eff_activity = intent["effective_activity"]
 
-    compendium_block = ""
-    if compendium_raw:
-        compendium_block = f"\n\n★ LIVE DESTINY 2 DATA COMPENDIUM TELEMETRY (UP-TO-DATE):\n{compendium_raw}\n"
+        # Format live Guardian inventory & vault context if provided
+        inventory_block = ""
+        try:
+            inventory_block = format_guardian_inventory_for_chat(
+                req.inventory_context,
+                eff_class,
+                eff_subclass,
+                eff_activity,
+                req.message,
+            )
+        except Exception as e_inv:
+            logging.error(f"[Chat Endpoint] Failed to format inventory context: {e_inv}")
 
-    # Check for weapon god roll match in database
-    matched_weapons = []
-    all_rolls = get_all_god_rolls()
-    for w in all_rolls:
-        base_name = re.sub(r'\(.*?\)', '', w.get("name", "")).strip().lower()
-        clean_base = re.sub(r'[^a-z0-9]', '', base_name)
-        clean_msg = re.sub(r'[^a-z0-9]', '', msg_lower)
-        if clean_base and len(clean_base) >= 3 and clean_base in clean_msg:
-            matched_weapons.append(w)
-    
-    godroll_context = ""
-    if matched_weapons:
-        godroll_context = "\n\n★ VERIFIED WEAPON GOD ROLLS FROM ARMORY ARCHIVES:\n"
-        for w in matched_weapons[:2]:
-            pve = w.get("pve", {})
-            pvp = w.get("pvp", {})
-            godroll_context += (
-                f"- Weapon: {w.get('name')} ({w.get('slot')} Slot // {w.get('element')} {w.get('type')}, {w.get('frame')})\n"
-                f"  Source: {w.get('source')}\n"
-                f"  PVE God Roll: Barrel: {pve.get('barrel')}, Mag: {pve.get('mag')}, Perk 1: {pve.get('perk1')}, Perk 2: {pve.get('perk2')}, MW: {pve.get('masterwork')}. Notes: {pve.get('notes')}\n"
-                f"  PVP God Roll: Barrel: {pvp.get('barrel')}, Mag: {pvp.get('mag')}, Perk 1: {pvp.get('perk1')}, Perk 2: {pvp.get('perk2')}, MW: {pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
+        # Retrieve relevant wiki knowledge
+        all_wikis = get_all_wiki_data()
+        msg_lower = req.message.lower()
+        
+        # Filter relevant snippets (keyword match)
+        matched_snippets = []
+        for item in all_wikis:
+            score = 0
+            title_lower = item.get("title", "").lower()
+            content_lower = item.get("content", "").lower()
+            tags = [t.lower() for t in item.get("tags", [])]
+            
+            for word in msg_lower.split():
+                if len(word) > 2:
+                    if word in title_lower:
+                        score += 3
+                    if word in tags:
+                        score += 3
+                    if word in content_lower:
+                        score += 1
+            
+            if score > 0:
+                matched_snippets.append((score, item))
+                
+        matched_snippets.sort(key=lambda x: x[0], reverse=True)
+        top_snippets = [s[1] for s in matched_snippets[:4]]
+        
+        knowledge_context = ""
+        if top_snippets:
+            knowledge_context = "\n\nRELEVANT DESTINY 2 INTEL FROM ARCHIVES:\n"
+            for idx, snip in enumerate(top_snippets, 1):
+                knowledge_context += f"--- Entry {idx}: {snip.get('title')} ({snip.get('category')}) ---\n"
+                knowledge_context += f"{snip.get('content')}\n"
+        
+        # Check for exact verified clan build match using the effective class & subclass
+        verified_build = None
+        if intent["is_build_query"]:
+            verified_build = find_verified_build(eff_subclass, eff_class, eff_activity, req.tactical_inquiry or "")
+        verified_blueprint_context = ""
+        if verified_build:
+            verified_blueprint_context = (
+                f"\n\n★ OFFICIAL CLAN VERIFIED BLUEPRINT MATCHED ({verified_build['title']}):\n"
+                f"{format_verified_build_response(verified_build)}\n\n"
+                f"NOTE: Use this battle-tested clan blueprint as a baseline if it fits the Guardian's exact request, and enrich it with any newer 2-Piece / 4-Piece Armor Set Bonuses or Compendium details below!"
             )
 
-    tactical_profile_block = ""
-    if intent["is_build_query"] or intent["is_inventory_query"] or intent["explicit_class"] or intent["explicit_subclass"]:
-        tactical_profile_block = (
-            f"TACTICAL PROFILE (DETECTED CONVERSATIONAL CONTEXT):\n"
-            f"• Guardian Class: {eff_class}\n"
-            f"• Subclass Element: {eff_subclass}\n"
-            f"• Operational Activity: {eff_activity}\n\n"
-        )
+        compendium_block = ""
+        if compendium_raw:
+            compendium_block = f"\n\n★ LIVE DESTINY 2 DATA COMPENDIUM TELEMETRY (UP-TO-DATE):\n{compendium_raw}\n"
 
-    enhanced_prompt = (
-        f"{tactical_profile_block}"
-        f"{inventory_block}"
-        f"{verified_blueprint_context}"
-        f"{compendium_block}"
-        f"{knowledge_context}"
-        f"{godroll_context}\n\n"
-        f"Guardian Transmission: {req.message}"
-    )
-    
-    reply = await run_in_threadpool(query_gemini_api, enhanced_prompt, req.history or [], FELICIA_SYSTEM_PROMPT)
-    if reply.startswith("ERROR_FALLBACK"):
-        reply = local_tactical_fallback(
+        # Check for weapon god roll match in database
+        matched_weapons = []
+        all_rolls = get_all_god_rolls()
+        for w in all_rolls:
+            base_name = re.sub(r'\(.*?\)', '', w.get("name", "")).strip().lower()
+            clean_base = re.sub(r'[^a-z0-9]', '', base_name)
+            clean_msg = re.sub(r'[^a-z0-9]', '', msg_lower)
+            if clean_base and len(clean_base) >= 3 and clean_base in clean_msg:
+                matched_weapons.append(w)
+        
+        godroll_context = ""
+        if matched_weapons:
+            godroll_context = "\n\n★ VERIFIED WEAPON GOD ROLLS FROM ARMORY ARCHIVES:\n"
+            for w in matched_weapons[:2]:
+                pve = w.get("pve", {})
+                pvp = w.get("pvp", {})
+                godroll_context += (
+                    f"- Weapon: {w.get('name')} ({w.get('slot')} Slot // {w.get('element')} {w.get('type')}, {w.get('frame')})\n"
+                    f"  Source: {w.get('source')}\n"
+                    f"  PVE God Roll: Barrel: {pve.get('barrel')}, Mag: {pve.get('mag')}, Perk 1: {pve.get('perk1')}, Perk 2: {pve.get('perk2')}, MW: {pve.get('masterwork')}. Notes: {pve.get('notes')}\n"
+                    f"  PVP God Roll: Barrel: {pvp.get('barrel')}, Mag: {pvp.get('mag')}, Perk 1: {pvp.get('perk1')}, Perk 2: {pvp.get('perk2')}, MW: {pvp.get('masterwork')}. Notes: {pvp.get('notes')}\n"
+                )
+
+        tactical_profile_block = ""
+        if intent["is_build_query"] or intent["is_inventory_query"] or intent["explicit_class"] or intent["explicit_subclass"]:
+            tactical_profile_block = (
+                f"TACTICAL PROFILE (DETECTED CONVERSATIONAL CONTEXT):\n"
+                f"• Guardian Class: {eff_class}\n"
+                f"• Subclass Element: {eff_subclass}\n"
+                f"• Operational Activity: {eff_activity}\n\n"
+            )
+
+        enhanced_prompt = (
+            f"{tactical_profile_block}"
+            f"{inventory_block}"
+            f"{verified_blueprint_context}"
+            f"{compendium_block}"
+            f"{knowledge_context}"
+            f"{godroll_context}\n\n"
+            f"Guardian Transmission: {req.message}"
+        )
+        
+        reply = await run_in_threadpool(query_gemini_api, enhanced_prompt, req.history or [], FELICIA_SYSTEM_PROMPT)
+        if reply.startswith("ERROR_FALLBACK"):
+            reply = local_tactical_fallback(
+                req.message,
+                eff_class,
+                eff_activity,
+                top_snippets,
+                eff_subclass,
+                req.tactical_inquiry or "General",
+                history=req.history or [],
+                inventory_context=req.inventory_context,
+            )
+        
+        # Save to chat history
+        history = load_json(HISTORY_PATH, [])
+        history.append({
+            "id": str(uuid.uuid4()),
+            "user": req.message,
+            "felicia": reply,
+            "guardian_class": eff_class,
+            "activity": eff_activity,
+            "timestamp": time.time()
+        })
+        # Keep last 50
+        save_json(HISTORY_PATH, history[-50:])
+        
+        # Background non-blocking sync to Firebase
+        cfg = get_config()
+        background_tasks.add_task(sync_to_firebase, "felicia/chat_history", history[-20:], cfg.get("firebase_auth_token", ""))
+        
+        return {
+            "reply": reply,
+            "effective_class": eff_class,
+            "effective_subclass": eff_subclass,
+            "compendium_active": bool(compendium_raw),
+            "snippets_used": [s.get("title") for s in top_snippets]
+        }
+    except Exception as exc:
+        logging.error(f"[Chat Endpoint Exception] {traceback.format_exc()}")
+        fallback_class = req.guardian_class or "Warlock"
+        fallback_subclass = req.subclass or "Solar"
+        fallback_activity = "PVP" if any(k in (req.message or "").lower() for k in ["pvp", "crucible", "trials", "comp"]) else (req.activity or "Grandmaster+")
+        fallback_reply = local_tactical_fallback(
             req.message,
-            eff_class,
-            eff_activity,
-            top_snippets,
-            eff_subclass,
+            fallback_class,
+            fallback_activity,
+            [],
+            fallback_subclass,
             req.tactical_inquiry or "General",
             history=req.history or [],
             inventory_context=req.inventory_context,
         )
-    
-    # Save to chat history
-    history = load_json(HISTORY_PATH, [])
-    history.append({
-        "id": str(uuid.uuid4()),
-        "user": req.message,
-        "felicia": reply,
-        "guardian_class": eff_class,
-        "activity": eff_activity,
-        "timestamp": os.path.getmtime(HISTORY_PATH) if os.path.exists(HISTORY_PATH) else 0
-    })
-    # Keep last 50
-    save_json(HISTORY_PATH, history[-50:])
-    
-    # Background non-blocking sync to Firebase
-    cfg = get_config()
-    background_tasks.add_task(sync_to_firebase, "felicia/chat_history", history[-20:], cfg.get("firebase_auth_token", ""))
-    
-    return {
-        "reply": reply,
-        "effective_class": eff_class,
-        "effective_subclass": eff_subclass,
-        "compendium_active": bool(compendium_raw),
-        "snippets_used": [s.get("title") for s in top_snippets]
-    }
+        return {
+            "reply": fallback_reply,
+            "effective_class": fallback_class,
+            "effective_subclass": fallback_subclass,
+            "compendium_active": False,
+            "snippets_used": []
+        }
 
 @app.get("/api/compendium/status")
 def get_compendium_status_endpoint():
