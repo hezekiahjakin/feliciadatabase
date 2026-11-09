@@ -773,7 +773,6 @@ async function sendChatMessage(userText) {
         : `Vanguard uplink responded with status ${res.status}`);
       throw new Error(errorMsg);
     }
-
     state.isThinking = false;
     if (thinkingEl) thinkingEl.classList.add('hidden');
 
@@ -811,7 +810,7 @@ async function sendChatMessage(userText) {
     if (thinkingEl) thinkingEl.classList.add('hidden');
     const safeMsg = (err.message && !err.message.includes('Unexpected token') && !err.message.includes('is not valid JSON')) 
       ? err.message 
-      : "Vanguard communications relay hit atmospheric turbulence! Felicia is reconnecting—give it another quick transmission.";
+      : "Vanguard communications relay hit atmospheric turbulence on the server! Felicia is reconnecting—give it another quick transmission.";
     appendMessage('felicia', 'F.E.L.I.C.I.A.', `Signal dropped out: ${safeMsg}`);
     updateConstructMood('ERROR // COMMUNICATIONS DRIFT');
   }
@@ -1526,7 +1525,7 @@ async function loadMobileConnectInfo() {
 function checkAndShowFieldAdvisory(force = false) {
   const modal = document.getElementById('modalFieldAdvisory');
   if (!modal) return;
-  modal.style.display = '';
+  if (modal.open) return;
 
   if (force) {
     try {
@@ -1562,12 +1561,12 @@ function initFieldAdvisoryModal() {
   if (!modal) return;
 
   const closeAdvisory = () => {
-    try { sfx.playChirp(); } catch (_) {}
+    sfx.playChirp();
     try {
       modal.close();
-    } catch (_) {}
-    modal.removeAttribute('open');
-    modal.style.display = 'none';
+    } catch (_) {
+      modal.removeAttribute('open');
+    }
     try {
       localStorage.setItem('felicia_clan_advisory_ack_v2', 'true');
     } catch (_) {}
@@ -1577,7 +1576,7 @@ function initFieldAdvisoryModal() {
   btnClose?.addEventListener('click', closeAdvisory);
 
   btnOpen?.addEventListener('click', () => {
-    try { sfx.playChirp(); } catch (_) {}
+    sfx.playChirp();
     checkAndShowFieldAdvisory(true);
   });
 
@@ -2575,22 +2574,6 @@ function openItemInspectModal(item) {
           actionsGrid.appendChild(lockBtn);
         }
 
-        // Option A: 3D Gear Model & Shader Preview Bridge (Lowlidev / Paracausal)
-        if (item.itemHash) {
-          const preview3DBtn = document.createElement('a');
-          preview3DBtn.href = `https://lowlidev.com.au/destiny/gear-viewer?hash=${item.itemHash}`;
-          preview3DBtn.target = '_blank';
-          preview3DBtn.rel = 'noopener noreferrer';
-          preview3DBtn.className = 'btn-item-action btn-inspect-3d-gear';
-          preview3DBtn.innerHTML = `<span>🎮</span> 3D Gear Model &amp; Shaders ↗`;
-          preview3DBtn.title = 'Inspect official 3D extracted CAD mesh & shaders in Lowlidev Gear Viewer';
-          preview3DBtn.addEventListener('click', () => {
-            try { sfx.playTransmit(); } catch (_) {}
-            showToast(`Opening 3D model viewer for ${item.name}...`, 'info');
-          });
-          actionsGrid.appendChild(preview3DBtn);
-        }
-
         // Signature Action: Ask F.E.L.I.C.I.A.
         const askBtn = document.createElement('button');
         askBtn.type = 'button';
@@ -2772,18 +2755,20 @@ async function executeItemTransfer(item, targetType, targetCharacterId, targetLa
       })
     });
 
-    if (!res.ok) {
-      let errorDetail = '';
-      try {
-        const errJson = await res.json();
-        errorDetail = errJson.reply || errJson.detail || '';
-      } catch (_) {
-        errorDetail = await res.text().catch(() => '');
-      }
-      throw new Error(errorDetail || `Vanguard uplink responded with status ${res.status}`);
+    const rawText = await res.text().catch(() => '');
+    let data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch (_) {
+      data = null;
     }
 
-    const data = await res.json();
+    if (!res.ok || !data) {
+      const errorMsg = data?.reply || data?.detail || (res.status >= 500 
+        ? "Vanguard communications relay hit atmospheric turbulence on the server! Felicia is reconnecting—give it another quick transmission." 
+        : `Vanguard uplink responded with status ${res.status}`);
+      throw new Error(errorMsg);
+    }
     if (data.refreshed_session) {
       saveBungieSession(data.refreshed_session);
     }
@@ -5083,8 +5068,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBungieLoginHero = document.getElementById('btnBungieLoginHero');
   const bungieHeaderBadge = document.getElementById('bungieHeaderBadge');
   const btnRefreshInventory = document.getElementById('btnRefreshInventory');
-  const btnOpen3DForge = document.getElementById('btnOpen3DForge');
-  const btnPreview3DLoadout = document.getElementById('btnPreview3DLoadout');
   const btnDisconnectBungie = document.getElementById('btnDisconnectBungie');
   const invSearchInput = document.getElementById('invSearchInput');
   const btnClearInvSearch = document.getElementById('btnClearInvSearch');
@@ -5112,22 +5095,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRefreshInventory.addEventListener('click', () => {
       sfx.playChirp();
       loadBungieInventory(false);
-    });
-  }
-
-  if (btnOpen3DForge) {
-    btnOpen3DForge.addEventListener('click', () => {
-      sfx.playTransmit();
-      showToast('Opening Paracausal Forge: Customise your 3D Guardian, Armor & Shaders!', 'info');
-      window.open('https://paracausalforge.com/guardian', '_blank', 'noopener,noreferrer');
-    });
-  }
-
-  if (btnPreview3DLoadout) {
-    btnPreview3DLoadout.addEventListener('click', () => {
-      sfx.playTransmit();
-      showToast('Opening 3D Character & Shader Preview in Paracausal Forge...', 'info');
-      window.open('https://paracausalforge.com/guardian', '_blank', 'noopener,noreferrer');
     });
   }
 

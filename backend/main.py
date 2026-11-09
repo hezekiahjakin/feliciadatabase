@@ -258,9 +258,8 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
     if not api_key:
         return "ERROR_FALLBACK: GEMINI_API_KEY not configured"
     
-    # Priority cascade: fast production and preview models
+    # Priority cascade: fast production, preview, and lite models
     candidate_models = [
-        "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemini-flash-latest",
@@ -274,14 +273,12 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
     contents = []
     # Add history
     for msg in conversation_history[-8:]:  # keep last 8 turns for responsive context
-        if not isinstance(msg, dict):
-            continue
         role = "user" if msg.get("role") in ["user", "human"] else "model"
         text = msg.get("content", "")
         if text:
             contents.append({
                 "role": role,
-                "parts": [{"text": str(text)}]
+                "parts": [{"text": text}]
             })
     
     # Add current prompt
