@@ -4646,62 +4646,131 @@ dialog.modal-inspect-item::backdrop {
   color: #FFFFFF;
 }
 
-/* 3D Viewport Canvas Wrapper */
-.gear-3d-canvas-wrap {
+/* Photorealistic Studio Stage (Official High-Res Bungie Game Asset) */
+.gear-studio-wrap {
   position: relative;
   width: 100%;
-  height: 350px;
+  height: 360px;
   border-radius: 12px;
   overflow: hidden;
   background: radial-gradient(ellipse at center, #111A2E 0%, #050811 85%);
   border: 1px solid rgba(56, 189, 248, 0.35);
   box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.85), 0 8px 28px rgba(0, 0, 0, 0.6);
+  perspective: 1100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
   cursor: grab;
 }
 
-.gear-3d-canvas-wrap:active {
+.gear-studio-wrap:active {
   cursor: grabbing;
 }
 
-.gear-3d-canvas {
+.gear-studio-viewport {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: block;
-  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
 }
 
-.gear-3d-iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-  background: #050811;
+.gear-studio-art-card {
+  position: relative;
+  max-width: 90%;
+  max-height: 84%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0.38, 0.9);
+  will-change: transform;
+  filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.88));
+  z-index: 1;
 }
 
-.gear-3d-iframe.hidden {
-  display: none !important;
+.gear-studio-img {
+  max-width: 100%;
+  max-height: 285px;
+  object-fit: contain;
+  pointer-events: none;
+  border-radius: 6px;
+  transition: filter 0.35s ease;
 }
 
-.gear-3d-watermark {
+.gear-shader-dye-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  mix-blend-mode: color;
+  opacity: 0;
+  transition: opacity 0.3s ease, background 0.3s ease;
+}
+
+.gear-studio-glint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  mix-blend-mode: overlay;
+}
+
+.gear-studio-glow-orb {
+  position: absolute;
+  width: 340px;
+  height: 180px;
+  border-radius: 50%;
+  filter: blur(55px);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+  transition: background 0.4s ease, opacity 0.3s ease;
+}
+
+.gear-studio-grid-floor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  background: linear-gradient(transparent, rgba(56, 189, 248, 0.08));
+  border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+  background-image: radial-gradient(rgba(56, 189, 248, 0.18) 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events: none;
+  transform: perspective(400px) rotateX(60deg);
+  transform-origin: bottom;
+  opacity: 0.65;
+}
+
+.gear-studio-watermark {
   position: absolute;
   top: 10px;
   left: 12px;
   font-family: var(--font-display);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.4);
   letter-spacing: 0.8px;
   pointer-events: none;
   display: flex;
   align-items: center;
   gap: 6px;
+  z-index: 2;
 }
 
-.gear-3d-watermark .vanguard-pip {
+.gear-studio-watermark .vanguard-pip {
   color: var(--vanguard-amber);
 }
 
-.gear-3d-hint {
+.gear-studio-hint {
   position: absolute;
   bottom: 8px;
   right: 12px;
@@ -4709,10 +4778,11 @@ dialog.modal-inspect-item::backdrop {
   font-size: 11px;
   color: rgba(203, 213, 225, 0.65);
   pointer-events: none;
-  background: rgba(4, 7, 13, 0.7);
+  background: rgba(4, 7, 13, 0.75);
   padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 2;
 }
 
 /* Tactical Shader Lab Section */

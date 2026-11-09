@@ -1318,8 +1318,8 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           </button>
           <button type="button" class="btn-inspect-tab" id="btnInspectTab3D" role="tab" aria-selected="false" data-inspect-tab="3d">
             <span class="inspect-tab-icon">🎮</span>
-            <span>3D Holoview &amp; Shaders</span>
-            <span class="inspect-tab-badge">3D</span>
+            <span>Studio View &amp; Shaders</span>
+            <span class="inspect-tab-badge">HD</span>
           </button>
         </div>
 
@@ -1368,25 +1368,17 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           </div>
         </div>
 
-        <!-- 3D TAB CONTENT: INTERACTIVE 3D HOLOVIEW & SHADER LAB -->
+        <!-- STUDIO VIEW & SHADER LAB (OFFICIAL 100% IN-GAME PHOTOREALISTIC ASSET) -->
         <div class="inspect-tab-content inspect-tab-3d hidden" id="inspectTabContent3D">
           <!-- 3D HUD CONTROLS BAR -->
           <div class="inspect-3d-header">
             <div class="inspect-3d-title">
               <span class="holocube-glyph">❖</span>
-              <span id="inspect3DItemTypeTag">TACTICAL HOLOGRAPHIC FRAME</span>
+              <span id="inspect3DItemTypeTag">STUDIO IN-GAME RENDER</span>
             </div>
             <div class="inspect-3d-actions">
-              <div class="inspect-3d-mode-toggles" role="group" aria-label="3D View Engine Mode">
-                <button type="button" class="btn-3d-mode active" id="btn3DModeHolo" title="Tactical 3D Hologram with Real-Time Shaders">
-                  <span class="icon">❖</span> Hologram
-                </button>
-                <button type="button" class="btn-3d-mode" id="btn3DModeCad" title="Interactive In-Game 3D CAD Mesh (Extracted Game Assets)">
-                  <span class="icon">🌐</span> In-Game CAD
-                </button>
-              </div>
-              <button type="button" class="btn-3d-ctrl active" id="btn3DToggleAutoRotate" title="Toggle Auto-Rotation">
-                <span class="icon">⟳</span> <span class="label">Auto-Rotate</span>
+              <button type="button" class="btn-3d-ctrl active" id="btn3DToggleTilt" title="Toggle Interactive 3D Perspective Tilt">
+                <span class="icon">⤹</span> <span class="label">3D Tilt</span>
               </button>
               <button type="button" class="btn-3d-ctrl active" id="btn3DToggleGlow" title="Toggle Elemental Aura">
                 <span class="icon">⚡</span> <span class="label">Aura</span>
@@ -1394,21 +1386,28 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
               <button type="button" class="btn-3d-ctrl" id="btn3DResetCamera" title="Reset View Angle">
                 <span class="icon">↺</span> <span class="label">Reset</span>
               </button>
-              <a href="#" target="_blank" rel="noopener noreferrer" class="btn-3d-ctrl btn-3d-external" id="btn3DOpenExternal" title="View in Lowlidev 3D Gear Viewer">
-                <span class="icon">↗</span> <span class="label">Lowlidev</span>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="btn-3d-ctrl btn-3d-external" id="btn3DOpenExternal" title="View Extracted 3D CAD Mesh in Lowlidev">
+                <span class="icon">↗</span> <span class="label">Lowlidev 3D</span>
               </a>
             </div>
           </div>
 
-          <!-- 3D VIEWPORT CANVAS WRAPPER -->
-          <div class="gear-3d-canvas-wrap" id="gear3DCanvasWrap">
-            <canvas id="gear3DCanvas" class="gear-3d-canvas"></canvas>
-            <iframe id="gear3DExternalFrame" class="gear-3d-iframe hidden" src="about:blank" title="Destiny 2 In-Game 3D Mesh Viewer" allow="fullscreen"></iframe>
-            <div class="gear-3d-watermark" id="gear3DWatermark">
-              <span class="vanguard-pip">❖</span> F.E.L.I.C.I.A. // TACTICAL HOLOVIEW
-            </div>
-            <div class="gear-3d-hint" id="gear3DHint">
-              <span>🖱️ Drag to rotate • 🔍 Scroll / pinch to zoom • Double-click to reset</span>
+          <!-- PHOTOREALISTIC STUDIO STAGE (OFFICIAL HIGH-RES BUNGIE GAME ASSET) -->
+          <div class="gear-studio-wrap" id="gearStudioWrap">
+            <div class="gear-studio-viewport" id="gearStudioViewport">
+              <div class="gear-studio-art-card" id="gearStudioArtCard">
+                <img id="gearStudioImg" class="gear-studio-img" src="" alt="Official In-Game Gear Render">
+                <div class="gear-shader-dye-overlay" id="gearShaderDyeOverlay"></div>
+                <div class="gear-studio-glint" id="gearStudioGlint"></div>
+              </div>
+              <div class="gear-studio-glow-orb" id="gearStudioGlowOrb"></div>
+              <div class="gear-studio-grid-floor"></div>
+              <div class="gear-studio-watermark">
+                <span class="vanguard-pip">❖</span> OFFICIAL BUNGIE ARSENAL ARCHIVE // 100% AUTHENTIC IN-GAME ASSET
+              </div>
+              <div class="gear-studio-hint">
+                <span>🖱️ Move / touch to tilt in 3D perspective • Preview shaders below</span>
+              </div>
             </div>
           </div>
 

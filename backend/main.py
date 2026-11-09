@@ -258,13 +258,13 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
     if not api_key:
         return "ERROR_FALLBACK: GEMINI_API_KEY not configured"
     
-    # Priority cascade: fast preview and lite models
+    # Priority cascade: fast production and preview models
     candidate_models = [
-        "gemini-3.1-flash-lite-preview",
-        "gemini-flash-lite-latest",
-        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.1-pro-preview"
+        "gemini-3.1-flash-lite-preview",
     ]
     
     # Build contents array
@@ -300,7 +300,7 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
     for model_name in candidate_models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         try:
-            resp = requests.post(url, json=payload, timeout=18)
+            resp = requests.post(url, json=payload, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
