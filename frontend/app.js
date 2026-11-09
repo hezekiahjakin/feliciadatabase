@@ -2679,17 +2679,96 @@ function createOctaMesh(r, mat, pos, rot, parent) {
 }
 
 // 3D Gear Model Assemblers
-function buildHandCannonMesh(group, m1, m2, m3, mAcc) {
-  createCylMesh(0.13, 0.11, 2.1, 16, m1, [0.7, 0.35, 0], [0, 0, Math.PI / 2], group);
-  createBoxMesh(2.1, 0.22, 0.3, m2, [0.7, 0.45, 0], null, group);
-  createCylMesh(0.35, 0.35, 0.65, 14, m1, [-0.2, 0.28, 0], [0, 0, Math.PI / 2], group);
-  createBoxMesh(0.85, 0.65, 0.38, m2, [-0.25, 0.22, 0], null, group);
-  createBoxMesh(0.32, 1.15, 0.32, m3, [-0.65, -0.4, 0], [0, 0, -0.32], group);
-  createBoxMesh(0.24, 0.95, 0.38, m1, [-0.65, -0.4, 0], [0, 0, -0.32], group);
-  createTorusMesh(0.2, 0.035, 8, 16, Math.PI, m3, [-0.25, -0.1, 0], [0, 0, Math.PI], group);
-  createBoxMesh(0.35, 0.32, 0.34, m2, [1.7, 0.35, 0], null, group);
-  createBoxMesh(0.12, 0.12, 0.12, mAcc, [1.7, 0.58, 0], null, group);
-  createBoxMesh(0.14, 0.14, 0.14, mAcc, [-0.55, 0.58, 0], null, group);
+function buildHandCannonMesh(group, m1, m2, m3, mAcc, item) {
+  const isFatebringer = (item?.name || '').toLowerCase().includes('fatebringer');
+
+  // 1. Structural Frame (Encapsulating the Revolver Cylinder)
+  // Top Strap
+  createBoxMesh(1.45, 0.22, 0.44, m1, [-0.15, 0.58, 0], null, group);
+  // Recoil Shield & Hammer Well (Rear)
+  createBoxMesh(0.72, 0.82, 0.44, m1, [-0.85, 0.22, 0], null, group);
+  // Bottom Frame (Lower Strap)
+  createBoxMesh(1.25, 0.2, 0.42, m2, [-0.15, -0.16, 0], null, group);
+  // Front Crane Pivot & Frame Brace
+  createBoxMesh(0.48, 0.6, 0.44, m1, [0.45, 0.22, 0], null, group);
+
+  // 2. 6-Chamber Cylinder & Crane
+  // Main Cylinder Drum
+  createCylMesh(0.38, 0.38, 0.72, 20, m2, [-0.15, 0.22, 0], [0, 0, Math.PI / 2], group);
+  // Front Bevel Ring
+  createCylMesh(0.4, 0.4, 0.08, 20, m1, [0.22, 0.22, 0], [0, 0, Math.PI / 2], group);
+  // Rear Ratchet Collar
+  createCylMesh(0.4, 0.4, 0.08, 20, m1, [-0.52, 0.22, 0], [0, 0, Math.PI / 2], group);
+  // 4 Fluting Grooves along cylinder circumference
+  createBoxMesh(0.72, 0.06, 0.06, m3, [-0.15, 0.56, 0], null, group);
+  createBoxMesh(0.72, 0.06, 0.06, m3, [-0.15, -0.12, 0], null, group);
+  createBoxMesh(0.72, 0.06, 0.06, m3, [-0.15, 0.22, 0.36], null, group);
+  createBoxMesh(0.72, 0.06, 0.06, m3, [-0.15, 0.22, -0.36], null, group);
+
+  // 3. Barrel & Fatebringer Heavy Underlug Assembly
+  // Heavy Squared Barrel Shroud
+  createBoxMesh(1.7, 0.46, 0.38, m1, [1.5, 0.36, 0], null, group);
+  // Signature Fatebringer Full-Length Heavy Underlug / Counterweight
+  createBoxMesh(1.5, 0.34, 0.34, m2, [1.4, 0.02, 0], null, group);
+  // Underlug Front Angled Chamfer
+  createBoxMesh(0.38, 0.34, 0.34, m1, [2.16, 0.02, 0], [0, 0, 0.38], group);
+  // Recessed Steel Barrel Bore at Muzzle
+  createCylMesh(0.12, 0.12, 0.22, 16, m3, [2.36, 0.36, 0], [0, 0, Math.PI / 2], group);
+  // Muzzle Compensator Crown / Port Block
+  createBoxMesh(0.28, 0.54, 0.4, m1, [2.38, 0.36, 0], null, group);
+
+  // Barrel Side Porting Cutouts
+  createBoxMesh(0.35, 0.12, 0.42, m3, [1.3, 0.38, 0], null, group);
+  createBoxMesh(0.35, 0.12, 0.42, m3, [1.8, 0.38, 0], null, group);
+
+  // Top Ventilated Sighting Rib
+  createBoxMesh(1.85, 0.14, 0.24, m2, [1.5, 0.64, 0], null, group);
+  // 3 Heat Dissipation Vents along Top Rib
+  createBoxMesh(0.25, 0.16, 0.28, m3, [0.85, 0.64, 0], null, group);
+  createBoxMesh(0.25, 0.16, 0.28, m3, [1.4, 0.64, 0], null, group);
+  createBoxMesh(0.25, 0.16, 0.28, m3, [1.95, 0.64, 0], null, group);
+
+  // 4. Combat Sights & Hammer
+  // Front Sight Blade
+  createBoxMesh(0.08, 0.24, 0.08, m2, [2.32, 0.78, 0], null, group);
+  // Glowing Tritium Optical Sight Bead
+  createBoxMesh(0.1, 0.1, 0.1, mAcc, [2.32, 0.85, 0], null, group);
+  // Rear Notch Combat Sight on Frame
+  createBoxMesh(0.18, 0.16, 0.26, m2, [-0.75, 0.74, 0], null, group);
+  // Exposed Combat Hammer Spur
+  createBoxMesh(0.12, 0.38, 0.16, m2, [-1.05, 0.65, 0], [0, 0, -0.4], group);
+  createBoxMesh(0.14, 0.12, 0.18, mAcc, [-1.18, 0.76, 0], null, group);
+  // Cylinder Release Latch (Left Side)
+  createBoxMesh(0.18, 0.12, 0.08, m2, [-0.55, 0.38, 0.24], null, group);
+
+  // 5. Trigger Guard & Trigger
+  // Contoured Combat Trigger Guard
+  createTorusMesh(0.26, 0.045, 12, 24, Math.PI * 1.25, m2, [-0.25, -0.22, 0], [0, 0, Math.PI * 0.95], group);
+  // Curved Combat Steel Trigger
+  createCylMesh(0.035, 0.035, 0.3, 8, m3, [-0.28, -0.2, 0], [0, 0, 0.25], group);
+
+  // 6. Ergonomic Combat Grip
+  // Angled Grip Core
+  createBoxMesh(0.38, 1.4, 0.34, m3, [-0.95, -0.65, 0], [0, 0, -0.38], group);
+  // Left Grip Textured Panel
+  createBoxMesh(0.32, 1.25, 0.08, m1, [-0.95, -0.65, 0.18], [0, 0, -0.38], group);
+  // Right Grip Textured Panel
+  createBoxMesh(0.32, 1.25, 0.08, m1, [-0.95, -0.65, -0.18], [0, 0, -0.38], group);
+  // 3 Ergonomic Front Finger Grooves
+  createCylMesh(0.06, 0.06, 0.32, 8, m2, [-0.72, -0.45, 0], [Math.PI / 2, 0, 0], group);
+  createCylMesh(0.06, 0.06, 0.32, 8, m2, [-0.85, -0.7, 0], [Math.PI / 2, 0, 0], group);
+  createCylMesh(0.06, 0.06, 0.32, 8, m2, [-0.98, -0.95, 0], [Math.PI / 2, 0, 0], group);
+  // Weighted Baseplate / Grip Cap
+  createBoxMesh(0.48, 0.14, 0.38, m2, [-1.22, -1.22, 0], [0, 0, -0.38], group);
+
+  // 7. Signature Vault of Glass / Fatebringer Accents
+  if (isFatebringer) {
+    // VoG Brass Medallions on Grip
+    createDodecMesh(0.14, mAcc, [-0.95, -0.55, 0.24], null, group);
+    createDodecMesh(0.14, mAcc, [-0.95, -0.55, -0.24], null, group);
+    // VoG Golden Crane Bracket
+    createBoxMesh(0.32, 0.12, 0.12, mAcc, [0.15, 0.06, 0.22], null, group);
+  }
 }
 
 function buildAutoRifleMesh(group, m1, m2, m3, mAcc) {
@@ -3091,11 +3170,27 @@ class Gear3DViewer {
     const activeShader = DESTINY_SHADERS.find(s => s.id === state.activeShaderId) || DESTINY_SHADERS[0];
     this.applyShader(activeShader);
 
+    const isFatebringer = (item?.name || '').toLowerCase().includes('fatebringer');
+    if (isFatebringer && (!state.activeShaderId || state.activeShaderId === 'default')) {
+      // Authentic Vault of Glass signature finish: pearlescent silver, dark carbon, and brass
+      this.primaryMat.color.setHex(0xEDF2F7);
+      this.primaryMat.metalness = 0.9;
+      this.primaryMat.roughness = 0.22;
+      this.secondaryMat.color.setHex(0x181C24);
+      this.secondaryMat.metalness = 0.75;
+      this.secondaryMat.roughness = 0.35;
+      this.tertiaryMat.color.setHex(0xD4AF37);
+      this.tertiaryMat.metalness = 0.85;
+      this.tertiaryMat.roughness = 0.25;
+      this.accentMat.color.setHex(0xF8FAFC);
+      this.accentMat.emissive.setHex(0x38BDF8);
+    }
+
     // 3. Build geometry by archetype
     const archetype = resolveItem3DArchetype(item);
     switch (archetype) {
       case 'hand_cannon':
-        buildHandCannonMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        buildHandCannonMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat, item);
         break;
       case 'sniper_rifle':
         buildSniperRifleMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
@@ -3354,9 +3449,62 @@ function populateShaderSwatches() {
   }
 }
 
+function set3DViewerEngineMode(mode) {
+  state.gear3DMode = mode;
+  const btnHolo = document.getElementById('btn3DModeHolo');
+  const btnCad = document.getElementById('btn3DModeCad');
+  const canvas = document.getElementById('gear3DCanvas');
+  const iframe = document.getElementById('gear3DExternalFrame');
+  const watermark = document.getElementById('gear3DWatermark');
+  const hint = document.getElementById('gear3DHint');
+  const shaderLab = document.querySelector('.shader-lab-section');
+  const autoRotateBtn = document.getElementById('btn3DToggleAutoRotate');
+  const auraBtn = document.getElementById('btn3DToggleGlow');
+  const resetBtn = document.getElementById('btn3DResetCamera');
+
+  if (mode === 'cad') {
+    btnHolo?.classList.remove('active');
+    btnCad?.classList.add('active');
+    canvas?.classList.add('hidden');
+    watermark?.classList.add('hidden');
+    hint?.classList.add('hidden');
+    if (shaderLab) shaderLab.style.display = 'none';
+    if (autoRotateBtn) autoRotateBtn.style.display = 'none';
+    if (auraBtn) auraBtn.style.display = 'none';
+    if (resetBtn) resetBtn.style.display = 'none';
+
+    if (iframe) {
+      iframe.classList.remove('hidden');
+      iframe.src = 'https://lowlidev.com.au/destiny/gear-viewer';
+    }
+    state.gear3DViewer?.pause();
+  } else {
+    btnCad?.classList.remove('active');
+    btnHolo?.classList.add('active');
+    if (iframe) {
+      iframe.classList.add('hidden');
+      iframe.src = 'about:blank';
+    }
+    canvas?.classList.remove('hidden');
+    watermark?.classList.remove('hidden');
+    hint?.classList.remove('hidden');
+    if (shaderLab) shaderLab.style.display = '';
+    if (autoRotateBtn) autoRotateBtn.style.display = '';
+    if (auraBtn) auraBtn.style.display = '';
+    if (resetBtn) resetBtn.style.display = '';
+
+    if (state.inspectedItem) {
+      state.gear3DViewer?.loadItem(state.inspectedItem);
+    }
+    state.gear3DViewer?.resume();
+  }
+}
+
 function initInspect3DSystem() {
   const btn2D = document.getElementById('btnInspectTab2D');
   const btn3D = document.getElementById('btnInspectTab3D');
+  const btnModeHolo = document.getElementById('btn3DModeHolo');
+  const btnModeCad = document.getElementById('btn3DModeCad');
   const btnRotate = document.getElementById('btn3DToggleAutoRotate');
   const btnGlow = document.getElementById('btn3DToggleGlow');
   const btnReset = document.getElementById('btn3DResetCamera');
@@ -3370,6 +3518,16 @@ function initInspect3DSystem() {
   btn3D?.addEventListener('click', () => {
     sfx.playChirp();
     setInspectTab('3d');
+  });
+
+  btnModeHolo?.addEventListener('click', () => {
+    sfx.playChirp();
+    set3DViewerEngineMode('holo');
+  });
+
+  btnModeCad?.addEventListener('click', () => {
+    sfx.playChirp();
+    set3DViewerEngineMode('cad');
   });
 
   btnRotate?.addEventListener('click', () => {
@@ -3395,6 +3553,7 @@ function initInspect3DSystem() {
 
   modal?.addEventListener('close', () => {
     state.gear3DViewer?.stop();
+    set3DViewerEngineMode('holo');
     setInspectTab('2d');
   });
 }
