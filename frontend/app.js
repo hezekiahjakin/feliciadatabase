@@ -59,10 +59,7 @@ const state = {
   inspectedLoadout: null,
   loadoutsDrawerOpen: {},
   inspectedItem: null,
-  lastAppraisalReply: '',
-  activeInspectTab: '2d',
-  gear3DViewer: null,
-  activeShaderId: 'default'
+  lastAppraisalReply: ''
 };
 
 // Subclass Palettes & Tactical Profiles (Solar replaces Amber with true orange; Stasis added)
@@ -772,7 +769,7 @@ async function sendChatMessage(userText) {
 
     if (!res.ok || !data) {
       const errorMsg = data?.reply || data?.detail || (res.status >= 500 
-        ? "Vanguard communications relay hit atmospheric turbulence on the server! Give it another quick transmission." 
+        ? "Vanguard communications relay hit atmospheric turbulence on the server! Felicia is reconnecting—give it another quick transmission." 
         : `Vanguard uplink responded with status ${res.status}`);
       throw new Error(errorMsg);
     }
@@ -812,7 +809,10 @@ async function sendChatMessage(userText) {
   } catch (err) {
     state.isThinking = false;
     if (thinkingEl) thinkingEl.classList.add('hidden');
-    appendMessage('felicia', 'F.E.L.I.C.I.A.', `Signal dropped out: ${err.message}. Give it another try in a moment!`);
+    const safeMsg = (err.message && !err.message.includes('Unexpected token') && !err.message.includes('is not valid JSON')) 
+      ? err.message 
+      : "Vanguard communications relay hit atmospheric turbulence! Felicia is reconnecting—give it another quick transmission.";
+    appendMessage('felicia', 'F.E.L.I.C.I.A.', `Signal dropped out: ${safeMsg}`);
     updateConstructMood('ERROR // COMMUNICATIONS DRIFT');
   }
 }
@@ -2407,396 +2407,11 @@ function getActiveCharacter() {
   return chars[0] || null;
 }
 
-// =========================================================================
-// DESTINY 2 STUDIO VIEW & SHADER LAB (OFFICIAL 100% IN-GAME ASSETS)
-// =========================================================================
-
-const DESTINY_SHADERS = [
-  {
-    id: 'default',
-    name: 'Foundry Standard',
-    desc: 'Factory Issue Finish',
-    quads: ['#475569', '#1E293B', '#64748B', '#F1F5F9'],
-    overlay: null,
-    filter: 'none'
-  },
-  {
-    id: 'superblack',
-    name: 'Superblack',
-    desc: 'Obsidian Blackout',
-    quads: ['#09090B', '#18181B', '#27272A', '#020202'],
-    overlay: 'radial-gradient(circle at center, rgba(10,10,12,0.85) 0%, rgba(20,20,24,0.95) 100%)',
-    filter: 'contrast(1.4) brightness(0.65) grayscale(0.85)'
-  },
-  {
-    id: 'calus_selected',
-    name: "Calus's Selected",
-    desc: 'Imperial Leviathan Gilt',
-    quads: ['#F8FAFC', '#581C87', '#EAB308', '#262626'],
-    overlay: 'linear-gradient(135deg, rgba(234,179,8,0.4) 0%, rgba(88,28,135,0.45) 50%, rgba(248,250,252,0.3) 100%)',
-    filter: 'contrast(1.25) brightness(1.08)'
-  },
-  {
-    id: 'bergusian_night',
-    name: 'Bergusian Night',
-    desc: 'Black Armory Iridescent',
-    quads: ['#3B0764', '#1E1B4B', '#6366F1', '#475569'],
-    overlay: 'linear-gradient(135deg, rgba(99,102,241,0.45) 0%, rgba(59,7,100,0.55) 100%)',
-    filter: 'contrast(1.3) brightness(0.92) hue-rotate(240deg)'
-  },
-  {
-    id: 'jacarina',
-    name: 'Jacarina',
-    desc: 'Matte Carbon & Cyan',
-    quads: ['#18181B', '#27272A', '#06B6D4', '#F4F4F5'],
-    overlay: 'linear-gradient(135deg, rgba(6,182,212,0.4) 0%, rgba(24,24,27,0.7) 100%)',
-    filter: 'contrast(1.35) grayscale(0.35)'
-  },
-  {
-    id: 'photo_finish',
-    name: 'Photo Finish',
-    desc: 'Guardian Games RGB Flow',
-    quads: ['#0F172A', '#1E293B', '#10B981', '#38BDF8'],
-    overlay: 'linear-gradient(135deg, rgba(16,185,129,0.35) 0%, rgba(56,189,248,0.45) 100%)',
-    filter: 'contrast(1.2) saturate(1.3)'
-  },
-  {
-    id: 'butterbark',
-    name: 'Butterbark',
-    desc: 'Woodgrain & Warm Brass',
-    quads: ['#78350F', '#B45309', '#CA8A04', '#3F3F46'],
-    overlay: 'linear-gradient(135deg, rgba(180,83,9,0.45) 0%, rgba(120,53,15,0.6) 100%)',
-    filter: 'sepia(0.65) contrast(1.15) brightness(0.95)'
-  },
-  {
-    id: 'scarlet_semblance',
-    name: 'Scarlet Semblance',
-    desc: 'Crucible Crimson Glow',
-    quads: ['#991B1B', '#18181B', '#EF4444', '#F43F5E'],
-    overlay: 'linear-gradient(135deg, rgba(239,68,68,0.5) 0%, rgba(153,27,27,0.7) 100%)',
-    filter: 'contrast(1.35) hue-rotate(330deg) saturate(1.4)'
-  },
-  {
-    id: 'vanguard_marshall',
-    name: 'Vanguard Marshall',
-    desc: 'Cobalt, Amber & Silver',
-    quads: ['#1D4ED8', '#EA580C', '#F8FAFC', '#1E293B'],
-    overlay: 'linear-gradient(135deg, rgba(29,78,216,0.45) 0%, rgba(234,88,12,0.45) 100%)',
-    filter: 'contrast(1.2) saturate(1.2)'
-  },
-  {
-    id: 'gambit_emerald',
-    name: 'Gambit Emerald',
-    desc: 'Serpentine Chrome',
-    quads: ['#065F46', '#10B981', '#334155', '#6EE7B7'],
-    overlay: 'linear-gradient(135deg, rgba(16,185,129,0.5) 0%, rgba(6,78,59,0.7) 100%)',
-    filter: 'contrast(1.25) hue-rotate(90deg) saturate(1.3)'
-  },
-  {
-    id: 'rustberry',
-    name: 'Rustberry',
-    desc: 'Denim, Bone & Copper',
-    quads: ['#CBD5E1', '#1E3A8A', '#9A3412', '#475569'],
-    overlay: 'linear-gradient(135deg, rgba(154,52,18,0.45) 0%, rgba(30,58,138,0.4) 100%)',
-    filter: 'contrast(1.15) sepia(0.35)'
-  },
-  {
-    id: 'carbon_blood',
-    name: 'Carbon Blood',
-    desc: 'Carbon Fiber & Blood Red',
-    quads: ['#18181B', '#27272A', '#DC2626', '#7F1D1D'],
-    overlay: 'linear-gradient(135deg, rgba(220,38,38,0.45) 0%, rgba(24,24,27,0.75) 100%)',
-    filter: 'contrast(1.4) saturate(1.25)'
-  },
-  {
-    id: 'monochromatic',
-    name: 'Monochromatic',
-    desc: 'Stark High-Gloss Chrome',
-    quads: ['#FFFFFF', '#09090B', '#71717A', '#27272A'],
-    overlay: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(9,9,11,0.6) 100%)',
-    filter: 'grayscale(1) contrast(1.4) brightness(1.05)'
-  },
-  {
-    id: 'neopop_wave',
-    name: 'Neopop Wave',
-    desc: 'Synthwave Cyber Pulse',
-    quads: ['#D946EF', '#06B6D4', '#1E1B4B', '#F43F5E'],
-    overlay: 'linear-gradient(135deg, rgba(217,70,239,0.45) 0%, rgba(6,182,212,0.45) 100%)',
-    filter: 'contrast(1.25) saturate(1.5) hue-rotate(280deg)'
-  },
-  {
-    id: 'seven_sisters',
-    name: 'Seven Sisters',
-    desc: 'Astral Nebula Starlight',
-    quads: ['#1E1B4B', '#3B82F6', '#F59E0B', '#4C1D95'],
-    overlay: 'linear-gradient(135deg, rgba(59,130,246,0.4) 0%, rgba(245,158,11,0.35) 50%, rgba(76,29,149,0.5) 100%)',
-    filter: 'contrast(1.25) saturate(1.25)'
-  }
-];
-
-function getElementGlowColor(element) {
-  const el = (element || '').toLowerCase();
-  if (el.includes('solar')) return 'rgba(249, 115, 22, 0.5)';
-  if (el.includes('arc')) return 'rgba(56, 189, 248, 0.55)';
-  if (el.includes('void')) return 'rgba(192, 132, 252, 0.55)';
-  if (el.includes('stasis')) return 'rgba(103, 232, 249, 0.6)';
-  if (el.includes('strand')) return 'rgba(34, 197, 94, 0.55)';
-  return 'rgba(226, 232, 240, 0.4)';
-}
-
-const studioViewState = {
-  isTiltEnabled: true,
-  isAuraEnabled: true,
-  activeShaderId: 'default'
-};
-
-function resetStudioTilt() {
-  const card = document.getElementById('gearStudioArtCard');
-  const glint = document.getElementById('gearStudioGlint');
-  if (card) {
-    card.style.transform = 'perspective(1100px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-  }
-  if (glint) {
-    glint.style.opacity = '0';
-  }
-}
-
-function applyStudioShader(shader) {
-  const overlay = document.getElementById('gearShaderDyeOverlay');
-  const img = document.getElementById('gearStudioImg');
-  if (!overlay || !img) return;
-
-  if (!shader || shader.id === 'default' || !shader.overlay) {
-    overlay.style.opacity = '0';
-    img.style.filter = 'none';
-  } else {
-    overlay.style.background = shader.overlay;
-    overlay.style.opacity = '0.65';
-    img.style.filter = shader.filter || 'none';
-  }
-}
-
-function setInspectTab(tabKey) {
-  state.activeInspectTab = tabKey;
-  const btn2D = document.getElementById('btnInspectTab2D');
-  const btn3D = document.getElementById('btnInspectTab3D');
-  const content2D = document.getElementById('inspectTabContent2D');
-  const content3D = document.getElementById('inspectTabContent3D');
-
-  if (tabKey === '3d') {
-    btn2D?.classList.remove('active');
-    btn2D?.setAttribute('aria-selected', 'false');
-    btn3D?.classList.add('active');
-    btn3D?.setAttribute('aria-selected', 'true');
-    content2D?.classList.add('hidden');
-    content3D?.classList.remove('hidden');
-
-    if (state.inspectedItem) {
-      renderInspectStudioView(state.inspectedItem);
-    }
-  } else {
-    btn3D?.classList.remove('active');
-    btn3D?.setAttribute('aria-selected', 'false');
-    btn2D?.classList.add('active');
-    btn2D?.setAttribute('aria-selected', 'true');
-    content3D?.classList.add('hidden');
-    content2D?.classList.remove('hidden');
-  }
-}
-
-function renderInspectStudioView(item) {
-  if (!item) return;
-
-  // 1. Update tag
-  const typeTag = document.getElementById('inspect3DItemTypeTag');
-  if (typeTag) {
-    const rawType = item.typeName || item.slot || (item.category === 'Artifact' ? 'Seasonal Artifact' : 'Combat Gear');
-    const elem = item.element || (item.category === 'Armor' ? item.classRestriction || 'Armor' : 'Kinetic');
-    typeTag.textContent = `${rawType.toUpperCase()} // ${elem.toUpperCase()} ARCHIVE`;
-  }
-
-  // 2. Load the official Bungie High-Resolution Screenshot
-  const imgEl = document.getElementById('gearStudioImg');
-  if (imgEl) {
-    let src = '';
-    const rawScreenshot = item.screenshot || item.itemScreenshot || '';
-    const rawIcon = item.icon || item.itemIcon || '';
-    if (rawScreenshot) {
-      src = rawScreenshot.startsWith('http') ? rawScreenshot : `https://www.bungie.net${rawScreenshot.startsWith('/') ? '' : '/'}${rawScreenshot}`;
-    } else if (rawIcon) {
-      src = rawIcon.startsWith('http') ? rawIcon : `https://www.bungie.net${rawIcon.startsWith('/') ? '' : '/'}${rawIcon}`;
-    } else {
-      src = 'icon-192.png';
-    }
-    imgEl.src = src;
-    imgEl.onerror = () => {
-      if (rawIcon && !imgEl.src.includes(rawIcon)) {
-        imgEl.src = rawIcon.startsWith('http') ? rawIcon : `https://www.bungie.net${rawIcon.startsWith('/') ? '' : '/'}${rawIcon}`;
-      } else {
-        imgEl.src = 'icon-192.png';
-      }
-    };
-    imgEl.alt = `${item.name || 'Destiny 2 Gear'} Official In-Game Asset`;
-  }
-
-  // 3. Update Lowlidev & Paracausal Forge links
-  const hash = item.itemHash || '';
-  const btnExt = document.getElementById('btn3DOpenExternal');
-  if (btnExt) {
-    btnExt.href = `https://lowlidev.com.au/destiny/gear-viewer?item=${hash}`;
-  }
-  const btnForgeLowli = document.getElementById('btnForgeLowlidevLink');
-  if (btnForgeLowli) {
-    btnForgeLowli.href = `https://lowlidev.com.au/destiny/gear-viewer?item=${hash}`;
-  }
-
-  // 4. Update Elemental Glow Orb
-  const glowOrb = document.getElementById('gearStudioGlowOrb');
-  if (glowOrb) {
-    const glowColor = getElementGlowColor(item.element);
-    glowOrb.style.background = `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`;
-    glowOrb.style.opacity = studioViewState.isAuraEnabled ? '0.55' : '0';
-  }
-
-  // 5. Reset transform
-  resetStudioTilt();
-
-  // 6. Populate Shaders and apply active shader
-  populateStudioShaderSwatches();
-}
-
-function populateStudioShaderSwatches() {
-  const grid = document.getElementById('shaderSwatchesGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
-
-  const activeId = studioViewState.activeShaderId || 'default';
-  const activeShaderNameEl = document.getElementById('shaderActiveName');
-
-  DESTINY_SHADERS.forEach(shader => {
-    const card = document.createElement('div');
-    card.className = `shader-swatch-card ${shader.id === activeId ? 'active' : ''}`;
-    card.dataset.shaderId = shader.id;
-
-    card.innerHTML = `
-      <div class="shader-quadrant-disc" title="${escapeHtml(shader.name)}">
-        <div class="shader-q shader-q-top" style="background-color: ${shader.quads[0]};"></div>
-        <div class="shader-q shader-q-right" style="background-color: ${shader.quads[1]};"></div>
-        <div class="shader-q shader-q-bottom" style="background-color: ${shader.quads[2]};"></div>
-        <div class="shader-q shader-q-left" style="background-color: ${shader.quads[3]};"></div>
-      </div>
-      <div class="shader-swatch-info">
-        <div class="shader-swatch-name">${escapeHtml(shader.name)}</div>
-        <div class="shader-swatch-desc">${escapeHtml(shader.desc)}</div>
-      </div>
-    `;
-
-    card.addEventListener('click', () => {
-      sfx.playChirp();
-      studioViewState.activeShaderId = shader.id;
-      grid.querySelectorAll('.shader-swatch-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-
-      if (activeShaderNameEl) {
-        activeShaderNameEl.textContent = `CURRENT: ${shader.name.toUpperCase()}`;
-      }
-      applyStudioShader(shader);
-    });
-
-    grid.appendChild(card);
-  });
-
-  const cur = DESTINY_SHADERS.find(s => s.id === activeId) || DESTINY_SHADERS[0];
-  if (activeShaderNameEl && cur) {
-    activeShaderNameEl.textContent = `CURRENT: ${cur.name.toUpperCase()}`;
-  }
-  applyStudioShader(cur);
-}
-
-function initInspect3DSystem() {
-  const btn2D = document.getElementById('btnInspectTab2D');
-  const btn3D = document.getElementById('btnInspectTab3D');
-  const btnTilt = document.getElementById('btn3DToggleTilt');
-  const btnGlow = document.getElementById('btn3DToggleGlow');
-  const btnReset = document.getElementById('btn3DResetCamera');
-  const modal = document.getElementById('modalInspectItem');
-  const wrap = document.getElementById('gearStudioWrap');
-  const card = document.getElementById('gearStudioArtCard');
-  const glint = document.getElementById('gearStudioGlint');
-
-  btn2D?.addEventListener('click', () => {
-    sfx.playChirp();
-    setInspectTab('2d');
-  });
-
-  btn3D?.addEventListener('click', () => {
-    sfx.playChirp();
-    setInspectTab('3d');
-  });
-
-  btnTilt?.addEventListener('click', () => {
-    sfx.playChirp();
-    studioViewState.isTiltEnabled = !studioViewState.isTiltEnabled;
-    btnTilt.classList.toggle('active', studioViewState.isTiltEnabled);
-    if (!studioViewState.isTiltEnabled) resetStudioTilt();
-  });
-
-  btnGlow?.addEventListener('click', () => {
-    sfx.playChirp();
-    studioViewState.isAuraEnabled = !studioViewState.isAuraEnabled;
-    btnGlow.classList.toggle('active', studioViewState.isAuraEnabled);
-    const orb = document.getElementById('gearStudioGlowOrb');
-    if (orb) orb.style.opacity = studioViewState.isAuraEnabled ? '0.55' : '0';
-  });
-
-  btnReset?.addEventListener('click', () => {
-    sfx.playChirp();
-    resetStudioTilt();
-  });
-
-  // Smooth 3D Perspective Tilt on Mouse Movement & Touch Drag
-  if (wrap && card) {
-    const handleMove = (clientX, clientY) => {
-      if (!studioViewState.isTiltEnabled) return;
-      const rect = wrap.getBoundingClientRect();
-      const x = (clientX - rect.left) / rect.width - 0.5;
-      const y = (clientY - rect.top) / rect.height - 0.5;
-      const rotX = -y * 22;
-      const rotY = x * 26;
-
-      card.style.transform = `perspective(1100px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.04, 1.04, 1.04)`;
-      if (glint) {
-        glint.style.opacity = `${Math.min(0.55, (Math.abs(x) + Math.abs(y)) * 0.9).toFixed(2)}`;
-        glint.style.background = `linear-gradient(${135 + x * 45}deg, rgba(255, 255, 255, 0.35) 0%, transparent 60%)`;
-      }
-    };
-
-    wrap.addEventListener('mousemove', (e) => {
-      handleMove(e.clientX, e.clientY);
-    });
-
-    wrap.addEventListener('touchmove', (e) => {
-      if (e.touches && e.touches[0]) {
-        handleMove(e.touches[0].clientX, e.touches[0].clientY);
-      }
-    }, { passive: true });
-
-    wrap.addEventListener('mouseleave', () => resetStudioTilt());
-    wrap.addEventListener('touchend', () => resetStudioTilt());
-  }
-
-  modal?.addEventListener('close', () => {
-    resetStudioTilt();
-    setInspectTab('2d');
-  });
-}
-
 function openItemInspectModal(item) {
   try {
     sfx.playChirp();
     state.inspectedItem = item;
     state.lastAppraisalReply = '';
-    setInspectTab('2d');
 
     const modal = document.getElementById('modalInspectItem');
     if (!modal) return;
@@ -2958,6 +2573,21 @@ function openItemInspectModal(item) {
             lockBtn.disabled = false;
           });
           actionsGrid.appendChild(lockBtn);
+        }
+
+        // Option A: 3D Gear Model & Shader Preview Bridge (Lowlidev / Paracausal)
+        if (item.itemHash) {
+          const preview3DBtn = document.createElement('button');
+          preview3DBtn.type = 'button';
+          preview3DBtn.className = 'btn-item-action btn-inspect-3d-gear';
+          preview3DBtn.innerHTML = `<span>🎮</span> 3D Gear Model &amp; Shaders ↗`;
+          preview3DBtn.title = 'Inspect official 3D extracted CAD mesh & shaders in Lowlidev Gear Viewer';
+          preview3DBtn.addEventListener('click', () => {
+            sfx.playTransmit();
+            showToast(`Opening 3D model viewer for ${item.name}...`, 'info');
+            window.open(`https://lowlidev.com.au/destiny/gear-viewer?hash=${item.itemHash}`, '_blank', 'noopener,noreferrer');
+          });
+          actionsGrid.appendChild(preview3DBtn);
         }
 
         // Signature Action: Ask F.E.L.I.C.I.A.
@@ -5452,6 +5082,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBungieLoginHero = document.getElementById('btnBungieLoginHero');
   const bungieHeaderBadge = document.getElementById('bungieHeaderBadge');
   const btnRefreshInventory = document.getElementById('btnRefreshInventory');
+  const btnOpen3DForge = document.getElementById('btnOpen3DForge');
+  const btnPreview3DLoadout = document.getElementById('btnPreview3DLoadout');
   const btnDisconnectBungie = document.getElementById('btnDisconnectBungie');
   const invSearchInput = document.getElementById('invSearchInput');
   const btnClearInvSearch = document.getElementById('btnClearInvSearch');
@@ -5479,6 +5111,22 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRefreshInventory.addEventListener('click', () => {
       sfx.playChirp();
       loadBungieInventory(false);
+    });
+  }
+
+  if (btnOpen3DForge) {
+    btnOpen3DForge.addEventListener('click', () => {
+      sfx.playTransmit();
+      showToast('Opening Paracausal Forge: Customise your 3D Guardian, Armor & Shaders!', 'info');
+      window.open('https://paracausalforge.com/guardian', '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  if (btnPreview3DLoadout) {
+    btnPreview3DLoadout.addEventListener('click', () => {
+      sfx.playTransmit();
+      showToast('Opening 3D Character & Shader Preview in Paracausal Forge...', 'info');
+      window.open('https://paracausalforge.com/guardian', '_blank', 'noopener,noreferrer');
     });
   }
 
@@ -5657,7 +5305,6 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCloseInspectItem.addEventListener('click', () => modalInspectItem.close());
     }
     attachLightDismissFallback(modalInspectItem);
-    initInspect3DSystem();
   }
   attachLightDismissFallback(modalGodRollScanner);
   attachLightDismissFallback(modalSavedLoadout);

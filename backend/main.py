@@ -265,18 +265,23 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
         "gemini-1.5-flash",
         "gemini-flash-latest",
         "gemini-3.1-flash-lite-preview",
+        "gemini-flash-lite-latest",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview"
     ]
     
     # Build contents array
     contents = []
     # Add history
     for msg in conversation_history[-8:]:  # keep last 8 turns for responsive context
+        if not isinstance(msg, dict):
+            continue
         role = "user" if msg.get("role") in ["user", "human"] else "model"
         text = msg.get("content", "")
         if text:
             contents.append({
                 "role": role,
-                "parts": [{"text": text}]
+                "parts": [{"text": str(text)}]
             })
     
     # Add current prompt
@@ -300,7 +305,7 @@ def query_gemini_api(prompt_text: str, conversation_history: List[Dict[str, str]
     for model_name in candidate_models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         try:
-            resp = requests.post(url, json=payload, timeout=10)
+            resp = requests.post(url, json=payload, timeout=18)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
@@ -527,7 +532,7 @@ def local_tactical_fallback(
     history: Optional[List[Dict[str, str]]] = None,
     inventory_context: Optional[Dict[str, Any]] = None,
 ) -> str:
-    q_lower = query.lower()
+    q_lower = (query or "").lower()
     
     # Check for direct verified build match first
     v_match = find_verified_build(subclass, guardian_class, activity, tactical_inquiry)
