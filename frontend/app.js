@@ -59,7 +59,10 @@ const state = {
   inspectedLoadout: null,
   loadoutsDrawerOpen: {},
   inspectedItem: null,
-  lastAppraisalReply: ''
+  lastAppraisalReply: '',
+  activeInspectTab: '2d',
+  gear3DViewer: null,
+  activeShaderId: 'default'
 };
 
 // Subclass Palettes & Tactical Profiles (Solar replaces Amber with true orange; Stasis added)
@@ -2401,11 +2404,1007 @@ function getActiveCharacter() {
   return chars[0] || null;
 }
 
+// =========================================================================
+// DESTINY 2 SHADER LAB MATRIX & 3D TACTICAL GEAR HOLOVIEW
+// =========================================================================
+
+const DESTINY_SHADERS = [
+  {
+    id: 'default',
+    name: 'Foundry Standard',
+    desc: 'Factory Issue Finish',
+    quads: ['#475569', '#1E293B', '#64748B', '#F1F5F9'],
+    primary: 0x475569,
+    secondary: 0x1e293b,
+    tertiary: 0x64748b,
+    metalness: 0.65,
+    roughness: 0.35
+  },
+  {
+    id: 'superblack',
+    name: 'Superblack',
+    desc: 'Obsidian Blackout',
+    quads: ['#09090B', '#18181B', '#27272A', '#020202'],
+    primary: 0x09090b,
+    secondary: 0x18181b,
+    tertiary: 0x27272a,
+    metalness: 0.88,
+    roughness: 0.16
+  },
+  {
+    id: 'calus_selected',
+    name: "Calus's Selected",
+    desc: 'Imperial Leviathan Gilt',
+    quads: ['#F8FAFC', '#581C87', '#EAB308', '#262626'],
+    primary: 0xf8fafc,
+    secondary: 0x581c87,
+    tertiary: 0xeab308,
+    metalness: 0.92,
+    roughness: 0.22
+  },
+  {
+    id: 'bergusian_night',
+    name: 'Bergusian Night',
+    desc: 'Black Armory Iridescent',
+    quads: ['#3B0764', '#1E1B4B', '#6366F1', '#475569'],
+    primary: 0x3b0764,
+    secondary: 0x1e1b4b,
+    tertiary: 0x6366f1,
+    metalness: 0.85,
+    roughness: 0.28
+  },
+  {
+    id: 'jacarina',
+    name: 'Jacarina',
+    desc: 'Matte Carbon & Cyan',
+    quads: ['#18181B', '#27272A', '#06B6D4', '#F4F4F5'],
+    primary: 0x18181b,
+    secondary: 0x27272a,
+    tertiary: 0x06b6d4,
+    metalness: 0.52,
+    roughness: 0.52
+  },
+  {
+    id: 'photo_finish',
+    name: 'Photo Finish',
+    desc: 'Guardian Games RGB Flow',
+    quads: ['#0F172A', '#1E293B', '#10B981', '#38BDF8'],
+    primary: 0x0f172a,
+    secondary: 0x1e293b,
+    tertiary: 0x10b981,
+    metalness: 0.78,
+    roughness: 0.3
+  },
+  {
+    id: 'butterbark',
+    name: 'Butterbark',
+    desc: 'Woodgrain & Warm Brass',
+    quads: ['#78350F', '#B45309', '#CA8A04', '#3F3F46'],
+    primary: 0x602c0b,
+    secondary: 0xb45309,
+    tertiary: 0xca8a04,
+    metalness: 0.25,
+    roughness: 0.75
+  },
+  {
+    id: 'scarlet_semblance',
+    name: 'Scarlet Semblance',
+    desc: 'Crucible Crimson Glow',
+    quads: ['#991B1B', '#18181B', '#EF4444', '#F43F5E'],
+    primary: 0x800d0d,
+    secondary: 0x18181b,
+    tertiary: 0xef4444,
+    metalness: 0.72,
+    roughness: 0.32
+  },
+  {
+    id: 'vanguard_marshall',
+    name: 'Vanguard Marshall',
+    desc: 'Cobalt, Amber & Silver',
+    quads: ['#1D4ED8', '#EA580C', '#F8FAFC', '#1E293B'],
+    primary: 0x1d4ed8,
+    secondary: 0xea580c,
+    tertiary: 0xf8fafc,
+    metalness: 0.8,
+    roughness: 0.3
+  },
+  {
+    id: 'gambit_emerald',
+    name: 'Gambit Emerald',
+    desc: 'Serpentine Chrome',
+    quads: ['#065F46', '#10B981', '#334155', '#6EE7B7'],
+    primary: 0x064e3b,
+    secondary: 0x10b981,
+    tertiary: 0x334155,
+    metalness: 0.88,
+    roughness: 0.2
+  },
+  {
+    id: 'rustberry',
+    name: 'Rustberry',
+    desc: 'Denim, Bone & Copper',
+    quads: ['#CBD5E1', '#1E3A8A', '#9A3412', '#475569'],
+    primary: 0xcbd5e1,
+    secondary: 0x1e3a8a,
+    tertiary: 0x9a3412,
+    metalness: 0.45,
+    roughness: 0.58
+  },
+  {
+    id: 'carbon_blood',
+    name: 'Carbon Blood',
+    desc: 'Carbon Fiber & Blood Red',
+    quads: ['#18181B', '#27272A', '#DC2626', '#7F1D1D'],
+    primary: 0x18181b,
+    secondary: 0x27272a,
+    tertiary: 0xdc2626,
+    metalness: 0.65,
+    roughness: 0.4
+  },
+  {
+    id: 'monochromatic',
+    name: 'Monochromatic',
+    desc: 'Stark High-Gloss Chrome',
+    quads: ['#FFFFFF', '#09090B', '#71717A', '#27272A'],
+    primary: 0xfafafa,
+    secondary: 0x09090b,
+    tertiary: 0x71717a,
+    metalness: 0.82,
+    roughness: 0.18
+  },
+  {
+    id: 'neopop_wave',
+    name: 'Neopop Wave',
+    desc: 'Synthwave Cyber Pulse',
+    quads: ['#D946EF', '#06B6D4', '#1E1B4B', '#F43F5E'],
+    primary: 0xd946ef,
+    secondary: 0x06b6d4,
+    tertiary: 0x312e81,
+    metalness: 0.75,
+    roughness: 0.3
+  },
+  {
+    id: 'seven_sisters',
+    name: 'Seven Sisters',
+    desc: 'Astral Nebula Starlight',
+    quads: ['#1E1B4B', '#3B82F6', '#F59E0B', '#4C1D95'],
+    primary: 0x17153b,
+    secondary: 0x3b82f6,
+    tertiary: 0xf59e0b,
+    metalness: 0.85,
+    roughness: 0.24
+  }
+];
+
+function getElementHex(element) {
+  const el = (element || '').toLowerCase();
+  if (el.includes('solar')) return 0xF97316;
+  if (el.includes('arc')) return 0x38BDF8;
+  if (el.includes('void')) return 0xC084FC;
+  if (el.includes('stasis')) return 0x67E8F9;
+  if (el.includes('strand')) return 0x22C55E;
+  return 0xE2E8F0;
+}
+
+function resolveItem3DArchetype(item) {
+  if (!item) return 'auto_rifle';
+  const cat = (item.category || '').toLowerCase();
+  const type = (item.typeName || '').toLowerCase();
+  const slot = (item.slot || '').toLowerCase();
+
+  if (cat === 'artifact' || type.includes('artifact')) return 'artifact';
+
+  if (cat === 'armor' || ['helmet', 'gauntlets', 'arms', 'chest armor', 'leg armor', 'class item'].some(s => slot.includes(s) || type.includes(s))) {
+    if (slot.includes('helmet') || type.includes('helmet')) return 'armor_helmet';
+    if (slot.includes('arm') || slot.includes('gauntlet') || type.includes('gauntlet') || type.includes('arm')) return 'armor_arms';
+    if (slot.includes('chest') || type.includes('chest') || type.includes('vest') || type.includes('robe') || type.includes('plate')) return 'armor_chest';
+    if (slot.includes('leg') || type.includes('leg') || type.includes('boot') || type.includes('greave') || type.includes('stride')) return 'armor_legs';
+    if (slot.includes('class') || type.includes('cloak') || type.includes('bond') || type.includes('mark')) return 'armor_class';
+    return 'armor_chest';
+  }
+
+  // Weapons
+  if (type.includes('hand cannon') || type.includes('revolver')) return 'hand_cannon';
+  if (type.includes('sniper') || type.includes('linear fusion')) return 'sniper_rifle';
+  if (type.includes('shotgun')) return 'shotgun';
+  if (type.includes('rocket') || type.includes('grenade launcher')) return 'rocket_launcher';
+  if (type.includes('sword') || type.includes('glaive')) return 'sword';
+  if (type.includes('bow')) return 'bow';
+  if (type.includes('fusion') || type.includes('trace')) return 'fusion_rifle';
+  if (type.includes('machine gun')) return 'auto_rifle';
+  if (type.includes('auto') || type.includes('pulse') || type.includes('scout') || type.includes('submachine') || type.includes('sidearm') || type.includes('rifle')) return 'auto_rifle';
+
+  return 'auto_rifle';
+}
+
+// 3D Procedural Mesh Helpers
+function createBoxMesh(w, h, d, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createCylMesh(rt, rb, h, seg, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.CylinderGeometry(rt, rb, h, seg);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createSphereMesh(r, segW, segH, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.SphereGeometry(r, segW, segH);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createTorusMesh(r, tube, radSeg, tubSeg, arc, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.TorusGeometry(r, tube, radSeg, tubSeg, arc || Math.PI * 2);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createDodecMesh(r, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.DodecahedronGeometry(r);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createOctaMesh(r, mat, pos, rot, parent) {
+  const THREE = window.THREE;
+  const geom = new THREE.OctahedronGeometry(r);
+  const mesh = new THREE.Mesh(geom, mat);
+  if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(mesh);
+  return mesh;
+}
+
+// 3D Gear Model Assemblers
+function buildHandCannonMesh(group, m1, m2, m3, mAcc) {
+  createCylMesh(0.13, 0.11, 2.1, 16, m1, [0.7, 0.35, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(2.1, 0.22, 0.3, m2, [0.7, 0.45, 0], null, group);
+  createCylMesh(0.35, 0.35, 0.65, 14, m1, [-0.2, 0.28, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(0.85, 0.65, 0.38, m2, [-0.25, 0.22, 0], null, group);
+  createBoxMesh(0.32, 1.15, 0.32, m3, [-0.65, -0.4, 0], [0, 0, -0.32], group);
+  createBoxMesh(0.24, 0.95, 0.38, m1, [-0.65, -0.4, 0], [0, 0, -0.32], group);
+  createTorusMesh(0.2, 0.035, 8, 16, Math.PI, m3, [-0.25, -0.1, 0], [0, 0, Math.PI], group);
+  createBoxMesh(0.35, 0.32, 0.34, m2, [1.7, 0.35, 0], null, group);
+  createBoxMesh(0.12, 0.12, 0.12, mAcc, [1.7, 0.58, 0], null, group);
+  createBoxMesh(0.14, 0.14, 0.14, mAcc, [-0.55, 0.58, 0], null, group);
+}
+
+function buildAutoRifleMesh(group, m1, m2, m3, mAcc) {
+  createCylMesh(0.1, 0.08, 3.4, 16, m1, [1.2, 0.2, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(2.0, 0.48, 0.38, m2, [0.8, 0.2, 0], null, group);
+  createBoxMesh(1.4, 0.42, 0.4, m1, [-0.5, 0.32, 0], null, group);
+  createBoxMesh(1.2, 0.4, 0.36, m2, [-0.5, -0.05, 0], null, group);
+  createBoxMesh(0.35, 1.1, 0.25, m1, [-0.15, -0.65, 0], [0, 0, 0.18], group);
+  createBoxMesh(0.28, 0.95, 0.28, m3, [-0.85, -0.5, 0], [0, 0, -0.35], group);
+  createBoxMesh(1.3, 0.55, 0.3, m3, [-1.75, 0.18, 0], null, group);
+  createBoxMesh(0.18, 0.8, 0.32, m2, [-2.4, 0.18, 0], null, group);
+  createBoxMesh(0.65, 0.38, 0.32, m2, [-0.45, 0.68, 0], null, group);
+  createBoxMesh(0.25, 0.22, 0.22, mAcc, [-0.45, 0.68, 0], null, group);
+  createCylMesh(0.14, 0.1, 0.4, 12, m3, [2.9, 0.2, 0], [0, 0, Math.PI / 2], group);
+}
+
+function buildSniperRifleMesh(group, m1, m2, m3, mAcc) {
+  createCylMesh(0.09, 0.07, 4.8, 16, m1, [1.6, 0.15, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.14, 0.12, 2.2, 16, m2, [0.9, 0.15, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(0.55, 0.3, 0.26, m3, [3.95, 0.15, 0], null, group);
+  createCylMesh(0.22, 0.18, 2.2, 16, m1, [-0.3, 0.72, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(0.2, 0.4, 0.38, m3, [0.4, 0.55, 0], null, group);
+  createBoxMesh(0.2, 0.4, 0.38, m3, [-1.0, 0.55, 0], null, group);
+  createCylMesh(0.21, 0.21, 0.05, 16, mAcc, [0.82, 0.72, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.21, 0.21, 0.05, 16, mAcc, [-1.42, 0.72, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(2.2, 0.52, 0.4, m1, [-0.4, 0.12, 0], null, group);
+  createBoxMesh(0.9, 0.12, 0.16, m3, [1.2, -0.15, 0], null, group);
+  createBoxMesh(0.4, 0.75, 0.26, m2, [-0.1, -0.45, 0], null, group);
+  createBoxMesh(1.6, 0.4, 0.24, m2, [-2.1, 0.08, 0], null, group);
+  createBoxMesh(0.8, 0.22, 0.28, m3, [-1.9, 0.42, 0], null, group);
+  createBoxMesh(0.26, 0.95, 0.26, m3, [-0.95, -0.45, 0], [0, 0, -0.35], group);
+}
+
+function buildShotgunMesh(group, m1, m2, m3, mAcc) {
+  createCylMesh(0.2, 0.2, 3.2, 16, m1, [1.1, 0.25, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.16, 0.16, 2.8, 16, m2, [1.0, -0.1, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.25, 0.25, 1.1, 16, m3, [0.9, -0.1, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(1.3, 0.75, 0.48, m1, [-0.5, 0.15, 0], null, group);
+  createBoxMesh(0.45, 0.15, 0.5, mAcc, [-0.45, 0.3, 0], null, group);
+  createBoxMesh(1.6, 0.65, 0.38, m2, [-1.85, -0.05, 0], null, group);
+  createBoxMesh(0.2, 0.85, 0.4, m3, [-2.65, -0.05, 0], null, group);
+  createBoxMesh(0.16, 0.25, 0.2, mAcc, [2.5, 0.55, 0], null, group);
+}
+
+function buildRocketLauncherMesh(group, m1, m2, m3, mAcc) {
+  createCylMesh(0.55, 0.52, 4.2, 24, m1, [0.2, 0.25, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.68, 0.56, 0.6, 24, m2, [2.2, 0.25, 0], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.52, 0.72, 0.7, 24, m2, [-1.85, 0.25, 0], [0, 0, Math.PI / 2], group);
+  createTorusMesh(0.58, 0.06, 12, 24, null, m3, [1.0, 0.25, 0], [0, Math.PI / 2, 0], group);
+  createTorusMesh(0.58, 0.06, 12, 24, null, m3, [-0.6, 0.25, 0], [0, Math.PI / 2, 0], group);
+  createBoxMesh(0.8, 0.45, 0.42, m2, [0.4, 0.82, 0.35], null, group);
+  createCylMesh(0.18, 0.18, 0.1, 16, mAcc, [0.7, 0.82, 0.58], [Math.PI / 2, 0, 0], group);
+  createBoxMesh(0.35, 0.75, 0.3, m3, [-0.2, -0.4, 0], null, group);
+}
+
+function buildSwordMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(0.12, 3.8, 0.48, m1, [0, 1.6, 0], null, group);
+  createBoxMesh(0.16, 3.6, 0.2, m2, [0, 1.5, -0.15], null, group);
+  createBoxMesh(0.14, 3.4, 0.08, mAcc, [0, 1.5, 0.05], null, group);
+  createBoxMesh(0.35, 0.28, 1.35, m3, [0, -0.25, 0], null, group);
+  createBoxMesh(0.38, 0.22, 0.25, mAcc, [0, -0.25, 0], null, group);
+  createCylMesh(0.14, 0.14, 1.25, 16, m2, [0, -0.95, 0], null, group);
+  createDodecMesh(0.24, m3, [0, -1.65, 0], null, group);
+}
+
+function buildBowMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(0.12, 1.8, 0.22, m1, [0, 1.0, 0], [0, 0, -0.25], group);
+  createBoxMesh(0.1, 1.4, 0.18, m2, [0.35, 2.2, 0], [0, 0, -0.65], group);
+  createBoxMesh(0.12, 1.8, 0.22, m1, [0, -1.0, 0], [0, 0, 0.25], group);
+  createBoxMesh(0.1, 1.4, 0.18, m2, [0.35, -2.2, 0], [0, 0, 0.65], group);
+  createBoxMesh(0.24, 1.2, 0.35, m3, [-0.15, 0, 0], null, group);
+  createBoxMesh(0.4, 0.15, 0.25, mAcc, [0.15, 0.15, 0], null, group);
+  createCylMesh(0.015, 0.015, 5.0, 8, m3, [0.75, 0, 0], null, group);
+}
+
+function buildFusionMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(2.2, 0.72, 0.48, m1, [0.3, 0.15, 0], null, group);
+  createCylMesh(0.26, 0.26, 1.2, 16, mAcc, [0.2, 0.15, 0], [0, 0, Math.PI / 2], group);
+  createTorusMesh(0.32, 0.04, 8, 16, null, m3, [0.5, 0.15, 0], [0, Math.PI / 2, 0], group);
+  createTorusMesh(0.32, 0.04, 8, 16, null, m3, [-0.1, 0.15, 0], [0, Math.PI / 2, 0], group);
+  createCylMesh(0.16, 0.14, 1.8, 16, m2, [1.9, 0.15, 0], [0, 0, Math.PI / 2], group);
+  createBoxMesh(1.4, 0.6, 0.38, m3, [-1.4, 0.05, 0], null, group);
+  createBoxMesh(0.28, 0.95, 0.28, m2, [-0.5, -0.45, 0], [0, 0, -0.32], group);
+}
+
+function buildHelmetMesh(group, m1, m2, m3, mAcc) {
+  createSphereMesh(1.05, 24, 20, m1, [0, 0.25, 0], null, group);
+  createSphereMesh(1.08, 24, 16, mAcc, [0, 0.2, 0.12], [-0.25, 0, 0], group);
+  createBoxMesh(1.3, 0.65, 0.85, m2, [0, -0.45, 0.45], null, group);
+  createCylMesh(0.28, 0.28, 0.35, 16, m3, [-0.75, -0.4, 0.3], [0, 0, Math.PI / 2], group);
+  createCylMesh(0.28, 0.28, 0.35, 16, m3, [0.75, -0.4, 0.3], [0, 0, Math.PI / 2], group);
+  createBoxMesh(0.25, 0.6, 0.35, m3, [-1.05, 0.2, -0.1], null, group);
+  createBoxMesh(0.25, 0.6, 0.35, m3, [1.05, 0.2, -0.1], null, group);
+  createCylMesh(0.85, 0.95, 0.5, 20, m2, [0, -0.85, 0], null, group);
+}
+
+function buildChestMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(1.9, 1.4, 0.95, m1, [0, 0.45, 0], null, group);
+  createBoxMesh(1.5, 0.95, 0.75, m2, [0, -0.55, 0], null, group);
+  createDodecMesh(0.32, mAcc, [0, 0.55, 0.52], null, group);
+  createBoxMesh(2.1, 0.35, 0.9, m3, [0, 1.25, 0], null, group);
+  createBoxMesh(1.6, 0.15, 1.02, m3, [0, 0.15, 0], null, group);
+}
+
+function buildArmsMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(1.1, 1.2, 1.1, m1, [0, 0.9, 0], null, group);
+  createBoxMesh(0.2, 1.1, 1.2, m2, [0.6, 0.95, 0], null, group);
+  createCylMesh(0.42, 0.38, 0.9, 16, m3, [0, 0.1, 0], null, group);
+  createBoxMesh(0.9, 1.3, 0.85, m1, [0, -0.95, 0], null, group);
+  createBoxMesh(0.2, 0.3, 0.4, mAcc, [0.48, -0.85, 0], null, group);
+  createBoxMesh(0.65, 0.65, 0.65, m2, [0, -1.8, 0], null, group);
+}
+
+function buildLegsMesh(group, m1, m2, m3, mAcc) {
+  createBoxMesh(0.65, 1.3, 0.7, m1, [-0.6, 0.85, 0], null, group);
+  createBoxMesh(0.65, 1.3, 0.7, m1, [0.6, 0.85, 0], null, group);
+  createBoxMesh(0.55, 0.45, 0.4, m2, [-0.6, 0.05, 0.4], null, group);
+  createBoxMesh(0.55, 0.45, 0.4, m2, [0.6, 0.05, 0.4], null, group);
+  createBoxMesh(0.6, 1.4, 0.65, m1, [-0.6, -0.85, 0], null, group);
+  createBoxMesh(0.6, 1.4, 0.65, m1, [0.6, -0.85, 0], null, group);
+  createBoxMesh(0.12, 0.6, 0.12, mAcc, [-0.6, -0.85, 0.35], null, group);
+  createBoxMesh(0.12, 0.6, 0.12, mAcc, [0.6, -0.85, 0.35], null, group);
+  createBoxMesh(0.62, 0.45, 1.05, m3, [-0.6, -1.65, 0.2], null, group);
+  createBoxMesh(0.62, 0.45, 1.05, m3, [0.6, -1.65, 0.2], null, group);
+}
+
+function buildClassItemMesh(group, m1, m2, m3, mAcc, item) {
+  const name = (item?.name || item?.slot || '').toLowerCase();
+  if (name.includes('bond') || item?.classRestriction === 'Warlock') {
+    createTorusMesh(0.95, 0.12, 16, 32, null, mAcc, [0, 0, 0], [Math.PI / 2, 0, 0], group);
+    createBoxMesh(0.35, 0.5, 0.35, m1, [0.95, 0, 0], null, group);
+    createTorusMesh(0.65, 0.06, 12, 24, null, m2, [0, 0, 0], [Math.PI / 2, 0, 0], group);
+  } else {
+    createBoxMesh(1.6, 0.35, 0.6, m1, [0, 1.4, 0], null, group);
+    createDodecMesh(0.3, mAcc, [0, 1.4, 0.32], null, group);
+    createBoxMesh(1.4, 2.6, 0.12, m2, [0, 0, 0], [0.1, 0, 0], group);
+    createBoxMesh(1.45, 0.25, 0.16, m3, [0, -1.3, 0], null, group);
+  }
+}
+
+function buildArtifactMesh(group, m1, m2, m3, mAcc) {
+  createOctaMesh(0.95, mAcc, [0, 0, 0], null, group);
+  createTorusMesh(1.35, 0.06, 16, 36, null, m1, [0, 0, 0], [Math.PI / 3, 0, 0], group);
+  createTorusMesh(1.7, 0.06, 16, 36, null, m2, [0, 0, 0], [0, Math.PI / 4, 0], group);
+  createCylMesh(0.08, 0.08, 2.8, 12, m3, [-1.2, 0, -1.2], null, group);
+  createCylMesh(0.08, 0.08, 2.8, 12, m3, [1.2, 0, -1.2], null, group);
+  createCylMesh(0.08, 0.08, 2.8, 12, m3, [-1.2, 0, 1.2], null, group);
+  createCylMesh(0.08, 0.08, 2.8, 12, m3, [1.2, 0, 1.2], null, group);
+}
+
+// Main 3D Tactical Gear Viewer Engine
+class Gear3DViewer {
+  constructor(canvasEl) {
+    this.canvas = canvasEl;
+    this.renderer = null;
+    this.scene = null;
+    this.camera = null;
+    this.modelGroup = null;
+    this.pedestalGroup = null;
+    this.particleSystem = null;
+    this.pointLight = null;
+    this.animFrameId = null;
+    this.isAutoRotating = true;
+    this.isAuraActive = true;
+
+    this.primaryMat = null;
+    this.secondaryMat = null;
+    this.tertiaryMat = null;
+    this.accentMat = null;
+
+    this.isDragging = false;
+    this.prevPointerPos = { x: 0, y: 0 };
+    this.rotTarget = { x: 0.12, y: -0.55 };
+    this.rotCurrent = { x: 0.12, y: -0.55 };
+    this.zoomTarget = 5.2;
+    this.zoomCurrent = 5.2;
+
+    this.touchStartDist = 0;
+    this.initialized = false;
+    this.resizeObserver = null;
+  }
+
+  init() {
+    if (!window.THREE) {
+      console.warn('[Gear3DViewer] Three.js library not yet loaded on window.');
+      return false;
+    }
+    const THREE = window.THREE;
+
+    try {
+      const rect = this.canvas.getBoundingClientRect();
+      const width = Math.max(rect.width || 400, 320);
+      const height = Math.max(rect.height || 350, 260);
+
+      this.scene = new THREE.Scene();
+      this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+      this.camera.position.set(0, 0.2, this.zoomTarget);
+
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: this.canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer.setSize(width, height, false);
+
+      // Studio Lighting
+      const ambLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.scene.add(ambLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+      keyLight.position.set(5, 8, 6);
+      this.scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.55);
+      fillLight.position.set(-5, 3, -4);
+      this.scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xffedd5, 0.6);
+      rimLight.position.set(0, -4, -6);
+      this.scene.add(rimLight);
+
+      this.pointLight = new THREE.PointLight(0x38bdf8, 2.2, 12);
+      this.pointLight.position.set(0, 1.0, 2.2);
+      this.scene.add(this.pointLight);
+
+      // Pedestal & Holographic Ring
+      this.pedestalGroup = new THREE.Group();
+      const grid = new THREE.GridHelper(6.5, 16, 0x38bdf8, 0x1e293b);
+      grid.position.y = -1.65;
+      this.pedestalGroup.add(grid);
+
+      const ringGeom = new THREE.RingGeometry(2.1, 2.15, 48);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+      const ringMesh = new THREE.Mesh(ringGeom, ringMat);
+      ringMesh.rotation.x = Math.PI / 2;
+      ringMesh.position.y = -1.64;
+      this.pedestalGroup.add(ringMesh);
+      this.scene.add(this.pedestalGroup);
+
+      // Materials Setup
+      this.primaryMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.65, roughness: 0.35 });
+      this.secondaryMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.65, roughness: 0.35 });
+      this.tertiaryMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.65, roughness: 0.35 });
+      this.accentMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 0.9, metalness: 0.2, roughness: 0.2 });
+
+      // Model Parent Group
+      this.modelGroup = new THREE.Group();
+      this.scene.add(this.modelGroup);
+
+      // Ambient Particle Motes
+      this.setupParticleAura(0x38bdf8);
+
+      // Event Listeners for Touch / Mouse
+      this.attachControls();
+
+      // ResizeObserver
+      const wrap = document.getElementById('gear3DCanvasWrap');
+      if (wrap && window.ResizeObserver) {
+        this.resizeObserver = new ResizeObserver(() => this.handleResize());
+        this.resizeObserver.observe(wrap);
+      }
+
+      this.initialized = true;
+      this.resume();
+      return true;
+    } catch (err) {
+      console.error('[Gear3DViewer Init Error]', err);
+      return false;
+    }
+  }
+
+  setupParticleAura(colorHex) {
+    const THREE = window.THREE;
+    if (this.particleSystem) {
+      this.scene.remove(this.particleSystem);
+      if (this.particleSystem.geometry) this.particleSystem.geometry.dispose();
+      if (this.particleSystem.material) this.particleSystem.material.dispose();
+      this.particleSystem = null;
+    }
+
+    const particleCount = 55;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount * 3; i += 3) {
+      positions[i] = (Math.random() - 0.5) * 5.0;
+      positions[i + 1] = (Math.random() - 0.5) * 3.6 + 0.2;
+      positions[i + 2] = (Math.random() - 0.5) * 5.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: colorHex,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.65,
+      blending: THREE.AdditiveBlending
+    });
+
+    this.particleSystem = new THREE.Points(geometry, mat);
+    this.particleSystem.visible = this.isAuraActive;
+    this.scene.add(this.particleSystem);
+  }
+
+  attachControls() {
+    const canvas = this.canvas;
+
+    canvas.addEventListener('pointerdown', (e) => {
+      this.isDragging = true;
+      this.prevPointerPos = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture?.(e.pointerId);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!this.isDragging) return;
+      const dx = e.clientX - this.prevPointerPos.x;
+      const dy = e.clientY - this.prevPointerPos.y;
+      this.rotTarget.y += dx * 0.009;
+      this.rotTarget.x += dy * 0.009;
+      this.rotTarget.x = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, this.rotTarget.x));
+      this.prevPointerPos = { x: e.clientX, y: e.clientY };
+    });
+
+    const endDrag = (e) => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        try { canvas.releasePointerCapture?.(e.pointerId); } catch (_) {}
+      }
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.zoomTarget += e.deltaY * 0.0035;
+      this.zoomTarget = Math.max(2.6, Math.min(9.0, this.zoomTarget));
+    }, { passive: false });
+
+    canvas.addEventListener('dblclick', () => {
+      this.resetView();
+    });
+
+    // Touch Pinch Zoom
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        this.touchStartDist = Math.hypot(dx, dy);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && this.touchStartDist > 0) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const diff = this.touchStartDist - dist;
+        this.zoomTarget += diff * 0.012;
+        this.zoomTarget = Math.max(2.6, Math.min(9.0, this.zoomTarget));
+        this.touchStartDist = dist;
+      }
+    }, { passive: true });
+  }
+
+  handleResize() {
+    if (!this.renderer || !this.camera) return;
+    const wrap = document.getElementById('gear3DCanvasWrap');
+    if (!wrap) return;
+    const width = wrap.clientWidth || 400;
+    const height = wrap.clientHeight || 350;
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height, false);
+  }
+
+  clearModelGroup() {
+    while (this.modelGroup.children.length > 0) {
+      const child = this.modelGroup.children[0];
+      if (child.geometry) child.geometry.dispose();
+      this.modelGroup.remove(child);
+    }
+  }
+
+  loadItem(item) {
+    if (!this.initialized && !this.init()) return;
+
+    this.clearModelGroup();
+
+    // 1. Update element accent & aura
+    const elemColor = getElementHex(item.element);
+    this.accentMat.color.setHex(elemColor);
+    this.accentMat.emissive.setHex(elemColor);
+    if (this.pointLight) this.pointLight.color.setHex(elemColor);
+    this.setupParticleAura(elemColor);
+
+    // 2. Apply active or default shader
+    const activeShader = DESTINY_SHADERS.find(s => s.id === state.activeShaderId) || DESTINY_SHADERS[0];
+    this.applyShader(activeShader);
+
+    // 3. Build geometry by archetype
+    const archetype = resolveItem3DArchetype(item);
+    switch (archetype) {
+      case 'hand_cannon':
+        buildHandCannonMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'sniper_rifle':
+        buildSniperRifleMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'shotgun':
+        buildShotgunMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'rocket_launcher':
+        buildRocketLauncherMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'sword':
+        buildSwordMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'bow':
+        buildBowMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'fusion_rifle':
+        buildFusionMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'armor_helmet':
+        buildHelmetMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'armor_chest':
+        buildChestMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'armor_arms':
+        buildArmsMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'armor_legs':
+        buildLegsMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'armor_class':
+        buildClassItemMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat, item);
+        break;
+      case 'artifact':
+        buildArtifactMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+      case 'auto_rifle':
+      default:
+        buildAutoRifleMesh(this.modelGroup, this.primaryMat, this.secondaryMat, this.tertiaryMat, this.accentMat);
+        break;
+    }
+
+    // Auto-center and normalize size
+    const THREE = window.THREE;
+    const box = new THREE.Box3().setFromObject(this.modelGroup);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    this.modelGroup.position.sub(center);
+
+    // Adjust scale so it fits the viewport comfortably
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetDim = 3.6;
+    if (maxDim > 0) {
+      const scale = targetDim / maxDim;
+      this.modelGroup.scale.set(scale, scale, scale);
+    }
+
+    this.resume();
+  }
+
+  applyShader(shader) {
+    if (!shader) return;
+    if (this.primaryMat) {
+      this.primaryMat.color.setHex(shader.primary);
+      this.primaryMat.metalness = shader.metalness || 0.65;
+      this.primaryMat.roughness = shader.roughness || 0.35;
+    }
+    if (this.secondaryMat) {
+      this.secondaryMat.color.setHex(shader.secondary);
+      this.secondaryMat.metalness = shader.metalness || 0.65;
+      this.secondaryMat.roughness = shader.roughness || 0.35;
+    }
+    if (this.tertiaryMat) {
+      this.tertiaryMat.color.setHex(shader.tertiary);
+      this.tertiaryMat.metalness = (shader.metalness || 0.65) * 0.8;
+      this.tertiaryMat.roughness = Math.min(1.0, (shader.roughness || 0.35) * 1.3);
+    }
+  }
+
+  toggleAutoRotate() {
+    this.isAutoRotating = !this.isAutoRotating;
+    return this.isAutoRotating;
+  }
+
+  toggleAura() {
+    this.isAuraActive = !this.isAuraActive;
+    if (this.particleSystem) this.particleSystem.visible = this.isAuraActive;
+    if (this.pointLight) this.pointLight.visible = this.isAuraActive;
+    return this.isAuraActive;
+  }
+
+  resetView() {
+    this.rotTarget = { x: 0.12, y: -0.55 };
+    this.zoomTarget = 5.2;
+  }
+
+  pause() {
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+  }
+
+  resume() {
+    if (!this.animFrameId && this.renderer && this.scene && this.camera) {
+      this.render();
+    }
+  }
+
+  stop() {
+    this.pause();
+  }
+
+  render() {
+    if (!this.renderer || !this.scene || !this.camera) return;
+
+    if (this.isAutoRotating && !this.isDragging) {
+      this.rotTarget.y += 0.005;
+    }
+
+    this.rotCurrent.x += (this.rotTarget.x - this.rotCurrent.x) * 0.1;
+    this.rotCurrent.y += (this.rotTarget.y - this.rotCurrent.y) * 0.1;
+    this.zoomCurrent += (this.zoomTarget - this.zoomCurrent) * 0.1;
+
+    if (this.modelGroup) {
+      this.modelGroup.rotation.x = this.rotCurrent.x;
+      this.modelGroup.rotation.y = this.rotCurrent.y;
+    }
+
+    if (this.camera) {
+      this.camera.position.z = this.zoomCurrent;
+    }
+
+    if (this.particleSystem && this.isAuraActive) {
+      this.particleSystem.rotation.y += 0.002;
+    }
+
+    this.renderer.render(this.scene, this.camera);
+    this.animFrameId = requestAnimationFrame(() => this.render());
+  }
+}
+
+function setInspectTab(tabKey) {
+  state.activeInspectTab = tabKey;
+  const btn2D = document.getElementById('btnInspectTab2D');
+  const btn3D = document.getElementById('btnInspectTab3D');
+  const content2D = document.getElementById('inspectTabContent2D');
+  const content3D = document.getElementById('inspectTabContent3D');
+
+  if (tabKey === '3d') {
+    btn2D?.classList.remove('active');
+    btn2D?.setAttribute('aria-selected', 'false');
+    btn3D?.classList.add('active');
+    btn3D?.setAttribute('aria-selected', 'true');
+    content2D?.classList.add('hidden');
+    content3D?.classList.remove('hidden');
+
+    if (state.inspectedItem) {
+      renderInspect3DView(state.inspectedItem);
+    }
+  } else {
+    btn3D?.classList.remove('active');
+    btn3D?.setAttribute('aria-selected', 'false');
+    btn2D?.classList.add('active');
+    btn2D?.setAttribute('aria-selected', 'true');
+    content3D?.classList.add('hidden');
+    content2D?.classList.remove('hidden');
+
+    if (state.gear3DViewer) {
+      state.gear3DViewer.pause();
+    }
+  }
+}
+
+function renderInspect3DView(item) {
+  if (!item) return;
+
+  const typeTag = document.getElementById('inspect3DItemTypeTag');
+  if (typeTag) {
+    const rawType = item.typeName || item.slot || (item.category === 'Artifact' ? 'Seasonal Artifact' : 'Combat Gear');
+    const elem = item.element || (item.category === 'Armor' ? item.classRestriction || 'Armor' : 'Kinetic');
+    typeTag.textContent = `${rawType.toUpperCase()} // ${elem.toUpperCase()} FRAME`;
+  }
+
+  const hash = item.itemHash || '';
+  const btnExt = document.getElementById('btn3DOpenExternal');
+  if (btnExt) {
+    btnExt.href = `https://lowlidev.com.au/destiny/gear-viewer?item=${hash}`;
+  }
+  const btnForgeLowli = document.getElementById('btnForgeLowlidevLink');
+  if (btnForgeLowli) {
+    btnForgeLowli.href = `https://lowlidev.com.au/destiny/gear-viewer?item=${hash}`;
+  }
+
+  const canvas = document.getElementById('gear3DCanvas');
+  if (!canvas) return;
+
+  if (!state.gear3DViewer) {
+    state.gear3DViewer = new Gear3DViewer(canvas);
+  }
+
+  state.gear3DViewer.loadItem(item);
+  populateShaderSwatches();
+}
+
+function populateShaderSwatches() {
+  const grid = document.getElementById('shaderSwatchesGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const activeId = state.activeShaderId || 'default';
+  const activeShaderNameEl = document.getElementById('shaderActiveName');
+
+  DESTINY_SHADERS.forEach(shader => {
+    const card = document.createElement('div');
+    card.className = `shader-swatch-card ${shader.id === activeId ? 'active' : ''}`;
+    card.dataset.shaderId = shader.id;
+
+    card.innerHTML = `
+      <div class="shader-quadrant-disc" title="${escapeHtml(shader.name)}">
+        <div class="shader-q shader-q-top" style="background-color: ${shader.quads[0]};"></div>
+        <div class="shader-q shader-q-right" style="background-color: ${shader.quads[1]};"></div>
+        <div class="shader-q shader-q-bottom" style="background-color: ${shader.quads[2]};"></div>
+        <div class="shader-q shader-q-left" style="background-color: ${shader.quads[3]};"></div>
+      </div>
+      <div class="shader-swatch-info">
+        <div class="shader-swatch-name">${escapeHtml(shader.name)}</div>
+        <div class="shader-swatch-desc">${escapeHtml(shader.desc)}</div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      sfx.playChirp();
+      state.activeShaderId = shader.id;
+      grid.querySelectorAll('.shader-swatch-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+
+      if (activeShaderNameEl) {
+        activeShaderNameEl.textContent = `CURRENT: ${shader.name.toUpperCase()}`;
+      }
+
+      if (state.gear3DViewer) {
+        state.gear3DViewer.applyShader(shader);
+      }
+    });
+
+    grid.appendChild(card);
+  });
+
+  const cur = DESTINY_SHADERS.find(s => s.id === activeId) || DESTINY_SHADERS[0];
+  if (activeShaderNameEl && cur) {
+    activeShaderNameEl.textContent = `CURRENT: ${cur.name.toUpperCase()}`;
+  }
+}
+
+function initInspect3DSystem() {
+  const btn2D = document.getElementById('btnInspectTab2D');
+  const btn3D = document.getElementById('btnInspectTab3D');
+  const btnRotate = document.getElementById('btn3DToggleAutoRotate');
+  const btnGlow = document.getElementById('btn3DToggleGlow');
+  const btnReset = document.getElementById('btn3DResetCamera');
+  const modal = document.getElementById('modalInspectItem');
+
+  btn2D?.addEventListener('click', () => {
+    sfx.playChirp();
+    setInspectTab('2d');
+  });
+
+  btn3D?.addEventListener('click', () => {
+    sfx.playChirp();
+    setInspectTab('3d');
+  });
+
+  btnRotate?.addEventListener('click', () => {
+    sfx.playChirp();
+    if (state.gear3DViewer) {
+      const active = state.gear3DViewer.toggleAutoRotate();
+      btnRotate.classList.toggle('active', active);
+    }
+  });
+
+  btnGlow?.addEventListener('click', () => {
+    sfx.playChirp();
+    if (state.gear3DViewer) {
+      const active = state.gear3DViewer.toggleAura();
+      btnGlow.classList.toggle('active', active);
+    }
+  });
+
+  btnReset?.addEventListener('click', () => {
+    sfx.playChirp();
+    state.gear3DViewer?.resetView();
+  });
+
+  modal?.addEventListener('close', () => {
+    state.gear3DViewer?.stop();
+    setInspectTab('2d');
+  });
+}
+
 function openItemInspectModal(item) {
   try {
     sfx.playChirp();
     state.inspectedItem = item;
     state.lastAppraisalReply = '';
+    setInspectTab('2d');
 
     const modal = document.getElementById('modalInspectItem');
     if (!modal) return;
@@ -5266,6 +6265,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCloseInspectItem.addEventListener('click', () => modalInspectItem.close());
     }
     attachLightDismissFallback(modalInspectItem);
+    initInspect3DSystem();
   }
   attachLightDismissFallback(modalGodRollScanner);
   attachLightDismissFallback(modalSavedLoadout);

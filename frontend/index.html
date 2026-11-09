@@ -12,7 +12,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261108_v29">
+  <link rel="stylesheet" href="styles.css?v=20261109_v30">
+  <!-- Three.js for 3D Tactical Holoview & Shaders -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body class="theme-vanguard">
 
@@ -1308,45 +1310,130 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
 
       <div class="modal-body inspect-modal-body">
 
-        <!-- ACTION BAR: SEND TO HUNTER / WARLOCK / TITAN / VAULT + 4TH BUTTON: ASK F.E.L.I.C.I.A. -->
-        <div class="inspect-actions-section">
-          <div class="inspect-section-label">TRANSFER &amp; TACTICAL ACTIONS</div>
-          <div class="inspect-actions-grid" id="inspectActionsGrid">
-            <!-- Dynamically populated: Character transfer buttons, Vault button, Equip button, and "Ask F.E.L.I.C.I.A." -->
-          </div>
-          <div class="inspect-transfer-feedback hidden" id="inspectTransferFeedback"></div>
+        <!-- VIEW SWITCHER: TELEMETRY & PERKS vs 3D HOLOVIEW & SHADERS -->
+        <div class="inspect-view-switcher" role="tablist" aria-label="Inspection Modes">
+          <button type="button" class="btn-inspect-tab active" id="btnInspectTab2D" role="tab" aria-selected="true" data-inspect-tab="2d">
+            <span class="inspect-tab-icon">📊</span>
+            <span>Telemetry &amp; Traits</span>
+          </button>
+          <button type="button" class="btn-inspect-tab" id="btnInspectTab3D" role="tab" aria-selected="false" data-inspect-tab="3d">
+            <span class="inspect-tab-icon">🎮</span>
+            <span>3D Holoview &amp; Shaders</span>
+            <span class="inspect-tab-badge">3D</span>
+          </button>
         </div>
 
-        <!-- F.E.L.I.C.I.A. LIVE ROLL REVIEW PANEL (REVEALED ON CLICKING "ASK F.E.L.I.C.I.A.") -->
-        <div class="inspect-felicia-panel hidden" id="inspectFeliciaPanel">
-          <div class="felicia-review-header">
-            <div class="felicia-review-title">
-              <span class="felicia-orb-dot">❖</span>
-              <span>F.E.L.I.C.I.A. // ROLL &amp; GEAR EVALUATION</span>
+        <!-- 2D TAB CONTENT -->
+        <div class="inspect-tab-content inspect-tab-2d" id="inspectTabContent2D">
+          <!-- ACTION BAR: SEND TO HUNTER / WARLOCK / TITAN / VAULT + 4TH BUTTON: ASK F.E.L.I.C.I.A. -->
+          <div class="inspect-actions-section">
+            <div class="inspect-section-label">TRANSFER &amp; TACTICAL ACTIONS</div>
+            <div class="inspect-actions-grid" id="inspectActionsGrid">
+              <!-- Dynamically populated: Character transfer buttons, Vault button, Equip button, and "Ask F.E.L.I.C.I.A." -->
             </div>
-            <div class="felicia-review-controls">
-              <span class="godroll-verdict-pill hidden" id="inspectVerdictPill">EVALUATING</span>
-              <button type="button" class="btn-mini-action" id="btnSpeakAppraisal" title="Hear F.E.L.I.C.I.A. read this review">🔊 Speak</button>
-              <button type="button" class="btn-mini-action" id="btnOpenInComms" title="Continue discussion in AI Chat">💬 Open in Chat</button>
+            <div class="inspect-transfer-feedback hidden" id="inspectTransferFeedback"></div>
+          </div>
+
+          <!-- F.E.L.I.C.I.A. LIVE ROLL REVIEW PANEL (REVEALED ON CLICKING "ASK F.E.L.I.C.I.A.") -->
+          <div class="inspect-felicia-panel hidden" id="inspectFeliciaPanel">
+            <div class="felicia-review-header">
+              <div class="felicia-review-title">
+                <span class="felicia-orb-dot">❖</span>
+                <span>F.E.L.I.C.I.A. // ROLL &amp; GEAR EVALUATION</span>
+              </div>
+              <div class="felicia-review-controls">
+                <span class="godroll-verdict-pill hidden" id="inspectVerdictPill">EVALUATING</span>
+                <button type="button" class="btn-mini-action" id="btnSpeakAppraisal" title="Hear F.E.L.I.C.I.A. read this review">🔊 Speak</button>
+                <button type="button" class="btn-mini-action" id="btnOpenInComms" title="Continue discussion in AI Chat">💬 Open in Chat</button>
+              </div>
+            </div>
+            <div class="felicia-review-body" id="inspectFeliciaBody">
+              <!-- Populated with markdown-formatted PVE / PVP / Shard verdict -->
             </div>
           </div>
-          <div class="felicia-review-body" id="inspectFeliciaBody">
-            <!-- Populated with markdown-formatted PVE / PVP / Shard verdict -->
+
+          <!-- PERKS & STATS TWO-COLUMN LAYOUT -->
+          <div class="inspect-details-grid">
+            <div class="inspect-perks-col">
+              <div class="inspect-section-label" id="inspectPerksHeading">ROLLED SOCKETS &amp; TRAITS</div>
+              <div class="inspect-frame-box hidden" id="inspectFrameBox"></div>
+              <div class="inspect-perk-columns" id="inspectPerkColumns"></div>
+              <div class="inspect-mw-row hidden" id="inspectMwRow"></div>
+            </div>
+
+            <div class="inspect-stats-col">
+              <div class="inspect-section-label" id="inspectStatsHeading">COMBAT TELEMETRY STATS</div>
+              <div class="inspect-stats-list" id="inspectStatsList"></div>
+            </div>
           </div>
         </div>
 
-        <!-- PERKS & STATS TWO-COLUMN LAYOUT -->
-        <div class="inspect-details-grid">
-          <div class="inspect-perks-col">
-            <div class="inspect-section-label" id="inspectPerksHeading">ROLLED SOCKETS &amp; TRAITS</div>
-            <div class="inspect-frame-box hidden" id="inspectFrameBox"></div>
-            <div class="inspect-perk-columns" id="inspectPerkColumns"></div>
-            <div class="inspect-mw-row hidden" id="inspectMwRow"></div>
+        <!-- 3D TAB CONTENT: INTERACTIVE 3D HOLOVIEW & SHADER LAB -->
+        <div class="inspect-tab-content inspect-tab-3d hidden" id="inspectTabContent3D">
+          <!-- 3D HUD CONTROLS BAR -->
+          <div class="inspect-3d-header">
+            <div class="inspect-3d-title">
+              <span class="holocube-glyph">❖</span>
+              <span id="inspect3DItemTypeTag">TACTICAL HOLOGRAPHIC FRAME</span>
+            </div>
+            <div class="inspect-3d-actions">
+              <button type="button" class="btn-3d-ctrl active" id="btn3DToggleAutoRotate" title="Toggle Auto-Rotation">
+                <span class="icon">⟳</span> <span class="label">Auto-Rotate</span>
+              </button>
+              <button type="button" class="btn-3d-ctrl active" id="btn3DToggleGlow" title="Toggle Elemental Aura">
+                <span class="icon">⚡</span> <span class="label">Aura</span>
+              </button>
+              <button type="button" class="btn-3d-ctrl" id="btn3DResetCamera" title="Reset View Angle">
+                <span class="icon">↺</span> <span class="label">Reset</span>
+              </button>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="btn-3d-ctrl btn-3d-external" id="btn3DOpenExternal" title="View in Lowlidev 3D Gear Viewer">
+                <span class="icon">🌐</span> <span class="label">Lowlidev ↗</span>
+              </a>
+            </div>
           </div>
 
-          <div class="inspect-stats-col">
-            <div class="inspect-section-label" id="inspectStatsHeading">COMBAT TELEMETRY STATS</div>
-            <div class="inspect-stats-list" id="inspectStatsList"></div>
+          <!-- 3D VIEWPORT CANVAS WRAPPER -->
+          <div class="gear-3d-canvas-wrap" id="gear3DCanvasWrap">
+            <canvas id="gear3DCanvas" class="gear-3d-canvas"></canvas>
+            <div class="gear-3d-watermark">
+              <span class="vanguard-pip">❖</span> F.E.L.I.C.I.A. // TACTICAL HOLOVIEW
+            </div>
+            <div class="gear-3d-hint">
+              <span>🖱️ Drag to rotate • 🔍 Scroll / pinch to zoom • Double-click to reset</span>
+            </div>
+          </div>
+
+          <!-- SHADER LAB MATRIX -->
+          <div class="shader-lab-section">
+            <div class="shader-lab-header">
+              <div class="shader-lab-title">
+                <span class="shader-icon">◈</span>
+                <span>TACTICAL SHADER LAB // DYE &amp; PALETTE MATRIX</span>
+              </div>
+              <div class="shader-active-name" id="shaderActiveName">CURRENT: FOUNDRY DEFAULT</div>
+            </div>
+            <div class="shader-swatches-grid" id="shaderSwatchesGrid">
+              <!-- Dynamically populated with Destiny 2 iconic shader quadrants -->
+            </div>
+          </div>
+
+          <!-- EXTERNAL GUARDIAN 3D FORGE BRIDGE -->
+          <div class="forge-bridge-footer">
+            <div class="forge-bridge-info">
+              <span class="forge-icon">🛡️</span>
+              <div class="forge-text">
+                <div class="forge-title">Need full Guardian Armor or raw extracted CAD models?</div>
+                <div class="forge-sub">Inspect your complete 3D Guardian loadout in the community high-poly forge tools.</div>
+              </div>
+            </div>
+            <div class="forge-bridge-buttons">
+              <a href="https://paracausalforge.com/guardian" target="_blank" rel="noopener noreferrer" class="btn-forge-link">
+                <span>Paracausal Forge</span> ↗
+              </a>
+              <a href="https://lowlidev.com.au/destiny/gear-viewer" target="_blank" rel="noopener noreferrer" class="btn-forge-link" id="btnForgeLowlidevLink">
+                <span>Lowlidev Gear Viewer</span> ↗
+              </a>
+            </div>
           </div>
         </div>
 
@@ -1531,6 +1618,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261108_v29"></script>
+  <script type="module" src="app.js?v=20261109_v30"></script>
 </body>
 </html>

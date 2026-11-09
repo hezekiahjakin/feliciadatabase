@@ -4465,6 +4465,423 @@ dialog.modal-inspect-item::backdrop {
 }
 
 /* ==========================================================================
+   INSPECTION MODAL VIEW SWITCHER & 3D HOLOVIEW / SHADER LAB
+   ========================================================================== */
+
+.inspect-view-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.btn-inspect-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #94A3B8;
+  font-family: var(--font-tactical);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.btn-inspect-tab:hover {
+  color: #F1F5F9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-inspect-tab.active {
+  background: linear-gradient(135deg, rgba(245, 166, 35, 0.22), rgba(56, 189, 248, 0.18));
+  border-color: rgba(245, 166, 35, 0.6);
+  color: #FFFFFF;
+  box-shadow: 0 2px 12px rgba(245, 166, 35, 0.25);
+}
+
+.inspect-tab-icon {
+  font-size: 14px;
+}
+
+.inspect-tab-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.25);
+  border: 1px solid #38BDF8;
+  color: #7DD3FC;
+  letter-spacing: 0.6px;
+  font-weight: 800;
+}
+
+.inspect-tab-content.hidden {
+  display: none !important;
+}
+
+/* 3D Holoview Controls Bar */
+.inspect-3d-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.inspect-3d-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--vanguard-amber);
+}
+
+.holocube-glyph {
+  font-size: 13px;
+  color: var(--arc-blue);
+  animation: pulse 2.5s infinite ease-in-out;
+}
+
+.inspect-3d-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-3d-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.85);
+  color: #CBD5E1;
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-3d-ctrl:hover {
+  border-color: var(--arc-blue);
+  color: #FFFFFF;
+}
+
+.btn-3d-ctrl.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: #38BDF8;
+  color: #38BDF8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.btn-3d-ctrl.btn-3d-external {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.45);
+  color: #E9D5FF;
+  text-decoration: none;
+}
+
+.btn-3d-ctrl.btn-3d-external:hover {
+  background: rgba(168, 85, 247, 0.35);
+  border-color: #C084FC;
+  color: #FFFFFF;
+}
+
+/* 3D Viewport Canvas Wrapper */
+.gear-3d-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 350px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #111A2E 0%, #050811 85%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.85), 0 8px 28px rgba(0, 0, 0, 0.6);
+  cursor: grab;
+}
+
+.gear-3d-canvas-wrap:active {
+  cursor: grabbing;
+}
+
+.gear-3d-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.gear-3d-watermark {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.8px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gear-3d-watermark .vanguard-pip {
+  color: var(--vanguard-amber);
+}
+
+.gear-3d-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-family: var(--font-tactical);
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.65);
+  pointer-events: none;
+  background: rgba(4, 7, 13, 0.7);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Tactical Shader Lab Section */
+.shader-lab-section {
+  margin-top: 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.shader-lab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.shader-lab-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--arc-blue);
+}
+
+.shader-active-name {
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--vanguard-amber);
+}
+
+.shader-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.shader-swatch-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(11, 16, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.shader-swatch-card:hover {
+  border-color: rgba(245, 166, 35, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.shader-swatch-card.active {
+  border-color: var(--vanguard-amber);
+  background: rgba(245, 166, 35, 0.14);
+  box-shadow: 0 0 10px rgba(245, 166, 35, 0.28);
+}
+
+/* Destiny 2 Shader 4-Quadrant Diamond Disc */
+.shader-quadrant-disc {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  transform: rotate(45deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.shader-q {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+}
+
+.shader-q-top {
+  top: 0;
+  left: 0;
+}
+
+.shader-q-right {
+  top: 0;
+  right: 0;
+}
+
+.shader-q-bottom {
+  bottom: 0;
+  right: 0;
+}
+
+.shader-q-left {
+  bottom: 0;
+  left: 0;
+}
+
+.shader-swatch-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.shader-swatch-name {
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #F1F5F9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shader-swatch-desc {
+  font-size: 10px;
+  color: #94A3B8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Forge Bridge Footer */
+.forge-bridge-footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(30, 27, 75, 0.5), rgba(15, 23, 42, 0.7));
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.forge-bridge-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.forge-icon {
+  font-size: 22px;
+}
+
+.forge-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: #E9D5FF;
+}
+
+.forge-sub {
+  font-size: 11px;
+  color: #C084FC;
+}
+
+.forge-bridge-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-forge-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  background: rgba(168, 85, 247, 0.16);
+  color: #F3E8FF;
+  font-family: var(--font-tactical);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.16s ease;
+}
+
+.btn-forge-link:hover {
+  background: rgba(168, 85, 247, 0.35);
+  border-color: #C084FC;
+  color: #FFFFFF;
+}
+
+@media (max-width: 640px) {
+  .gear-3d-canvas-wrap {
+    height: 270px;
+  }
+  .inspect-3d-actions .label {
+    display: none;
+  }
+  .shader-swatches-grid {
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+  }
+  .forge-bridge-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ==========================================================================
    SAVED LOADOUTS UNDER EACH CHARACTER + GOD ROLL SCANNER & LOCK ALL
    ========================================================================== */
 
