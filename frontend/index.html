@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261109_v32">
+  <link rel="stylesheet" href="styles.css?v=20261109_v33">
 </head>
 <body class="theme-vanguard">
 
@@ -140,9 +140,9 @@
                 <span class="inv-platform-tag" id="invPlatformTag">Destiny 2</span>
               </div>
               <div class="inv-account-actions">
-                <button type="button" class="btn-tactical btn-secondary btn-sm btn-3d-bridge-pill" id="btnOpen3DForge" title="Open 3D Character & Shader Studio in Paracausal Forge">
+                <a href="https://paracausalforge.com/guardian" target="_blank" rel="noopener noreferrer" class="btn-tactical btn-secondary btn-sm btn-3d-bridge-pill" id="btnOpen3DForge" title="Open 3D Character & Shader Studio in Paracausal Forge">
                   🎮 3D Guardian &amp; Shaders ↗
-                </button>
+                </a>
                 <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnRefreshInventory" title="Sync latest gear from Bungie">
                   <span id="refreshSpinIcon">🔄</span> Sync Gear
                 </button>
@@ -1446,7 +1446,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
         <div class="saved-loadout-actions">
           <button type="button" class="btn-item-action" id="btnEquipSavedLoadout">⚡ Equip Loadout In-Game</button>
           <button type="button" class="btn-item-action btn-ask-felicia" id="btnAskFeliciaLoadout">❖ Ask F.E.L.I.C.I.A. to Review Loadout</button>
-          <button type="button" class="btn-item-action btn-3d-loadout-preview" id="btnPreview3DLoadout" title="Inspect 3D Guardian model, armor ornaments &amp; shaders in Paracausal Forge">🎮 3D Character &amp; Shader Preview ↗</button>
+          <a href="https://paracausalforge.com/guardian" target="_blank" rel="noopener noreferrer" class="btn-item-action btn-3d-loadout-preview" id="btnPreview3DLoadout" title="Inspect 3D Guardian model, armor ornaments &amp; shaders in Paracausal Forge">🎮 3D Character &amp; Shader Preview ↗</a>
         </div>
         <div class="inspect-transfer-feedback hidden" id="savedLoadoutFeedback"></div>
         <div id="savedLoadoutItemsContainer"></div>
@@ -1467,7 +1467,9 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           <h3 class="modal-title advisory-title" id="advisoryModalTitle">PLEASE READ: DEVELOPMENT NOTICE</h3>
           <span class="modal-sub">VANGUARD TACTICAL INTELLIGENCE // FIRETEAM EARLY ACCESS</span>
         </div>
-        <button type="button" class="btn-modal-close" id="btnCloseAdvisory" title="Close Notification">&times;</button>
+        <form method="dialog">
+          <button type="submit" class="btn-modal-close" id="btnCloseAdvisory" title="Close Notification" onclick="const m=document.getElementById('modalFieldAdvisory'); if(m){ try{m.close();}catch(e){} m.removeAttribute('open'); m.style.display='none'; } try{localStorage.setItem('felicia_clan_advisory_ack_v2','true');}catch(e){}">&times;</button>
+        </form>
       </div>
 
       <div class="modal-body advisory-body">
@@ -1526,15 +1528,17 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       </div>
 
       <div class="modal-footer advisory-footer">
-        <button type="button" class="btn-tactical btn-primary btn-got-it" id="btnAckAdvisory">
-          <span class="got-it-text">GOT IT!</span>
-          <span class="got-it-arrow">➔</span>
-        </button>
+        <form method="dialog" style="width:100%; display:flex; justify-content:center; margin:0;">
+          <button type="submit" class="btn-tactical btn-primary btn-got-it" id="btnAckAdvisory" onclick="const m=document.getElementById('modalFieldAdvisory'); if(m){ try{m.close();}catch(e){} m.removeAttribute('open'); m.style.display='none'; } try{localStorage.setItem('felicia_clan_advisory_ack_v2','true');}catch(e){}">
+            <span class="got-it-text">GOT IT!</span>
+            <span class="got-it-arrow">➔</span>
+          </button>
+        </form>
       </div>
 
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261109_v32"></script>
+  <script type="module" src="app.js?v=20261109_v33"></script>
 </body>
 </html>

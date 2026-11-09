@@ -1526,7 +1526,7 @@ async function loadMobileConnectInfo() {
 function checkAndShowFieldAdvisory(force = false) {
   const modal = document.getElementById('modalFieldAdvisory');
   if (!modal) return;
-  if (modal.open) return;
+  modal.style.display = '';
 
   if (force) {
     try {
@@ -1562,12 +1562,12 @@ function initFieldAdvisoryModal() {
   if (!modal) return;
 
   const closeAdvisory = () => {
-    sfx.playChirp();
+    try { sfx.playChirp(); } catch (_) {}
     try {
       modal.close();
-    } catch (_) {
-      modal.removeAttribute('open');
-    }
+    } catch (_) {}
+    modal.removeAttribute('open');
+    modal.style.display = 'none';
     try {
       localStorage.setItem('felicia_clan_advisory_ack_v2', 'true');
     } catch (_) {}
@@ -1577,7 +1577,7 @@ function initFieldAdvisoryModal() {
   btnClose?.addEventListener('click', closeAdvisory);
 
   btnOpen?.addEventListener('click', () => {
-    sfx.playChirp();
+    try { sfx.playChirp(); } catch (_) {}
     checkAndShowFieldAdvisory(true);
   });
 
@@ -2577,15 +2577,16 @@ function openItemInspectModal(item) {
 
         // Option A: 3D Gear Model & Shader Preview Bridge (Lowlidev / Paracausal)
         if (item.itemHash) {
-          const preview3DBtn = document.createElement('button');
-          preview3DBtn.type = 'button';
+          const preview3DBtn = document.createElement('a');
+          preview3DBtn.href = `https://lowlidev.com.au/destiny/gear-viewer?hash=${item.itemHash}`;
+          preview3DBtn.target = '_blank';
+          preview3DBtn.rel = 'noopener noreferrer';
           preview3DBtn.className = 'btn-item-action btn-inspect-3d-gear';
           preview3DBtn.innerHTML = `<span>🎮</span> 3D Gear Model &amp; Shaders ↗`;
           preview3DBtn.title = 'Inspect official 3D extracted CAD mesh & shaders in Lowlidev Gear Viewer';
           preview3DBtn.addEventListener('click', () => {
-            sfx.playTransmit();
+            try { sfx.playTransmit(); } catch (_) {}
             showToast(`Opening 3D model viewer for ${item.name}...`, 'info');
-            window.open(`https://lowlidev.com.au/destiny/gear-viewer?hash=${item.itemHash}`, '_blank', 'noopener,noreferrer');
           });
           actionsGrid.appendChild(preview3DBtn);
         }
