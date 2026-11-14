@@ -1334,6 +1334,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
             <div class="inspect-frame-box hidden" id="inspectFrameBox"></div>
             <div class="inspect-perk-columns" id="inspectPerkColumns"></div>
             <div class="inspect-mw-row hidden" id="inspectMwRow"></div>
+            <div class="inspect-mods-section hidden" id="inspectModsSection"></div>
           </div>
 
           <div class="inspect-stats-col">
@@ -1434,6 +1435,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       <div class="modal-body saved-loadout-body">
         <div class="saved-loadout-actions">
           <button type="button" class="btn-item-action" id="btnEquipSavedLoadout">⚡ Equip Loadout In-Game</button>
+          <button type="button" class="btn-item-action" id="btnImportSavedLoadoutToBuilder">🛠️ Customize in Loadout Builder</button>
           <button type="button" class="btn-item-action btn-ask-felicia" id="btnAskFeliciaLoadout">❖ Ask F.E.L.I.C.I.A. to Review Loadout</button>
         </div>
         <div class="inspect-transfer-feedback hidden" id="savedLoadoutFeedback"></div>
@@ -1494,7 +1496,10 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
 
           <div class="lb-actions-group">
             <button type="button" class="btn-item-action btn-lb-equip" id="btnLbEquipNow">
-              ⚡ Equip Loadout on Guardian
+              ⚡ Equip Loadout &amp; Mods
+            </button>
+            <button type="button" class="btn-item-action" id="btnLbApplyModsOnly" title="Apply all selected Weapon Mods &amp; Armor Mods onto these items in-game">
+              🔧 Apply Mods Only
             </button>
             <button type="button" class="btn-item-action" id="btnLbPullOnly" title="Pull all items from Vault to Character inventory without unequipping current gear">
               📥 Pull All to Bag
@@ -1623,6 +1628,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261114_v36"></script>
+  <script type="module" src="app.js?v=20261114_v37"></script>
 </body>
 </html>

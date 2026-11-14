@@ -352,6 +352,14 @@ def _slim_item_def(raw: dict) -> dict:
             "indexes": sc.get("socketIndexes", []),
         })
 
+    socket_entries = []
+    for se in sockets_raw.get("socketEntries", []):
+        socket_entries.append({
+            "socketTypeHash": se.get("socketTypeHash", 0),
+            "singleInitialItemHash": se.get("singleInitialItemHash", 0),
+            "reusablePlugSetHash": se.get("reusablePlugSetHash") or se.get("randomizedPlugSetHash") or 0,
+        })
+
     return {
         "hash": raw.get("hash"),
         "name": dp.get("name", ""),
@@ -371,8 +379,172 @@ def _slim_item_def(raw: dict) -> dict:
         "isInstanceItem": inv.get("isInstanceItem", False),
         "plugCategoryIdentifier": plug.get("plugCategoryIdentifier", "") if plug else "",
         "socketCategories": socket_cats,
+        "socketEntries": socket_entries,
         "preview": raw.get("preview", {}),
     }
+
+
+_plug_set_mem_cache: Dict[int, List[int]] = {}
+
+
+def resolve_plug_sets(plug_set_hashes: Set[int], api_key: str) -> Dict[int, List[int]]:
+    """Resolves reusablePlugItems from DestinyPlugSetDefinition in the local SQLite Manifest."""
+    if not plug_set_hashes:
+        return {}
+
+    result: Dict[int, List[int]] = {}
+    missing: List[int] = []
+    for h in plug_set_hashes:
+        if not h:
+            continue
+        uh = int(h) & 0xFFFFFFFF
+        if uh in _plug_set_mem_cache:
+            result[uh] = _plug_set_mem_cache[uh]
+        else:
+            missing.append(uh)
+
+    if not missing:
+        return result
+
+    try:
+        db_path = ensure_manifest_db(api_key)
+        conn = sqlite3.connect(db_path)
+        try:
+            for i in range(0, len(missing), 400):
+                chunk = missing[i : i + 400]
+                sids = [_to_sqlite_id(uh) for uh in chunk]
+                placeholders = ",".join("?" for _ in sids)
+                rows = conn.execute(
+                    f"SELECT id, json FROM DestinyPlugSetDefinition WHERE id IN ({placeholders})",
+                    sids,
+                ).fetchall()
+                for sid, raw_json in rows:
+                    uh = _from_sqlite_id(sid)
+                    obj = json.loads(raw_json)
+                    plug_hashes: List[int] = []
+                    for rpi in obj.get("reusablePlugItems", []):
+                        if rpi.get("currentlyCanRoll") is False:
+                            continue
+                        ph = rpi.get("plugItemHash")
+                        if ph:
+                            plug_hashes.append(int(ph) & 0xFFFFFFFF)
+                    _plug_set_mem_cache[uh] = plug_hashes
+                    result[uh] = plug_hashes
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+    return result
+
+
+def _classify_mod_slot_type(
+    category: str,
+    slot_name: str,
+    pcat: str,
+    pname: str,
+    seen_stat_socket: bool = False,
+) -> Optional[str]:
+    """Classifies a weapon or armor socket into a normalized mod slot type, or None if cosmetic/masterwork/energy."""
+    pcat_low = (pcat or "").lower()
+    pname_low = (pname or "").lower()
+
+    # Skip Masterworks, Armor Energy/Tier sockets, and Cosmetics/Shaders/Ornaments/Trackers/Mementos
+    if any(
+        skip in pcat_low
+        for skip in (
+            "masterworks.stat",
+            "armor.masterworks",
+            "v460.plugs.armor.masterworks",
+            "shader",
+            "ornament",
+            "skins",
+            "tracker",
+            "memento",
+            "catalyst",
+            "emote",
+            "ghost",
+            "radiance",
+        )
+    ):
+        return None
+    if any(
+        skip in pname_low
+        for skip in (
+            "masterwork",
+            "tier ",
+            "upgrade armor",
+            "armor energy",
+            "default ornament",
+            "ornament",
+            "shader",
+            "memento",
+            "tracker",
+            "catalyst",
+            "radiance",
+            "combat flair",
+        )
+    ):
+        return None
+
+    if category == "Weapon":
+        if (
+            "weapon.mod" in pcat_low
+            or "enhancements" in pcat_low
+            or "mod" in pname_low
+            or any(
+                kw in pname_low
+                for kw in (
+                    "spec",
+                    "mag",
+                    "sling",
+                    "adjuster",
+                    "stock",
+                    "radar",
+                    "icarus",
+                    "adept",
+                    "ballistics",
+                    "tactical",
+                    "synergy",
+                    "optics",
+                    "access",
+                    "confetti",
+                )
+            )
+        ):
+            return "weapon_mod"
+        return None
+
+    if category == "Armor":
+        if "artifice" in pcat_low or "artifice" in pname_low:
+            return "armor_artifice"
+        if "v2_general" in pcat_low or "general" in pcat_low or "general armor mod" in pname_low:
+            return "armor_stat"
+        if "v2_head" in pcat_low or ".head" in pcat_low or "helmet armor mod" in pname_low:
+            return "armor_helmet"
+        if "v2_arms" in pcat_low or ".arms" in pcat_low or "arms armor mod" in pname_low or "gauntlets armor mod" in pname_low:
+            return "armor_arms"
+        if "v2_chest" in pcat_low or ".chest" in pcat_low or "chest armor mod" in pname_low:
+            return "armor_chest"
+        if "v2_legs" in pcat_low or ".legs" in pcat_low or "leg armor mod" in pname_low or "legs armor mod" in pname_low:
+            return "armor_legs"
+        if "v2_class_item" in pcat_low or "class_item" in pcat_low or "class item armor mod" in pname_low:
+            return "armor_class"
+        if "raid" in pcat_low or "nightmare" in pcat_low or "raid mod" in pname_low:
+            return "armor_raid"
+        if "enhancements." in pcat_low or "mod" in pname_low:
+            if not seen_stat_socket and ("stat" in pname_low or "general" in pname_low):
+                return "armor_stat"
+            slot_map = {
+                "Helmet": "armor_helmet",
+                "Gauntlets": "armor_arms",
+                "Chest Armor": "armor_chest",
+                "Leg Armor": "armor_legs",
+                "Class Armor": "armor_class",
+            }
+            return slot_map.get(slot_name, "armor_general")
+
+    return None
 
 
 def resolve_item_definitions(hashes: Set[int], api_key: str) -> Dict[int, dict]:
@@ -569,9 +741,12 @@ def _enrich_item(
     active_perks: List[dict] = []
     masterwork_info = None
     mods_list: List[dict] = []
+    mod_sockets: List[dict] = []
 
     item_sockets = sockets_map.get(instance_id, {}).get("sockets", []) if instance_id else []
     item_reusable = reusable_map.get(instance_id, {}).get("plugs", {}) if instance_id else {}
+    def_socket_entries = d.get("socketEntries", []) or []
+    seen_stat_mod_socket = False
 
     if item_sockets and d.get("socketCategories"):
         for sc in d["socketCategories"]:
@@ -663,7 +838,8 @@ def _enrich_item(
                         continue
                     pcat = pdef.get("plugCategoryIdentifier", "").lower()
                     pname = pdef["name"]
-                    if "masterworks.stat" in pcat or "masterwork" in pname.lower():
+                    pname_low = pname.lower()
+                    if "masterworks.stat" in pcat or "masterwork" in pname_low:
                         # Clean e.g. 'Tier 10: Range' or 'Masterworked: Range'
                         mw_clean = pname.replace("Masterworked:", "").strip()
                         masterwork_info = {
@@ -671,10 +847,68 @@ def _enrich_item(
                             "description": pdef.get("description", ""),
                             "icon": pdef.get("icon", ""),
                         }
-                    elif "empty" not in pname.lower() and "default" not in pname.lower() and "tracker" not in pcat:
+                        continue
+
+                    is_empty_mod = "empty" in pname_low or "default" in pname_low
+                    if not is_empty_mod and "tracker" not in pcat and "shader" not in pcat and "ornament" not in pcat and "skins" not in pcat and "tier " not in pname_low and "upgrade armor" not in pname_low:
                         mods_list.append({
                             "name": pname,
                             "icon": pdef.get("icon", ""),
+                            "description": pdef.get("description", ""),
+                            "socketIndex": idx,
+                            "plugHash": int(ph),
+                        })
+
+                    slot_type = _classify_mod_slot_type(
+                        category,
+                        slot_name,
+                        pcat,
+                        pname,
+                        seen_stat_socket=seen_stat_mod_socket,
+                    )
+                    if slot_type:
+                        if slot_type == "armor_stat":
+                            seen_stat_mod_socket = True
+                        se_obj = def_socket_entries[idx] if idx < len(def_socket_entries) else {}
+                        pset_hash = int(se_obj.get("reusablePlugSetHash") or 0)
+
+                        sock_avail_plugs: List[dict] = []
+                        seen_mod_hashes: Set[int] = set()
+                        for rp in item_reusable.get(str(idx), []):
+                            rph = rp.get("plugItemHash")
+                            if not rph:
+                                continue
+                            rph_int = int(rph)
+                            if rph_int in seen_mod_hashes:
+                                continue
+                            rpdef = defs.get(rph_int)
+                            if not rpdef or not rpdef.get("name"):
+                                continue
+                            rp_name = rpdef["name"]
+                            if "deprecated" in rp_name.lower():
+                                continue
+                            seen_mod_hashes.add(rph_int)
+                            sock_avail_plugs.append({
+                                "plugHash": rph_int,
+                                "name": rp_name,
+                                "icon": rpdef.get("icon", ""),
+                                "description": rpdef.get("description", ""),
+                                "isEmpty": "empty" in rp_name.lower() or "default" in rp_name.lower(),
+                            })
+                            if len(sock_avail_plugs) >= 35:
+                                break
+
+                        mod_sockets.append({
+                            "socketIndex": idx,
+                            "plugHash": int(ph) if ph else 0,
+                            "name": pname,
+                            "icon": pdef.get("icon", ""),
+                            "description": pdef.get("description", ""),
+                            "plugCategoryIdentifier": pcat,
+                            "plugSetHash": pset_hash,
+                            "slotType": slot_type,
+                            "isEmpty": is_empty_mod,
+                            "availablePlugs": sock_avail_plugs,
                         })
 
     # Parse Item Stats
@@ -766,6 +1000,7 @@ def _enrich_item(
         "activePerks": active_perks,
         "masterwork": masterwork_info,
         "mods": mods_list,
+        "modSockets": mod_sockets,
         "stats": ordered_stats,
         "totalStats": total_armor_stats if category == "Armor" else 0,
         "gearTier": gear_tier,
@@ -1126,6 +1361,31 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         extra_defs = resolve_item_definitions(artifact_perk_hashes, creds["api_key"])
         defs.update(extra_defs)
 
+    # Resolve DestinyPlugSetDefinition for Weapon Mod & Armor Mod sockets
+    mod_plug_set_hashes: Set[int] = set()
+    for ih, d in list(defs.items()):
+        s_entries = d.get("socketEntries") or []
+        if not s_entries:
+            continue
+        for sc in d.get("socketCategories") or []:
+            if sc.get("hash") in (SOCKET_CAT_WEAPON_MODS, SOCKET_CAT_ARMOR_MODS):
+                for s_idx in sc.get("indexes") or []:
+                    if s_idx < len(s_entries):
+                        ps_hash = int(s_entries[s_idx].get("reusablePlugSetHash") or 0)
+                        if ps_hash:
+                            mod_plug_set_hashes.add(ps_hash)
+
+    plug_sets_map = resolve_plug_sets(mod_plug_set_hashes, creds["api_key"]) if mod_plug_set_hashes else {}
+    plug_set_item_hashes: Set[int] = set()
+    for ps_list in plug_sets_map.values():
+        for ph in ps_list:
+            if ph and ph not in defs:
+                plug_set_item_hashes.add(int(ph))
+
+    if plug_set_item_hashes:
+        extra_mod_defs = resolve_item_definitions(plug_set_item_hashes, creds["api_key"])
+        defs.update(extra_mod_defs)
+
     def _resolve_artifact_perks_for_item(
         art_item: dict,
         owner_cid: str = "",
@@ -1450,6 +1710,95 @@ def fetch_guardian_inventory(access_token: str) -> dict:
 
         ch_obj["loadouts"] = saved_lds
 
+    # Build unified Mod Catalog (byPlugSet and bySlotType) for Weapon & Armor Mod Socketing
+    mod_by_plug_set: Dict[str, List[dict]] = {}
+    mod_by_slot_type: Dict[str, List[dict]] = {
+        "weapon_mod": [],
+        "armor_stat": [],
+        "armor_helmet": [],
+        "armor_arms": [],
+        "armor_chest": [],
+        "armor_legs": [],
+        "armor_class": [],
+        "armor_artifice": [],
+        "armor_raid": [],
+    }
+    seen_slot_mod_names: Dict[str, Set[str]] = {k: set() for k in mod_by_slot_type}
+
+    def _add_to_slot_catalog(st: str, pdef_obj: dict, ph_val: int):
+        if st not in mod_by_slot_type:
+            return
+        m_name = pdef_obj.get("name", "")
+        if not m_name or "deprecated" in m_name.lower():
+            return
+        is_emp = "empty" in m_name.lower() or "default" in m_name.lower()
+        dedup_key = f"empty_{ph_val}" if is_emp else m_name.lower()
+        if dedup_key in seen_slot_mod_names[st]:
+            return
+        seen_slot_mod_names[st].add(dedup_key)
+        mod_by_slot_type[st].append({
+            "plugHash": int(ph_val),
+            "name": m_name,
+            "icon": pdef_obj.get("icon", ""),
+            "description": pdef_obj.get("description", ""),
+            "plugCategoryIdentifier": pdef_obj.get("plugCategoryIdentifier", ""),
+            "isEmpty": is_emp,
+        })
+
+    for ps_hash, ph_list in plug_sets_map.items():
+        ps_items: List[dict] = []
+        seen_ps_names: Set[str] = set()
+        for ph_val in ph_list:
+            pdef_obj = defs.get(int(ph_val))
+            if not pdef_obj or not pdef_obj.get("name"):
+                continue
+            m_name = pdef_obj["name"]
+            if "deprecated" in m_name.lower():
+                continue
+            is_emp = "empty" in m_name.lower() or "default" in m_name.lower()
+            dedup_key = f"empty_{ph_val}" if is_emp else m_name.lower()
+            if dedup_key in seen_ps_names:
+                continue
+            seen_ps_names.add(dedup_key)
+            entry_obj = {
+                "plugHash": int(ph_val),
+                "name": m_name,
+                "icon": pdef_obj.get("icon", ""),
+                "description": pdef_obj.get("description", ""),
+                "plugCategoryIdentifier": pdef_obj.get("plugCategoryIdentifier", ""),
+                "isEmpty": is_emp,
+            }
+            ps_items.append(entry_obj)
+
+            # Also classify into bySlotType
+            pcat_str = pdef_obj.get("plugCategoryIdentifier", "").lower()
+            cat_guess = "Weapon" if ("weapon.mod" in pcat_str or "v400.weapon" in pcat_str) else "Armor"
+            st_guess = _classify_mod_slot_type(cat_guess, "", pcat_str, m_name)
+            if st_guess:
+                _add_to_slot_catalog(st_guess, pdef_obj, int(ph_val))
+
+        if ps_items:
+            ps_items.sort(key=lambda x: (0 if x["isEmpty"] else 1, x["name"]))
+            mod_by_plug_set[str(ps_hash)] = ps_items
+
+    # Also harvest any active/reusable/loadout mods discovered across all items in defs
+    for ph_val, pdef_obj in defs.items():
+        if not pdef_obj or not pdef_obj.get("name"):
+            continue
+        pcat_str = pdef_obj.get("plugCategoryIdentifier", "").lower()
+        m_name = pdef_obj["name"]
+        if "weapon.mod" in pcat_str or "v400.weapon" in pcat_str:
+            st_guess = _classify_mod_slot_type("Weapon", "", pcat_str, m_name)
+            if st_guess:
+                _add_to_slot_catalog(st_guess, pdef_obj, int(ph_val))
+        elif "enhancements." in pcat_str:
+            st_guess = _classify_mod_slot_type("Armor", "", pcat_str, m_name)
+            if st_guess:
+                _add_to_slot_catalog(st_guess, pdef_obj, int(ph_val))
+
+    for st_key in mod_by_slot_type:
+        mod_by_slot_type[st_key].sort(key=lambda x: (0 if x["isEmpty"] else 1, x["name"]))
+
     return {
         "player": membership,
         "characters": characters_list,
@@ -1458,6 +1807,10 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "gearCount": len(vault_items),
             "capacity": 1300,
             "items": vault_items,
+        },
+        "modCatalog": {
+            "byPlugSet": mod_by_plug_set,
+            "bySlotType": mod_by_slot_type,
         },
     }
 
@@ -1944,15 +2297,18 @@ def equip_custom_loadout(
         except Exception as exc:
             failed.append({"itemInstanceId": iid, "name": nm, "reason": str(exc)})
 
-    if transfer_only or not ready_to_equip:
+    if transfer_only:
         return {
-            "status": "transferred" if transfer_only else "ok",
+            "status": "transferred",
             "characterId": target_cid,
             "equippedIds": equipped_ids,
             "equippedNames": equipped_names,
             "transferredIds": transferred_ids,
             "transferredNames": transferred_names,
             "alreadyEquippedIds": already_equipped_ids,
+            "appliedModsCount": 0,
+            "appliedMods": [],
+            "failedMods": [],
             "failed": failed,
         }
 
@@ -1964,11 +2320,9 @@ def equip_custom_loadout(
             0 if str(x.get("category", "")) == "Subclass" else (2 if x.get("isExotic") else 1)
         ),
     )
-    batch_iids = [str(it.get("itemInstanceId")) for it in equip_ordered if it.get("itemInstanceId")]
     name_by_iid = {str(it.get("itemInstanceId")): str(it.get("name", "Item")) for it in equip_ordered}
 
-    # Equip items sequentially in Legendary-first order or via batch EquipItems
-    # Doing Legendary-first then batch/individual guarantees zero Exotic replacement errors
+    # Equip items sequentially in Legendary-first order
     combat_zone_blocked = False
     for it_entry in equip_ordered:
         iid = str(it_entry.get("itemInstanceId", ""))
@@ -1994,16 +2348,116 @@ def equip_custom_loadout(
                 combat_zone_blocked = True
             failed.append({"itemInstanceId": iid, "name": nm, "reason": err_str})
 
+    # PHASE 3: Apply Selected Weapon Mods & Armor Mods via InsertSocketPlugFree
+    applied_mods: List[dict] = []
+    failed_mods: List[dict] = []
+    on_target_iids = set(already_equipped_ids) | set(equipped_ids) | set(transferred_ids) | {
+        str(it.get("itemInstanceId", "")) for it in ready_to_equip if it.get("itemInstanceId")
+    }
+
+    for entry in sorted_items:
+        iid = str(entry.get("itemInstanceId", ""))
+        nm = str(entry.get("name", "Item"))
+        sock_plugs = entry.get("socketPlugs") or []
+        if not iid or not sock_plugs or iid not in on_target_iids:
+            continue
+        for sp in sock_plugs:
+            s_idx = sp.get("socketIndex")
+            p_hash = sp.get("plugHash")
+            m_name = str(sp.get("name") or f"Mod #{p_hash}")
+            if s_idx is None or not p_hash:
+                continue
+            try:
+                _bungie_post(
+                    "/Destiny2/Actions/Items/InsertSocketPlugFree/",
+                    {
+                        "plug": {
+                            "socketIndex": int(s_idx),
+                            "socketArrayType": 0,
+                            "plugItemHash": int(p_hash) & 0xFFFFFFFF,
+                        },
+                        "itemId": iid,
+                        "characterId": target_cid,
+                        "membershipType": int(membership_type),
+                    },
+                    api_key,
+                    access_token,
+                )
+                applied_mods.append({
+                    "itemInstanceId": iid,
+                    "itemName": nm,
+                    "socketIndex": int(s_idx),
+                    "plugHash": int(p_hash),
+                    "modName": m_name,
+                })
+            except PermissionError:
+                raise
+            except Exception as m_exc:
+                failed_mods.append({
+                    "itemInstanceId": iid,
+                    "itemName": nm,
+                    "socketIndex": int(s_idx),
+                    "modName": m_name,
+                    "reason": str(m_exc),
+                })
+
     return {
-        "status": "equipped" if equipped_ids else ("transferred_combat_locked" if transferred_ids and combat_zone_blocked else "partial"),
+        "status": (
+            "equipped"
+            if (equipped_ids or already_equipped_ids or applied_mods)
+            else ("transferred_combat_locked" if transferred_ids and combat_zone_blocked else "partial")
+        ),
         "characterId": target_cid,
         "equippedIds": equipped_ids,
         "equippedNames": equipped_names,
         "transferredIds": transferred_ids,
         "transferredNames": transferred_names,
         "alreadyEquippedIds": already_equipped_ids,
+        "appliedModsCount": len(applied_mods),
+        "appliedMods": applied_mods,
+        "failedMods": failed_mods,
         "combatZoneBlocked": combat_zone_blocked,
         "failed": failed,
+    }
+
+
+def insert_item_socket_plug(
+    access_token: str,
+    membership_type: int,
+    character_id: str,
+    item_instance_id: str,
+    socket_index: int,
+    plug_hash: int,
+) -> dict:
+    """Inserts a free socket plug (Weapon Mod, Armor Mod, Perk, or Subclass Aspect/Fragment) onto an item."""
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+    if not character_id or not item_instance_id:
+        raise ValueError("character_id and item_instance_id are required.")
+
+    _bungie_post(
+        "/Destiny2/Actions/Items/InsertSocketPlugFree/",
+        {
+            "plug": {
+                "socketIndex": int(socket_index),
+                "socketArrayType": 0,
+                "plugItemHash": int(plug_hash) & 0xFFFFFFFF,
+            },
+            "itemId": str(item_instance_id),
+            "characterId": str(character_id),
+            "membershipType": int(membership_type),
+        },
+        api_key,
+        access_token,
+    )
+    return {
+        "status": "inserted",
+        "itemInstanceId": str(item_instance_id),
+        "characterId": str(character_id),
+        "socketIndex": int(socket_index),
+        "plugHash": int(plug_hash) & 0xFFFFFFFF,
     }
 
 

@@ -28,6 +28,7 @@ try:
         prepare_items_for_dismantle,
         equip_guardian_loadout,
         equip_custom_loadout,
+        insert_item_socket_plug,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
     )
@@ -44,6 +45,7 @@ except ImportError:
         prepare_items_for_dismantle,
         equip_guardian_loadout,
         equip_custom_loadout,
+        insert_item_socket_plug,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
     )
@@ -857,6 +859,95 @@ def extract_build_recommendation_blueprint(
         if m_frag:
             fragments_list = [x.strip(" *•-") for x in re.split(r",|\|", m_frag.group(1)) if x.strip(" *•-")][:6]
 
+    # 5. Armor Mods & Weapon Mods extraction
+    armor_mods_map: Dict[str, List[str]] = {
+        "Helmet": [],
+        "Gauntlets": [],
+        "Chest Armor": [],
+        "Leg Armor": [],
+        "Class Armor": [],
+    }
+    if verified_build and isinstance(verified_build.get("armor_mods"), dict):
+        vb_mods = verified_build["armor_mods"]
+        slot_aliases = {
+            "helmet": "Helmet",
+            "head": "Helmet",
+            "gauntlets": "Gauntlets",
+            "arms": "Gauntlets",
+            "gloves": "Gauntlets",
+            "chest": "Chest Armor",
+            "chest armor": "Chest Armor",
+            "legs": "Leg Armor",
+            "leg armor": "Leg Armor",
+            "boots": "Leg Armor",
+            "class": "Class Armor",
+            "class item": "Class Armor",
+            "class armor": "Class Armor",
+        }
+        for k_raw, v_raw in vb_mods.items():
+            norm_slot = slot_aliases.get(str(k_raw).lower().strip())
+            if norm_slot:
+                if isinstance(v_raw, list):
+                    armor_mods_map[norm_slot] = [str(m).strip() for m in v_raw if str(m).strip()]
+                elif isinstance(v_raw, str) and v_raw.strip():
+                    armor_mods_map[norm_slot] = [
+                        x.strip(" *•-")
+                        for x in re.split(r",|\+|/", v_raw)
+                        if x.strip(" *•-")
+                    ][:3]
+
+    # Also parse any explicit Armor Mod lines in reply_text if not populated
+    regex_slot_patterns = [
+        ("Helmet", r"(?:\*\*|•|-|\b)(?:Helmet|Head)(?:\s+Mods?)?:\*\*?\s*([^\n]+)"),
+        ("Gauntlets", r"(?:\*\*|•|-|\b)(?:Gauntlets|Arms|Gloves)(?:\s+Mods?)?:\*\*?\s*([^\n]+)"),
+        ("Chest Armor", r"(?:\*\*|•|-|\b)(?:Chest(?:\s+Armor)?)(?:\s+Mods?)?:\*\*?\s*([^\n]+)"),
+        ("Leg Armor", r"(?:\*\*|•|-|\b)(?:Legs?|Leg\s+Armor|Boots)(?:\s+Mods?)?:\*\*?\s*([^\n]+)"),
+        ("Class Armor", r"(?:\*\*|•|-|\b)(?:Class\s+Item|Class\s+Armor|Bond|Mark|Cloak)(?:\s+Mods?)?:\*\*?\s*([^\n]+)"),
+    ]
+    for slot_key, pat in regex_slot_patterns:
+        if not armor_mods_map[slot_key]:
+            m_slot = re.search(pat, reply_text or "", re.IGNORECASE)
+            if m_slot:
+                parsed_mods = [
+                    re.sub(r"^\d+x\s*", "", x.strip(" *•-")).strip()
+                    for x in re.split(r",|\+|/", m_slot.group(1))
+                    if x.strip(" *•-")
+                ]
+                armor_mods_map[slot_key] = [pm for pm in parsed_mods if len(pm) >= 3][:3]
+
+    # Check common weapon mods mentioned in reply_text
+    common_weapon_mods = [
+        "Backup Mag", "Major Spec", "Boss Spec", "Minor Spec", "Taken Spec",
+        "Counterbalance Stock", "Quick Access Sling", "Targeting Adjuster",
+        "Icarus Grip", "Freehand Grip", "Radar Tuner", "Sprint Grip",
+        "Adept Range", "Adept Stability", "Adept Handling", "Adept Reload",
+        "Adept Mag", "Adept Targeting", "Adept Counterbalance", "Adept Icarus Grip",
+        "Synergy", "Ballistics", "Tactical", "Bandolier", "Aerodynamics", "Stunloader",
+    ]
+    rec_weapon_mods = [wm for wm in common_weapon_mods if wm.lower() in reply_low]
+
+    # 6. Seasonal Artifact & Artifact Perks extraction
+    artifact_name = ""
+    artifact_perks: List[str] = []
+    if verified_build and isinstance(verified_build.get("artifact"), dict):
+        artifact_name = str(verified_build["artifact"].get("name") or "")
+        raw_ap = verified_build["artifact"].get("perks") or []
+        if isinstance(raw_ap, list):
+            artifact_perks = [str(p).strip() for p in raw_ap if str(p).strip()]
+
+    comp_artifacts = comp_db.get("artifacts") or []
+    if isinstance(comp_artifacts, list):
+        for art_entry in comp_artifacts:
+            if not isinstance(art_entry, dict):
+                continue
+            a_nm = (art_entry.get("name") or "").strip()
+            if a_nm and not artifact_name and a_nm.lower() in reply_low:
+                artifact_name = a_nm
+            for p_entry in art_entry.get("perks") or []:
+                p_nm = (p_entry.get("name") if isinstance(p_entry, dict) else str(p_entry or "")).strip()
+                if p_nm and len(p_nm) >= 4 and p_nm.lower() in reply_low and p_nm not in artifact_perks:
+                    artifact_perks.append(p_nm)
+
     title = (
         verified_build.get("title")
         if verified_build and verified_build.get("title")
@@ -876,6 +967,10 @@ def extract_build_recommendation_blueprint(
         "exoticArmor": exotic_armor_name,
         "armorSet": armor_set_name,
         "recommendedWeapons": rec_weapons[:6],
+        "armorMods": armor_mods_map,
+        "weaponMods": rec_weapon_mods[:3],
+        "artifactName": artifact_name,
+        "artifactPerks": artifact_perks[:7],
     }
 
 # Endpoints
@@ -1835,6 +1930,7 @@ class BungieCustomLoadoutItem(BaseModel):
     sourceCharacterId: Optional[str] = ""
     isEquipped: Optional[bool] = False
     fallbackEquipInstanceId: Optional[str] = ""
+    socketPlugs: Optional[List[Dict[str, Any]]] = []
 
 
 class BungieEquipCustomLoadoutRequest(BaseModel):
@@ -1842,6 +1938,48 @@ class BungieEquipCustomLoadoutRequest(BaseModel):
     targetCharacterId: str
     transferOnly: Optional[bool] = False
     items: List[BungieCustomLoadoutItem]
+
+
+class BungieInsertSocketPlugRequest(BaseModel):
+    membershipType: int
+    characterId: str
+    itemInstanceId: str
+    socketIndex: int
+    plugHash: int
+
+
+@app.post("/api/bungie/item/insert-plug")
+async def post_bungie_insert_plug_endpoint(body: BungieInsertSocketPlugRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+
+    def _do_insert_plug(token: str):
+        return insert_item_socket_plug(
+            access_token=token,
+            membership_type=body.membershipType,
+            character_id=body.characterId,
+            item_instance_id=body.itemInstanceId,
+            socket_index=body.socketIndex,
+            plug_hash=body.plugHash,
+        )
+
+    try:
+        res = await run_in_threadpool(_do_insert_plug, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_insert_plug, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
 
 
 @app.post("/api/bungie/loadout/equip-custom")

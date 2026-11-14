@@ -2739,6 +2739,8 @@ function openItemInspectModal(item) {
       }
     }
 
+    renderInspectItemModSockets(item);
+
     // Render Stat Bars
     const statsListEl = document.getElementById('inspectStatsList');
     if (statsListEl) {
@@ -3218,11 +3220,230 @@ async function executeEquipSavedLoadout() {
 }
 
 /* ==========================================================================
-   DIM-STYLE TACTICAL LOADOUT BUILDER, AUTO-OPTIMIZER & GUARDIAN EQUIPPER
+   DIM-STYLE TACTICAL LOADOUT BUILDER, MOD SOCKET MANAGER & ARTIFACT SELECTOR
    ========================================================================== */
 const CUSTOM_LOADOUTS_STORAGE_KEY = 'felicia_custom_loadouts_v1';
 let activeLoadoutBuilderState = null;
 let activeLbPickerSlot = null;
+
+function getAvailablePlugsForModSocket(item, modSocket) {
+  if (!modSocket) return [];
+  const seenHashes = new Set();
+  const seenNames = new Set();
+  const list = [];
+
+  const addPlug = (p) => {
+    if (!p || !p.plugHash || !p.name) return;
+    const ph = Number(p.plugHash);
+    const nm = String(p.name).trim();
+    const nmLow = nm.toLowerCase();
+    if (nmLow.includes('deprecated')) return;
+    const isEmp = Boolean(p.isEmpty) || nmLow.includes('empty') || nmLow.includes('default');
+    const nameKey = isEmp ? '__empty__' : nmLow;
+    if (seenHashes.has(ph) || seenNames.has(nameKey)) return;
+    seenHashes.add(ph);
+    seenNames.add(nameKey);
+    list.push({
+      plugHash: ph,
+      name: nm,
+      icon: p.icon || '',
+      description: p.description || '',
+      isEmpty: isEmp,
+    });
+  };
+
+  // 1. Current active plug on the socket
+  if (modSocket.plugHash && modSocket.name) {
+    addPlug(modSocket);
+  }
+
+  // 2. Socket's own reusable plugs
+  (modSocket.availablePlugs || []).forEach(addPlug);
+
+  // 3. Manifest PlugSet catalog
+  const catalog = state.bungieData?.modCatalog;
+  if (catalog) {
+    if (modSocket.plugSetHash && catalog.byPlugSet?.[String(modSocket.plugSetHash)]) {
+      catalog.byPlugSet[String(modSocket.plugSetHash)].forEach(addPlug);
+    }
+    if (modSocket.slotType && catalog.bySlotType?.[modSocket.slotType]) {
+      catalog.bySlotType[modSocket.slotType].forEach(addPlug);
+    }
+  }
+
+  list.sort((a, b) => {
+    if (a.isEmpty !== b.isEmpty) return a.isEmpty ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return list;
+}
+
+async function executeSingleItemModInsert(item, socketIndex, plugObj, feedbackEl) {
+  if (!state.bungieData || !state.bungieSession?.access_token) {
+    showToast('Sign in with Bungie.net to apply mods in-game!', 'info');
+    return false;
+  }
+  const charId = item.characterId || getActiveCharacter()?.characterId || state.bungieData?.characters?.[0]?.characterId || '';
+  if (!charId || !item.itemInstanceId) {
+    showToast('Cannot determine target character for mod insertion.', 'error');
+    return false;
+  }
+
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = `Applying '${plugObj.name}' onto ${item.name}...`;
+  }
+  sfx.playTransmit();
+
+  try {
+    const res = await fetch('/api/bungie/item/insert-plug', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        characterId: String(charId),
+        itemInstanceId: String(item.itemInstanceId),
+        socketIndex: Number(socketIndex),
+        plugHash: Number(plugObj.plugHash),
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      throw new Error(data?.detail || `Could not insert mod (HTTP ${res.status}).`);
+    }
+    if (data.refreshed_session) {
+      saveBungieSession(data.refreshed_session);
+    }
+
+    // Update live item socket in memory immediately
+    const targetSock = (item.modSockets || []).find(s => Number(s.socketIndex) === Number(socketIndex));
+    if (targetSock) {
+      targetSock.plugHash = Number(plugObj.plugHash);
+      targetSock.name = plugObj.name;
+      targetSock.icon = plugObj.icon || '';
+      targetSock.description = plugObj.description || '';
+      targetSock.isEmpty = Boolean(plugObj.isEmpty);
+    }
+
+    sfx.playReceive();
+    const msg = `✓ Applied '${plugObj.name}' onto ${item.name}!`;
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden', 'error');
+      feedbackEl.textContent = msg;
+    }
+    showToast(msg, 'info');
+    loadBungieInventory(true);
+    return true;
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+    showToast(`Mod error: ${err.message}`, 'error');
+    return false;
+  }
+}
+
+function renderInspectItemModSockets(item) {
+  const sec = document.getElementById('inspectModsSection');
+  if (!sec) return;
+  const modSockets = item?.modSockets || [];
+  if (!item || (item.category !== 'Weapon' && item.category !== 'Armor') || modSockets.length === 0) {
+    sec.classList.add('hidden');
+    sec.innerHTML = '';
+    return;
+  }
+
+  sec.classList.remove('hidden');
+  const renderSocketsView = (activeSocketIdx = null) => {
+    const activeSock = activeSocketIdx !== null
+      ? modSockets.find(s => Number(s.socketIndex) === Number(activeSocketIdx))
+      : null;
+    const availPlugs = activeSock ? getAvailablePlugsForModSocket(item, activeSock) : [];
+
+    sec.innerHTML = `
+      <div class="inspect-section-label" style="margin-top:12px;">
+        🔧 ${item.category === 'Weapon' ? 'WEAPON MOD SOCKET' : 'ARMOR MOD SOCKETS'} (CLICK TO CHANGE MOD IN-GAME)
+      </div>
+      <div class="lb-mod-sockets-row" style="margin-top:6px;">
+        ${modSockets.map((ms, idx) => {
+          const isOpen = activeSock && Number(activeSock.socketIndex) === Number(ms.socketIndex);
+          const mIcon = ms.icon ? `<img src="https://www.bungie.net${ms.icon}" alt="">` : '<span class="lb-mod-empty-dot">◇</span>';
+          return `
+            <button type="button" class="lb-mod-socket-btn ${ms.isEmpty ? 'is-empty' : 'is-filled'} ${isOpen ? 'is-active' : ''}" data-sidx="${ms.socketIndex}" title="${escapeHtml(ms.description || ms.name)}">
+              ${mIcon}
+              <span>${escapeHtml(ms.name || `Mod Socket #${idx + 1}`)}</span>
+              <span class="lb-mod-caret">▾</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      ${activeSock ? `
+        <div class="inspect-inline-mod-picker">
+          <div class="inspect-mod-picker-top">
+            <span>Select Mod for <strong>Socket #${Number(activeSock.socketIndex) + 1}</strong> (${availPlugs.length} available)</span>
+            <button type="button" class="btn-mini-action" data-role="close-inspect-mod">Close</button>
+          </div>
+          <div class="inspect-mod-picker-grid">
+            ${availPlugs.map(p => {
+              const isCur = Number(p.plugHash) === Number(activeSock.plugHash);
+              return `
+                <button type="button" class="lb-mod-option-btn ${isCur ? 'is-selected' : ''}" data-phash="${p.plugHash}" title="${escapeHtml(p.description || p.name)}">
+                  ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : '<span class="lb-mod-empty-dot">◇</span>'}
+                  <div class="lb-mod-opt-text">
+                    <div class="lb-mod-opt-name">${escapeHtml(p.name)}</div>
+                    ${p.description ? `<div class="lb-mod-opt-desc">${escapeHtml(p.description)}</div>` : ''}
+                  </div>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    sec.querySelectorAll('.lb-mod-socket-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sfx.playChirp();
+        const sidx = Number(btn.getAttribute('data-sidx'));
+        if (activeSocketIdx === sidx) {
+          renderSocketsView(null);
+        } else {
+          renderSocketsView(sidx);
+        }
+      });
+    });
+
+    const closeBtn = sec.querySelector('[data-role="close-inspect-mod"]');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => renderSocketsView(null));
+    }
+
+    sec.querySelectorAll('.lb-mod-option-btn').forEach(optBtn => {
+      optBtn.addEventListener('click', async () => {
+        const phash = Number(optBtn.getAttribute('data-phash'));
+        const chosenPlug = availPlugs.find(x => Number(x.plugHash) === phash);
+        if (!chosenPlug || !activeSock) return;
+        const fbEl = document.getElementById('inspectTransferFeedback');
+        optBtn.disabled = true;
+        const ok = await executeSingleItemModInsert(item, activeSock.socketIndex, chosenPlug, fbEl);
+        if (ok) {
+          renderSocketsView(null);
+        } else {
+          optBtn.disabled = false;
+        }
+      });
+    });
+  };
+
+  renderSocketsView(null);
+}
 
 function getCustomLoadouts() {
   try {
@@ -3263,6 +3484,10 @@ function saveCustomLoadoutToStorage(draft) {
     armorSet: draft.armorSet || '',
     recommendedWeapons: draft.recommendedWeapons || [],
     slotInstanceIds,
+    slotMods: draft.slotMods || {},
+    artifact: draft.artifact || null,
+    artifactPresetKey: draft.artifactPresetKey || '',
+    selectedArtifactPerks: draft.selectedArtifactPerks || [],
     updatedAt: Date.now(),
   };
 
@@ -3636,6 +3861,102 @@ function assembleLoadoutFromBlueprint(blueprint = {}) {
     }
   });
 
+  // 4. Auto-populate Weapon Mods & Armor Mods (from saved slotMods or AI blueprint recommendations)
+  const slotMods = blueprint.slotMods ? JSON.parse(JSON.stringify(blueprint.slotMods)) : {};
+  const recArmorMods = blueprint.armorMods || {};
+  const recWeaponMods = blueprint.weaponMods || [];
+
+  const matchModNameOnItem = (it, modNameRaw, usedSocketIndexes) => {
+    const cleanTarget = String(modNameRaw || '').toLowerCase().replace(/\bmod\b/g, '').trim();
+    if (!cleanTarget || cleanTarget.length < 3) return null;
+    for (const ms of (it.modSockets || [])) {
+      if (usedSocketIndexes.has(ms.socketIndex)) continue;
+      const avail = getAvailablePlugsForModSocket(it, ms);
+      const hit = avail.find(p => {
+        if (p.isEmpty) return false;
+        const pLow = p.name.toLowerCase();
+        return pLow === cleanTarget || pLow.includes(cleanTarget) || cleanTarget.includes(pLow.replace(/\bmod\b/g, '').trim());
+      });
+      if (hit) {
+        usedSocketIndexes.add(ms.socketIndex);
+        return { socketIndex: ms.socketIndex, plug: hit };
+      }
+    }
+    return null;
+  };
+
+  ['Kinetic', 'Energy', 'Heavy'].forEach((wSlot, wIdx) => {
+    const it = slots[wSlot];
+    if (!it || slotMods[wSlot]) return;
+    slotMods[wSlot] = {};
+    const targetWMod = recWeaponMods[wIdx] || recWeaponMods[0];
+    if (targetWMod) {
+      const usedSet = new Set();
+      const matched = matchModNameOnItem(it, targetWMod, usedSet);
+      if (matched) {
+        slotMods[wSlot][matched.socketIndex] = {
+          socketIndex: matched.socketIndex,
+          plugHash: matched.plug.plugHash,
+          name: matched.plug.name,
+          icon: matched.plug.icon,
+          description: matched.plug.description,
+          isEmpty: false,
+        };
+      }
+    }
+  });
+
+  ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'].forEach(aSlot => {
+    const it = slots[aSlot];
+    if (!it || slotMods[aSlot]) return;
+    slotMods[aSlot] = {};
+    const recList = recArmorMods[aSlot] || [];
+    if (recList.length > 0) {
+      const usedSet = new Set();
+      recList.forEach(mName => {
+        const matched = matchModNameOnItem(it, mName, usedSet);
+        if (matched) {
+          slotMods[aSlot][matched.socketIndex] = {
+            socketIndex: matched.socketIndex,
+            plugHash: matched.plug.plugHash,
+            name: matched.plug.name,
+            icon: matched.plug.icon,
+            description: matched.plug.description,
+            isEmpty: false,
+          };
+        }
+      });
+    }
+  });
+
+  // 5. Resolve Seasonal Artifact & Selected Artifact Perks (from character, saved loadouts, or AI blueprint)
+  const artBundle = collectArtifactPresetsAndPerks(character?.className || className, blueprint);
+  const chosenPresetKey = blueprint.artifactPresetKey || artBundle.defaultPresetKey;
+  const chosenPreset = artBundle.presets.find(p => p.key === chosenPresetKey) || artBundle.presets[0] || null;
+
+  const artifactObj = blueprint.artifact || (chosenPreset ? {
+    name: chosenPreset.artifactName,
+    icon: chosenPreset.icon,
+    powerBonus: chosenPreset.powerBonus,
+    pointsAcquired: chosenPreset.pointsAcquired,
+    sourceLabel: chosenPreset.label,
+  } : null);
+
+  let selectedArtifactPerks = [];
+  if (Array.isArray(blueprint.selectedArtifactPerks) && blueprint.selectedArtifactPerks.length > 0) {
+    selectedArtifactPerks = blueprint.selectedArtifactPerks;
+  } else if (Array.isArray(blueprint.artifactPerks) && blueprint.artifactPerks.length > 0) {
+    const recPerkLows = blueprint.artifactPerks.map(p => String(p).toLowerCase().trim());
+    selectedArtifactPerks = artBundle.allPerks.filter(pk =>
+      recPerkLows.some(rl => pk.name.toLowerCase().includes(rl) || rl.includes(pk.name.toLowerCase()))
+    );
+    if (selectedArtifactPerks.length === 0 && chosenPreset?.perks?.length) {
+      selectedArtifactPerks = [...chosenPreset.perks];
+    }
+  } else if (chosenPreset?.perks?.length) {
+    selectedArtifactPerks = [...chosenPreset.perks];
+  }
+
   return {
     id: blueprint.id || '',
     title,
@@ -3650,10 +3971,163 @@ function assembleLoadoutFromBlueprint(blueprint = {}) {
     exoticArmor: blueprint.exoticArmor || chosenExoticArmor?.name || '',
     armorSet: blueprint.armorSet || preferredSetName || '',
     recommendedWeapons: blueprint.recommendedWeapons || [],
+    armorMods: recArmorMods,
+    weaponMods: recWeaponMods,
     missingExoticArmor,
     missingWeapons,
     slots,
+    slotMods,
+    artifact: artifactObj,
+    artifactPresetKey: chosenPreset?.key || '',
+    selectedArtifactPerks,
   };
+}
+
+function collectArtifactPresetsAndPerks(targetClassName, blueprint = {}) {
+  const data = state.bungieData;
+  const presets = [];
+  const allPerks = [];
+  const seenPerkNames = new Set();
+
+  const registerPerk = (p) => {
+    if (!p) return null;
+    const nm = String(typeof p === 'string' ? p : (p.name || '')).trim();
+    if (!nm) return null;
+    const low = nm.toLowerCase();
+    if (!seenPerkNames.has(low)) {
+      seenPerkNames.add(low);
+      allPerks.push({
+        hash: p.hash || 0,
+        name: nm,
+        icon: p.icon || '',
+        description: p.description || '',
+      });
+    }
+    return allPerks.find(x => x.name.toLowerCase() === low);
+  };
+
+  if (data) {
+    const chars = data.characters || [];
+    const primaryChar = chars.find(c => (c.className || '').toLowerCase() === (targetClassName || '').toLowerCase()) || chars[0];
+    const orderedChars = primaryChar
+      ? [primaryChar, ...chars.filter(c => c.characterId !== primaryChar.characterId)]
+      : chars;
+
+    orderedChars.forEach(ch => {
+      if (ch.artifact && ch.artifact.name) {
+        const cPerks = (ch.artifact.activePerks || []).map(registerPerk).filter(Boolean);
+        presets.push({
+          key: `live_${ch.characterId}`,
+          label: `✦ Live ${ch.className} Artifact — ${ch.artifact.name} (+${ch.artifact.powerBonus || 0} Power, ${cPerks.length} Perks)`,
+          artifactName: ch.artifact.name,
+          icon: ch.artifact.icon || '',
+          powerBonus: ch.artifact.powerBonus || 0,
+          pointsAcquired: ch.artifact.pointsAcquired || cPerks.length,
+          perks: cPerks,
+        });
+      }
+      (ch.loadouts || []).forEach(ld => {
+        const ldArt = ld.artifact || ch.artifact;
+        if (ldArt && ldArt.name) {
+          const lPerks = (ldArt.activePerks || []).map(registerPerk).filter(Boolean);
+          presets.push({
+            key: `ld_${ch.characterId}_${ld.loadoutIndex}`,
+            label: `📋 ${ch.className} Loadout #${ld.slotNumber}: ${ld.name} — ${ldArt.name} (${lPerks.length} Perks)`,
+            artifactName: ldArt.name,
+            icon: ldArt.icon || '',
+            powerBonus: ldArt.powerBonus || 0,
+            pointsAcquired: lPerks.length,
+            perks: lPerks,
+            loadoutRef: { character: ch, loadout: ld },
+          });
+        }
+      });
+    });
+  }
+
+  // Also include any AI-recommended artifact perks from blueprint
+  (blueprint.artifactPerks || []).forEach(pName => registerPerk({ name: pName, description: 'Recommended by F.E.L.I.C.I.A.' }));
+  (blueprint.selectedArtifactPerks || []).forEach(registerPerk);
+
+  return {
+    presets,
+    allPerks,
+    defaultPresetKey: presets[0]?.key || '',
+  };
+}
+
+function getEffectiveModSocketsForSlot(draft, slotName) {
+  const it = draft?.slots?.[slotName];
+  if (!it || !Array.isArray(it.modSockets)) return [];
+  const stagedMap = draft?.slotMods?.[slotName] || {};
+
+  return it.modSockets.map(ms => {
+    const staged = stagedMap[ms.socketIndex];
+    if (staged && staged.plugHash) {
+      return {
+        ...ms,
+        plugHash: Number(staged.plugHash),
+        name: staged.name || ms.name,
+        icon: staged.icon !== undefined ? staged.icon : ms.icon,
+        description: staged.description !== undefined ? staged.description : ms.description,
+        isEmpty: Boolean(staged.isEmpty),
+        isStaged: Number(staged.plugHash) !== Number(ms.plugHash),
+      };
+    }
+    return { ...ms, isStaged: false };
+  });
+}
+
+function convertInGameSavedLoadoutToDraft(character, loadout) {
+  const subElem = loadout.subclass?.element || character?.subclass?.element || 'Solar';
+  const draft = assembleLoadoutFromBlueprint({
+    title: `${loadout.name || `Loadout #${loadout.slotNumber}`} (${character.className})`,
+    className: character.className,
+    subclass: subElem,
+    mode: 'PVE',
+    super: loadout.subclass?.super?.name || '',
+    aspects: (loadout.subclass?.aspects || []).map(a => a.name),
+    fragments: (loadout.subclass?.fragments || []).map(f => f.name),
+    artifactPresetKey: `ld_${character.characterId}_${loadout.loadoutIndex}`,
+  });
+
+  if (loadout.subclass?.itemInstanceId) {
+    draft.subclassItem = loadout.subclass;
+  }
+
+  // Map saved weapons & armor to their live full items
+  [...(loadout.weapons || []), ...(loadout.armor || [])].forEach(slim => {
+    const full = findLiveItemByInstanceId(slim.itemInstanceId);
+    if (full && full.slot && draft.slots[full.slot] !== undefined) {
+      draft.slots[full.slot] = full;
+      // Match saved loadout armor mods onto modSockets if present
+      if (Array.isArray(slim.mods) && slim.mods.length > 0 && Array.isArray(full.modSockets)) {
+        draft.slotMods[full.slot] = {};
+        const usedIdx = new Set();
+        slim.mods.forEach(sm => {
+          for (const ms of full.modSockets) {
+            if (usedIdx.has(ms.socketIndex)) continue;
+            const avail = getAvailablePlugsForModSocket(full, ms);
+            const hit = avail.find(p => !p.isEmpty && p.name.toLowerCase() === (sm.name || '').toLowerCase());
+            if (hit) {
+              usedIdx.add(ms.socketIndex);
+              draft.slotMods[full.slot][ms.socketIndex] = {
+                socketIndex: ms.socketIndex,
+                plugHash: hit.plugHash,
+                name: hit.name,
+                icon: hit.icon,
+                description: hit.description,
+                isEmpty: false,
+              };
+              break;
+            }
+          }
+        });
+      }
+    }
+  });
+
+  return draft;
 }
 
 function hydrateSavedCustomLoadout(savedObj) {
@@ -3670,6 +4144,18 @@ function hydrateSavedCustomLoadout(savedObj) {
         }
       }
     });
+  }
+  if (savedObj.slotMods) {
+    base.slotMods = JSON.parse(JSON.stringify(savedObj.slotMods));
+  }
+  if (savedObj.artifact) {
+    base.artifact = savedObj.artifact;
+  }
+  if (savedObj.artifactPresetKey) {
+    base.artifactPresetKey = savedObj.artifactPresetKey;
+  }
+  if (Array.isArray(savedObj.selectedArtifactPerks)) {
+    base.selectedArtifactPerks = savedObj.selectedArtifactPerks;
   }
   return base;
 }
@@ -3735,6 +4221,10 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
           const iconUrl = it.icon ? `https://www.bungie.net${it.icon}` : '';
           const exoClass = it.isExotic ? 'is-exotic' : '';
           const locBadge = formatItemLocationBadge(it, assembled.characterId);
+          const effMods = getEffectiveModSocketsForSlot(assembled, slotName).filter(m => !m.isEmpty);
+          const modsSummary = effMods.length > 0
+            ? `<div class="chat-dim-slot-mods">${effMods.slice(0, 2).map(m => `<span>🔧 ${escapeHtml(m.name)}</span>`).join('')}</div>`
+            : '';
           return `<div class="chat-dim-mini-slot ${exoClass}" title="${escapeHtml(it.name)} (${escapeHtml(slotName)})">
             <img src="${iconUrl}" alt="" class="chat-dim-slot-icon" loading="lazy">
             <div class="chat-dim-slot-info">
@@ -3743,6 +4233,7 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
                 ${locBadge}
               </div>
               <div class="chat-dim-slot-name">${escapeHtml(it.name)}</div>
+              ${modsSummary}
             </div>
           </div>`;
         }).join('')}
@@ -3759,6 +4250,9 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
   const setBonusSummary = activeSets.length > 0
     ? activeSets.map(s => `${s.setObj.name} (${s.count >= 4 ? '4pc + 2pc' : '2pc'})`).join(' • ')
     : '';
+  const artSummary = assembled.artifact?.name
+    ? `<div class="chat-dim-art-banner">🔮 Seasonal Artifact: <strong>${escapeHtml(assembled.artifact.name)}</strong> ${(assembled.selectedArtifactPerks || []).length > 0 ? `• Perks: ${assembled.selectedArtifactPerks.slice(0, 5).map(p => `<span class="chat-art-perk-pill">${escapeHtml(p.name)}</span>`).join(' ')}` : ''}</div>`
+    : '';
 
   containerEl.innerHTML = `
     <div class="chat-dim-loadout-card">
@@ -3772,6 +4266,7 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
 
       ${missingAlerts.length > 0 ? `<div class="chat-dim-missing-banner">⚠ ${missingAlerts.join(' ')}</div>` : ''}
       ${setBonusSummary ? `<div class="chat-dim-set-banner">⛊ Active Armor Set Synergy: <strong>${escapeHtml(setBonusSummary)}</strong></div>` : ''}
+      ${artSummary}
 
       ${itemsPreviewHtml}
 
@@ -3779,10 +4274,10 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
 
       <div class="chat-dim-actions">
         <button type="button" class="btn-item-action btn-lb-equip" data-role="chat-equip-now">
-          ⚡ Equip Build on ${escapeHtml(assembled.className)}
+          ⚡ Equip Build &amp; Mods on ${escapeHtml(assembled.className)}
         </button>
         <button type="button" class="btn-item-action" data-role="chat-open-builder">
-          🛠️ Customize in Loadout Builder
+          🛠️ Customize Gear, Mods &amp; Artifact
         </button>
         <button type="button" class="btn-item-action btn-ask-felicia" data-role="chat-save-loadout">
           💾 Save to My Loadouts
@@ -3804,7 +4299,7 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
         return;
       }
       const freshAssembled = assembleLoadoutFromBlueprint(blueprint);
-      await executeEquipCustomLoadout(freshAssembled, feedbackEl, equipBtn, false);
+      await executeEquipCustomLoadout(freshAssembled, feedbackEl, equipBtn, false, false);
       renderInlineChatLoadoutCard(containerEl, blueprint);
     });
   }
@@ -3843,6 +4338,7 @@ function openLoadoutBuilderModal(initialLoadout = null) {
     });
   }
 
+  if (!initialLoadout.slotMods) initialLoadout.slotMods = {};
   activeLoadoutBuilderState = initialLoadout;
   activeLbPickerSlot = null;
 
@@ -3880,7 +4376,7 @@ function renderLoadoutBuilderWorkspace() {
 
   const equipBtn = document.getElementById('btnLbEquipNow');
   if (equipBtn) {
-    equipBtn.textContent = `⚡ Equip Loadout on ${draft.className}`;
+    equipBtn.textContent = `⚡ Equip Loadout & Mods on ${draft.className}`;
   }
 
   // 1. Render AI Blueprint Reference Banner (Super, Aspects, Fragments, Missing Gear)
@@ -3906,15 +4402,80 @@ function renderLoadoutBuilderWorkspace() {
     }
   }
 
-  // 2. Render 2-Column Slots Workspace
+  // 2. Render Seasonal Artifact Selector + 2-Column Slots Workspace (with Interactive Weapon & Armor Mod Sockets)
   const workspace = document.getElementById('lbSlotsWorkspace');
   if (!workspace) return;
 
   const { totals, overallTotal, activeSets } = computeLoadoutArmorTelemetry(draft.slots);
+  const artBundle = collectArtifactPresetsAndPerks(draft.className, draft);
+  const selectedPerkNamesLow = new Set((draft.selectedArtifactPerks || []).map(p => (p.name || '').toLowerCase()));
+
+  const artifactCardHtml = `
+    <div class="saved-loadout-artifact-card lb-artifact-selector-card">
+      <div class="lb-artifact-top-row">
+        <div class="saved-loadout-artifact-header" style="margin-bottom:0;">
+          <div class="dim-artifact-icon-wrap" style="margin-right:10px;">
+            ${draft.artifact?.icon ? `<img src="https://www.bungie.net${draft.artifact.icon}" alt="">` : '<span style="font-size:18px;">🔮</span>'}
+          </div>
+          <div>
+            <div style="font-family:var(--font-tactical); font-size:11px; color:#C084FC; font-weight:700; letter-spacing:0.8px;">
+              SEASONAL ARTIFACT &amp; LOADOUT PERKS (${(draft.selectedArtifactPerks || []).length} SELECTED)
+            </div>
+            <div style="font-family:var(--font-display); font-size:15px; font-weight:700; color:#FFFFFF;">
+              ${escapeHtml(draft.artifact?.name || 'Seasonal Artifact')}
+              ${draft.artifact?.powerBonus ? `<span style="font-size:12px; color:#E9D5FF; margin-left:6px; font-weight:500;">(✦ +${draft.artifact.powerBonus} Bonus Power)</span>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="lb-artifact-controls">
+          ${artBundle.presets.length > 0 ? `
+            <label class="lb-field-label" style="min-width:250px;">
+              <span>SELECT ARTIFACT FROM LOADOUTS</span>
+              <select id="lbArtifactPresetSelect" class="lb-select">
+                ${artBundle.presets.map(pr => `
+                  <option value="${escapeHtml(pr.key)}" ${pr.key === draft.artifactPresetKey ? 'selected' : ''}>
+                    ${escapeHtml(pr.label)}
+                  </option>
+                `).join('')}
+              </select>
+            </label>
+          ` : ''}
+          ${artBundle.presets.some(p => p.loadoutRef) ? `
+            <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnLbImportPresetLoadout" title="Import all Weapons, Armor, Mods, Subclass &amp; Artifact from the selected Saved In-Game Loadout">
+              📥 Import Full Loadout Gear &amp; Mods
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      ${artBundle.allPerks.length > 0 ? `
+        <div class="lb-artifact-perks-instruction">
+          Click any unlocked Seasonal Artifact Perk below to toggle it in this Loadout (or select a Saved In-Game Loadout above to load its Artifact Perks):
+        </div>
+        <div class="artifact-perks-wrap lb-artifact-perks-grid">
+          ${artBundle.allPerks.map((p, idx) => {
+            const isSel = selectedPerkNamesLow.has((p.name || '').toLowerCase());
+            return `
+              <button type="button" class="artifact-perk-chip lb-art-perk-toggle ${isSel ? 'is-selected' : ''}" data-perk-idx="${idx}" title="${escapeHtml(p.description || p.name)}">
+                ${p.icon ? `<img src="https://www.bungie.net${p.icon}" alt="">` : '<span style="color:#C084FC;">✦</span>'}
+                <span>${escapeHtml(p.name)}</span>
+                <span class="lb-art-perk-check">${isSel ? '✓' : '+'}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div style="font-size:12px; color:#94A3B8; margin-top:6px;">
+          Sign in with Bungie.net to inspect and select your unlocked Seasonal Artifact perks across your character &amp; saved loadouts.
+        </div>
+      `}
+    </div>
+  `;
 
   const renderSlotCard = (slotName, category) => {
     const it = draft.slots?.[slotName];
-    const isSelectedSlot = activeLbPickerSlot && activeLbPickerSlot.slotName === slotName;
+    const isSelectedSlot = activeLbPickerSlot && activeLbPickerSlot.slotName === slotName && activeLbPickerSlot.mode === 'item';
     if (!it) {
       return `
         <div class="lb-slot-card empty ${isSelectedSlot ? 'active-slot' : ''}" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">
@@ -3966,6 +4527,40 @@ function renderLoadoutBuilderWorkspace() {
       `;
     }
 
+    // Render Interactive Weapon Mod / Armor Mod Sockets
+    const effModSockets = getEffectiveModSocketsForSlot(draft, slotName);
+    const modSocketsHtml = effModSockets.length > 0
+      ? `
+        <div class="lb-mod-sockets-row" data-role="mod-sockets-strip">
+          <span class="lb-mods-row-lbl">🔧 MODS:</span>
+          ${effModSockets.map((ms, mIdx) => {
+            const isModPickerActive = activeLbPickerSlot
+              && activeLbPickerSlot.mode === 'mod'
+              && activeLbPickerSlot.slotName === slotName
+              && Number(activeLbPickerSlot.socketIndex) === Number(ms.socketIndex);
+            const mIcon = ms.icon
+              ? `<img src="https://www.bungie.net${ms.icon}" alt="">`
+              : '<span class="lb-mod-empty-dot">◇</span>';
+            const displayModName = ms.isEmpty
+              ? (category === 'Weapon' ? 'Add Weapon Mod' : `Mod Slot #${mIdx + 1}`)
+              : ms.name;
+            return `
+              <button type="button"
+                class="lb-mod-socket-btn ${ms.isEmpty ? 'is-empty' : 'is-filled'} ${ms.isStaged ? 'is-staged' : ''} ${isModPickerActive ? 'is-active' : ''}"
+                data-mod-slot="${escapeHtml(slotName)}"
+                data-mod-cat="${escapeHtml(category)}"
+                data-socket-idx="${ms.socketIndex}"
+                title="${escapeHtml(ms.description || ms.name || 'Click to choose mod')}">
+                ${mIcon}
+                <span>${escapeHtml(displayModName)}</span>
+                <span class="lb-mod-caret">▾</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `
+      : '';
+
     return `
       <div class="lb-slot-card ${exoClass} ${isSelectedSlot ? 'active-slot' : ''}" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">
         <img src="${iconUrl}" alt="" class="lb-slot-icon" loading="lazy">
@@ -3976,6 +4571,7 @@ function renderLoadoutBuilderWorkspace() {
           </div>
           <div class="lb-slot-name">${escapeHtml(it.name)}</div>
           ${subDetailsHtml}
+          ${modSocketsHtml}
         </div>
         <button type="button" class="btn-tactical btn-secondary btn-sm btn-lb-swap" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">🔄 Swap</button>
       </div>
@@ -4001,10 +4597,12 @@ function renderLoadoutBuilderWorkspace() {
     : '';
 
   workspace.innerHTML = `
+    ${artifactCardHtml}
+
     <div class="saved-loadout-columns lb-two-columns">
-      <!-- LEFT COLUMN: SUBCLASS + 3 WEAPON SLOTS -->
+      <!-- LEFT COLUMN: SUBCLASS + 3 WEAPON SLOTS (WITH WEAPON MODS) -->
       <div class="loadout-col-panel">
-        <div class="loadout-col-header">⚔️ SUBCLASS &amp; WEAPON ARSENAL (CLICK ANY SLOT TO SWAP)</div>
+        <div class="loadout-col-header">⚔️ SUBCLASS &amp; WEAPON ARSENAL (SWAP GEAR OR APPLY WEAPON MODS)</div>
         <div class="lb-slots-stack">
           <div class="lb-slot-card subclass-slot-card">
             ${subIconHtml}
@@ -4025,9 +4623,9 @@ function renderLoadoutBuilderWorkspace() {
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: 5 ARMOR SLOTS + LIVE 6-STAT SUMMARY -->
+      <!-- RIGHT COLUMN: 5 ARMOR SLOTS + ARMOR MOD SOCKETS + LIVE 6-STAT SUMMARY -->
       <div class="loadout-col-panel">
-        <div class="loadout-col-header">🛡️ ARMOR RIG &amp; COMBINED STAT TELEMETRY (${overallTotal} TOTAL)</div>
+        <div class="loadout-col-header">🛡️ ARMOR RIG, MOD SOCKETS &amp; STAT TELEMETRY (${overallTotal} TOTAL)</div>
         <div class="lb-armor-stats-strip">
           ${Object.entries(totals).map(([sName, sVal]) => {
             const isWarnPvEHealth = draft.mode === 'PVE' && sName === 'Health' && sVal >= 10;
@@ -4050,8 +4648,82 @@ function renderLoadoutBuilderWorkspace() {
     </div>
   `;
 
+  // Wire Artifact Preset Selector
+  const artPresetSelect = workspace.querySelector('#lbArtifactPresetSelect');
+  if (artPresetSelect) {
+    artPresetSelect.addEventListener('change', () => {
+      sfx.playChirp();
+      const chosenKey = artPresetSelect.value;
+      const chosenPr = artBundle.presets.find(p => p.key === chosenKey);
+      if (chosenPr) {
+        draft.artifactPresetKey = chosenPr.key;
+        draft.artifact = {
+          name: chosenPr.artifactName,
+          icon: chosenPr.icon,
+          powerBonus: chosenPr.powerBonus,
+          pointsAcquired: chosenPr.pointsAcquired,
+          sourceLabel: chosenPr.label,
+        };
+        draft.selectedArtifactPerks = [...(chosenPr.perks || [])];
+        renderLoadoutBuilderWorkspace();
+        showToast(`Loaded Artifact & ${draft.selectedArtifactPerks.length} Perks from ${chosenPr.label}!`, 'info');
+      }
+    });
+  }
+
+  // Wire Import Full Saved Loadout button
+  const btnImportPreset = workspace.querySelector('#btnLbImportPresetLoadout');
+  if (btnImportPreset) {
+    btnImportPreset.addEventListener('click', () => {
+      const chosenPr = artBundle.presets.find(p => p.key === draft.artifactPresetKey) || artBundle.presets.find(p => p.loadoutRef);
+      if (!chosenPr || !chosenPr.loadoutRef) {
+        showToast('Select one of your Saved In-Game Loadouts in the Artifact dropdown first to import its full gear & mods.', 'info');
+        return;
+      }
+      sfx.playReceive();
+      const imported = convertInGameSavedLoadoutToDraft(chosenPr.loadoutRef.character, chosenPr.loadoutRef.loadout);
+      openLoadoutBuilderModal(imported);
+      showToast(`Imported full gear, mods & artifact from '${chosenPr.loadoutRef.loadout.name}'!`, 'info');
+    });
+  }
+
+  // Wire Artifact Perk Toggle Chips
+  workspace.querySelectorAll('.lb-art-perk-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.playChirp();
+      const idx = Number(btn.getAttribute('data-perk-idx'));
+      const perkObj = artBundle.allPerks[idx];
+      if (!perkObj) return;
+      if (!Array.isArray(draft.selectedArtifactPerks)) draft.selectedArtifactPerks = [];
+      const existingIdx = draft.selectedArtifactPerks.findIndex(
+        x => (x.name || '').toLowerCase() === (perkObj.name || '').toLowerCase()
+      );
+      if (existingIdx >= 0) {
+        draft.selectedArtifactPerks.splice(existingIdx, 1);
+      } else {
+        draft.selectedArtifactPerks.push(perkObj);
+      }
+      renderLoadoutBuilderWorkspace();
+    });
+  });
+
+  // Wire Weapon Mod & Armor Mod Socket Buttons (prevent bubbling to slot swap)
+  workspace.querySelectorAll('.lb-mod-socket-btn').forEach(modBtn => {
+    modBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const sName = modBtn.getAttribute('data-mod-slot');
+      const cat = modBtn.getAttribute('data-mod-cat');
+      const sockIdx = Number(modBtn.getAttribute('data-socket-idx'));
+      if (sName && !Number.isNaN(sockIdx)) {
+        openLbModSocketPicker(sName, cat, sockIdx);
+      }
+    });
+  });
+
+  // Wire Slot Swap Cards
   workspace.querySelectorAll('.lb-slot-card[data-slot]').forEach(card => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('.lb-mod-sockets-row')) return;
       const sName = card.getAttribute('data-slot');
       const cat = card.getAttribute('data-category');
       if (sName && cat) {
@@ -4066,7 +4738,7 @@ function openLbSlotPicker(slotName, category) {
   const draft = activeLoadoutBuilderState;
   if (!draft) return;
 
-  activeLbPickerSlot = { slotName, category };
+  activeLbPickerSlot = { mode: 'item', slotName, category };
   const drawer = document.getElementById('lbSlotPickerDrawer');
   const labelEl = document.getElementById('lbPickerSlotLabel');
   const titleEl = document.getElementById('lbPickerTitle');
@@ -4076,7 +4748,36 @@ function openLbSlotPicker(slotName, category) {
   drawer.classList.remove('hidden');
   if (labelEl) labelEl.textContent = `SWAP ${slotName.toUpperCase()} // ${draft.className.toUpperCase()}`;
   if (titleEl) titleEl.textContent = `Select ${slotName} from Inventory & Vault`;
-  if (searchInput) searchInput.value = '';
+  if (searchInput) {
+    searchInput.placeholder = 'Filter by name, perk, set, or element...';
+    searchInput.value = '';
+  }
+
+  renderLbSlotPickerItems('');
+  renderLoadoutBuilderWorkspace();
+  drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openLbModSocketPicker(slotName, category, socketIndex) {
+  sfx.playChirp();
+  const draft = activeLoadoutBuilderState;
+  const item = draft?.slots?.[slotName];
+  if (!draft || !item) return;
+
+  activeLbPickerSlot = { mode: 'mod', slotName, category, socketIndex: Number(socketIndex) };
+  const drawer = document.getElementById('lbSlotPickerDrawer');
+  const labelEl = document.getElementById('lbPickerSlotLabel');
+  const titleEl = document.getElementById('lbPickerTitle');
+  const searchInput = document.getElementById('lbPickerSearchInput');
+
+  if (!drawer) return;
+  drawer.classList.remove('hidden');
+  if (labelEl) labelEl.textContent = `🔧 SOCKET ${category.toUpperCase()} MOD // ${slotName.toUpperCase()} — ${item.name.toUpperCase()}`;
+  if (titleEl) titleEl.textContent = `Select Mod for ${item.name} (Socket #${Number(socketIndex) + 1})`;
+  if (searchInput) {
+    searchInput.placeholder = 'Search mods by name or effect (e.g. Siphon, Surge, Kickstart, Spec, Stat)...';
+    searchInput.value = '';
+  }
 
   renderLbSlotPickerItems('');
   renderLoadoutBuilderWorkspace();
@@ -4089,8 +4790,93 @@ function renderLbSlotPickerItems(searchQuery = '') {
   const grid = document.getElementById('lbPickerGrid');
   if (!draft || !picker || !grid) return;
 
-  const { weapons, armor } = collectAllOwnedGearForLoadout(draft.className);
   const qLow = (searchQuery || '').toLowerCase().trim();
+
+  // MODE 1: WEAPON MOD OR ARMOR MOD PICKER
+  if (picker.mode === 'mod') {
+    const item = draft.slots?.[picker.slotName];
+    const effSockets = getEffectiveModSocketsForSlot(draft, picker.slotName);
+    const targetSocket = effSockets.find(s => Number(s.socketIndex) === Number(picker.socketIndex));
+    if (!item || !targetSocket) {
+      grid.innerHTML = `<div style="padding:14px; color:#94A3B8; font-size:13px;">Mod socket not found on this item.</div>`;
+      return;
+    }
+
+    let modPool = getAvailablePlugsForModSocket(item, targetSocket);
+    if (qLow) {
+      modPool = modPool.filter(m =>
+        m.name.toLowerCase().includes(qLow) || (m.description || '').toLowerCase().includes(qLow)
+      );
+    }
+
+    if (modPool.length === 0) {
+      grid.innerHTML = `<div style="padding:14px; color:#94A3B8; font-size:13px;">No matching mods found for "${escapeHtml(searchQuery)}".</div>`;
+      return;
+    }
+
+    grid.innerHTML = modPool.map(m => {
+      const isCurrent = Number(m.plugHash) === Number(targetSocket.plugHash);
+      const iconHtml = m.icon
+        ? `<img src="https://www.bungie.net${m.icon}" alt="" class="lb-picker-item-icon" loading="lazy">`
+        : `<div class="lb-slot-icon-placeholder" style="width:40px;height:40px;font-size:16px;">◇</div>`;
+      return `
+        <div class="lb-picker-item-btn lb-picker-mod-card ${isCurrent ? 'is-selected' : ''}" data-phash="${m.plugHash}">
+          ${iconHtml}
+          <div class="lb-picker-item-info" style="flex:1;">
+            <div class="lb-picker-item-top">
+              <span class="lb-picker-item-name">${escapeHtml(m.name)}</span>
+              ${isCurrent ? '<span class="lb-loc-pill equipped">✓ SELECTED</span>' : ''}
+            </div>
+            <div class="lb-picker-item-sub">${escapeHtml(m.description || (m.isEmpty ? 'Clear this mod socket' : 'Click to stage in Loadout or apply in-game'))}</div>
+          </div>
+          <button type="button" class="btn-mini-action btn-apply-mod-now" data-apply-phash="${m.plugHash}" title="Apply this mod onto ${escapeHtml(item.name)} in Destiny 2 immediately">
+            ⚡ Apply Now
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('.lb-picker-mod-card').forEach(card => {
+      card.addEventListener('click', async (ev) => {
+        const phash = Number(card.getAttribute('data-phash'));
+        const chosenMod = modPool.find(x => Number(x.plugHash) === phash);
+        if (!chosenMod) return;
+
+        // Stage mod in draft.slotMods
+        if (!draft.slotMods) draft.slotMods = {};
+        if (!draft.slotMods[picker.slotName]) draft.slotMods[picker.slotName] = {};
+        draft.slotMods[picker.slotName][picker.socketIndex] = {
+          socketIndex: Number(picker.socketIndex),
+          plugHash: Number(chosenMod.plugHash),
+          name: chosenMod.name,
+          icon: chosenMod.icon || '',
+          description: chosenMod.description || '',
+          isEmpty: Boolean(chosenMod.isEmpty),
+        };
+
+        const applyNowBtn = ev.target.closest('.btn-apply-mod-now');
+        if (applyNowBtn) {
+          ev.stopPropagation();
+          applyNowBtn.disabled = true;
+          applyNowBtn.textContent = 'Applying...';
+          const fbEl = document.getElementById('lbFeedbackBanner');
+          await executeSingleItemModInsert(item, picker.socketIndex, chosenMod, fbEl);
+        } else {
+          sfx.playChirp();
+          showToast(`Selected '${chosenMod.name}' for ${item.name}! (Click '⚡ Equip Loadout & Mods' or '🔧 Apply Mods Only' to socket in-game)`, 'info');
+        }
+
+        const drawer = document.getElementById('lbSlotPickerDrawer');
+        if (drawer) drawer.classList.add('hidden');
+        activeLbPickerSlot = null;
+        renderLoadoutBuilderWorkspace();
+      });
+    });
+    return;
+  }
+
+  // MODE 2: WEAPON OR ARMOR ITEM PICKER
+  const { weapons, armor } = collectAllOwnedGearForLoadout(draft.className);
 
   let pool = [];
   if (picker.category === 'Weapon') {
@@ -4161,6 +4947,9 @@ function renderLbSlotPickerItems(searchQuery = '') {
 
       sfx.playChirp();
       draft.slots[picker.slotName] = chosen;
+      if (draft.slotMods?.[picker.slotName]) {
+        delete draft.slotMods[picker.slotName];
+      }
 
       // Enforce Destiny 2 1-Exotic Weapon & 1-Exotic Armor rule automatically
       if (chosen.isExotic) {
@@ -4169,7 +4958,6 @@ function renderLbSlotPickerItems(searchQuery = '') {
           : ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
         siblingSlots.forEach(sibSlot => {
           if (sibSlot !== picker.slotName && draft.slots[sibSlot]?.isExotic) {
-            // Auto-replace conflicting Exotic in sibling slot with best Legendary owned in that slot
             const { weapons: allW, armor: allA } = collectAllOwnedGearForLoadout(draft.className);
             const fallbackLeg = (picker.category === 'Weapon' ? allW : allA)
               .filter(x => x.slot === sibSlot && !x.isExotic)
@@ -4191,7 +4979,7 @@ function renderLbSlotPickerItems(searchQuery = '') {
   });
 }
 
-async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, transferOnly = false) {
+async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, transferOnly = false, modsOnly = false) {
   if (!state.bungieData || !state.bungieSession?.access_token) {
     showToast('Please sign in to Bungie.net first to equip loadouts on your Guardian!', 'info');
     return;
@@ -4203,7 +4991,7 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
 
   const itemsPayload = [];
   // Include Subclass if present and not already equipped
-  if (loadoutDraft.subclassItem && loadoutDraft.subclassItem.itemInstanceId && !transferOnly) {
+  if (loadoutDraft.subclassItem && loadoutDraft.subclassItem.itemInstanceId && !transferOnly && !modsOnly) {
     itemsPayload.push({
       itemInstanceId: String(loadoutDraft.subclassItem.itemInstanceId),
       itemHash: Number(loadoutDraft.subclassItem.itemHash || 0),
@@ -4215,6 +5003,7 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
       sourceCharacterId: String(loadoutDraft.characterId),
       isEquipped: Boolean(loadoutDraft.subclassItem.isEquipped),
       fallbackEquipInstanceId: '',
+      socketPlugs: [],
     });
   }
 
@@ -4232,6 +5021,21 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
       }
     }
 
+    // Collect any staged or selected Weapon Mods / Armor Mods for this slot
+    const socketPlugs = [];
+    const stagedSlotMods = loadoutDraft.slotMods?.[sName] || {};
+    Object.values(stagedSlotMods).forEach(sm => {
+      if (sm && sm.socketIndex !== undefined && sm.plugHash) {
+        socketPlugs.push({
+          socketIndex: Number(sm.socketIndex),
+          plugHash: Number(sm.plugHash),
+          name: sm.name || '',
+        });
+      }
+    });
+
+    if (modsOnly && socketPlugs.length === 0) return;
+
     itemsPayload.push({
       itemInstanceId: String(it.itemInstanceId),
       itemHash: Number(it.itemHash || 0),
@@ -4241,26 +5045,36 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
       isExotic: Boolean(it.isExotic),
       sourceLocation: it.location || 'vault',
       sourceCharacterId: it.characterId || '',
-      isEquipped: Boolean(it.isEquipped),
+      isEquipped: modsOnly ? true : Boolean(it.isEquipped),
       fallbackEquipInstanceId: fallbackId,
+      socketPlugs,
     });
   });
 
   if (itemsPayload.length === 0) {
-    showToast('No items selected in this loadout to apply.', 'error');
+    showToast(
+      modsOnly
+        ? 'Click any Weapon Mod or Armor Mod socket below to choose a mod before clicking Apply Mods!'
+        : 'No items selected in this loadout to apply.',
+      'info'
+    );
     return;
   }
 
   const origBtnText = triggerBtn ? triggerBtn.textContent : '';
   if (triggerBtn) {
     triggerBtn.disabled = true;
-    triggerBtn.textContent = transferOnly ? '📥 Pulling Gear from Vault...' : `⚡ Equipping on ${loadoutDraft.className}...`;
+    triggerBtn.textContent = modsOnly
+      ? '🔧 Applying Mods...'
+      : (transferOnly ? '📥 Pulling Gear from Vault...' : `⚡ Equipping on ${loadoutDraft.className}...`);
   }
   if (feedbackEl) {
     feedbackEl.classList.remove('hidden', 'error');
-    feedbackEl.textContent = transferOnly
-      ? `Pulling loadout gear from Vault to ${loadoutDraft.className}...`
-      : `Assembling & equipping '${loadoutDraft.title}' on ${loadoutDraft.className} (transferring from Vault & equipping)...`;
+    feedbackEl.textContent = modsOnly
+      ? `Socketing selected Weapon Mods & Armor Mods on ${loadoutDraft.className}...`
+      : (transferOnly
+        ? `Pulling loadout gear from Vault to ${loadoutDraft.className}...`
+        : `Assembling & equipping '${loadoutDraft.title}' + Mods on ${loadoutDraft.className}...`);
   }
   sfx.playTransmit();
 
@@ -4298,22 +5112,33 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
 
     const eqCount = (data.equippedIds || []).length + (data.alreadyEquippedIds || []).length;
     const trCount = (data.transferredIds || []).length;
+    const modCount = Number(data.appliedModsCount || 0);
     const failList = data.failed || [];
+    const failMods = data.failedMods || [];
 
     sfx.playReceive();
     let summaryMsg = '';
-    if (transferOnly) {
+    const modSuffix = modCount > 0 ? `, ${modCount} Mod(s) socketed` : '';
+    if (modsOnly) {
+      if (modCount > 0) {
+        summaryMsg = `✓ Applied ${modCount} Weapon/Armor Mod(s) on ${loadoutDraft.className}!`;
+      } else if (failMods.length > 0) {
+        throw new Error(`${failMods[0].modName}: ${failMods[0].reason}`);
+      } else {
+        summaryMsg = `✓ Selected mods applied on ${loadoutDraft.className}!`;
+      }
+    } else if (transferOnly) {
       summaryMsg = `✓ Pulled ${trCount} item(s) to ${loadoutDraft.className}'s inventory bag!`;
     } else if (data.combatZoneBlocked) {
-      summaryMsg = `✓ Pulled ${trCount} item(s) to ${loadoutDraft.className}'s bag! (Note: Bungie blocks live equipping while in an active combat zone—return to Orbit/Tower to auto-equip, or click them in-game now).`;
+      summaryMsg = `✓ Pulled ${trCount} item(s) to ${loadoutDraft.className}'s bag${modSuffix}! (Note: Bungie blocks live equipping while in an active combat zone—return to Orbit/Tower to auto-equip).`;
     } else if (failList.length > 0 && eqCount > 0) {
-      summaryMsg = `✓ Equipped ${eqCount} item(s) on ${loadoutDraft.className} (${trCount} pulled from Vault). ${failList.length} item(s) could not be equipped: ${failList[0].name} (${failList[0].reason}).`;
-    } else if (eqCount > 0) {
-      summaryMsg = `✓ '${loadoutDraft.title}' equipped on ${loadoutDraft.className}! (${eqCount} items active, ${trCount} pulled from Vault).`;
+      summaryMsg = `✓ Equipped ${eqCount} item(s) on ${loadoutDraft.className} (${trCount} pulled from Vault${modSuffix}). ${failList.length} item(s) could not be equipped: ${failList[0].name} (${failList[0].reason}).`;
+    } else if (eqCount > 0 || modCount > 0) {
+      summaryMsg = `✓ '${loadoutDraft.title}' equipped on ${loadoutDraft.className}! (${eqCount} items active, ${trCount} pulled from Vault${modSuffix}).`;
     } else if (failList.length > 0) {
       throw new Error(`${failList[0].name}: ${failList[0].reason}`);
     } else {
-      summaryMsg = `✓ All loadout items are already equipped on ${loadoutDraft.className}!`;
+      summaryMsg = `✓ All loadout items are already equipped on ${loadoutDraft.className}${modSuffix}!`;
     }
 
     if (feedbackEl) {
@@ -4324,7 +5149,6 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
 
     await loadBungieInventory(true);
     if (activeLoadoutBuilderState) {
-      // Refresh live item locations in the open Loadout Builder
       Object.keys(activeLoadoutBuilderState.slots || {}).forEach(sKey => {
         const cur = activeLoadoutBuilderState.slots[sKey];
         if (cur?.itemInstanceId) {
@@ -6449,8 +7273,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const btnImportSavedLoadoutToBuilder = document.getElementById('btnImportSavedLoadoutToBuilder');
   if (btnEquipSavedLoadout) {
     btnEquipSavedLoadout.addEventListener('click', () => executeEquipSavedLoadout());
+  }
+
+  if (btnImportSavedLoadoutToBuilder) {
+    btnImportSavedLoadoutToBuilder.addEventListener('click', () => {
+      if (!state.inspectedLoadout) return;
+      sfx.playReceive();
+      const { character, loadout } = state.inspectedLoadout;
+      const draft = convertInGameSavedLoadoutToDraft(character, loadout);
+      modalSavedLoadout?.close();
+      openLoadoutBuilderModal(draft);
+      showToast(`Imported '${loadout.name}' (Gear, Mods & Artifact) into Loadout Builder!`, 'info');
+    });
   }
 
   if (btnAskFeliciaLoadout) {
@@ -6489,6 +7326,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const lbSubclassSelect = document.getElementById('lbSubclassSelect');
   const lbModeSelect = document.getElementById('lbModeSelect');
   const btnLbEquipNow = document.getElementById('btnLbEquipNow');
+  const btnLbApplyModsOnly = document.getElementById('btnLbApplyModsOnly');
   const btnLbPullOnly = document.getElementById('btnLbPullOnly');
   const btnLbAutoOptimize = document.getElementById('btnLbAutoOptimize');
   const btnLbSaveCustom = document.getElementById('btnLbSaveCustom');
@@ -6585,7 +7423,15 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLbEquipNow.addEventListener('click', async () => {
       if (!activeLoadoutBuilderState) return;
       activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
-      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbEquipNow, false);
+      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbEquipNow, false, false);
+    });
+  }
+
+  if (btnLbApplyModsOnly) {
+    btnLbApplyModsOnly.addEventListener('click', async () => {
+      if (!activeLoadoutBuilderState) return;
+      activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
+      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbApplyModsOnly, false, true);
     });
   }
 
@@ -6593,7 +7439,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLbPullOnly.addEventListener('click', async () => {
       if (!activeLoadoutBuilderState) return;
       activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
-      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbPullOnly, true);
+      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbPullOnly, true, false);
     });
   }
 
