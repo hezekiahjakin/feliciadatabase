@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261114_v35">
+  <link rel="stylesheet" href="styles.css?v=20261114_v36">
 </head>
 <body class="theme-vanguard">
 
@@ -23,34 +23,23 @@
         <span class="vanguard-logo">❖</span>
       </div>
       <div class="brand-text">
-        <h1 class="brand-title">F.E.L.I.C.I.A. <span class="badge-v1">v2.0</span></h1>
+        <h1 class="brand-title">
+          F.E.L.I.C.I.A.
+          <span class="badge-v1">v2.0</span>
+          <span class="pulse-dot" title="Construct Calibrated &amp; Online"></span>
+        </h1>
         <p class="brand-sub">FIRETEAM EVALUATION &amp; LOGISTICS INTELLIGENCE CONSTRUCT FOR INTERACTIVE ANALYSIS</p>
       </div>
     </div>
 
-    <!-- Active Status Bar -->
+    <!-- Clean Minimalist Right Controls -->
     <div class="hud-status-bar">
-      <div class="status-indicator online" id="statusPill" title="Construct Status">
-        <span class="pulse-dot"></span>
-        <span class="status-label">CALIBRATED // ACTIVE</span>
-      </div>
-
-      <button type="button" class="btn-tactical btn-advisory-pill" id="btnOpenFieldAdvisory" title="Read Clan Field Advisory & Development Notice">
+      <button type="button" class="btn-tactical btn-advisory-pill" id="btnOpenFieldAdvisory" title="Read Clan Field Advisory &amp; Development Notice">
         <span class="icon">📢</span>
         <span class="text">Field Advisory</span>
       </button>
 
-      <button type="button" class="bungie-header-pill" id="bungieHeaderBadge" title="Bungie.net Guardian Link">
-        <span class="bungie-pill-dot" id="bungiePillDot"></span>
-        <span class="bungie-pill-text" id="bungieHeaderText">Sign In with Bungie</span>
-      </button>
-
-      <button class="btn-tactical btn-connect" id="btnConnectDevice" title="Connect Phone or iPad">
-        <span class="icon">📱</span>
-        <span class="text">Connect Mobile</span>
-      </button>
-
-      <button class="btn-sound-toggle" id="btnSoundToggle" title="Toggle Ghost Chirps & SFX">
+      <button class="btn-sound-toggle" id="btnSoundToggle" title="Toggle Ghost Chirps &amp; SFX">
         <span class="sfx-icon" id="sfxIcon">🔊</span>
       </button>
     </div>
@@ -1634,6 +1623,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261114_v35"></script>
+  <script type="module" src="app.js?v=20261114_v36"></script>
 </body>
 </html>
