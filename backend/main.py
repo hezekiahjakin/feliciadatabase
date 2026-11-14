@@ -27,6 +27,7 @@ try:
         batch_lock_guardian_items,
         prepare_items_for_dismantle,
         equip_guardian_loadout,
+        equip_custom_loadout,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
     )
@@ -42,6 +43,7 @@ except ImportError:
         batch_lock_guardian_items,
         prepare_items_for_dismantle,
         equip_guardian_loadout,
+        equip_custom_loadout,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
     )
@@ -710,6 +712,172 @@ def fetch_from_firebase(endpoint: str, auth_token: str = "") -> dict:
     except Exception as e:
         return {"success": False, "message": str(e), "status": 500}
 
+def extract_build_recommendation_blueprint(
+    reply_text: str,
+    user_message: str,
+    eff_class: str,
+    eff_subclass: str,
+    eff_activity: str,
+    verified_build: Optional[dict] = None,
+    inv_ctx: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Extracts a structured DIM-style Loadout Blueprint from F.E.L.I.C.I.A.'s build recommendation."""
+    reply_low = (reply_text or "").lower()
+    msg_low = (user_message or "").lower()
+
+    build_signals = [
+        "super:", "aspects:", "fragments:", "exotic armor", "armor set",
+        "loadout", "build", "subclass", "aspect", "fragment",
+    ]
+    signal_hits = sum(1 for s in build_signals if s in reply_low or s in msg_low)
+    if not verified_build and signal_hits < 2:
+        return None
+
+    is_pvp = any(k in (eff_activity or "").lower() or k in msg_low for k in ["pvp", "crucible", "trials", "comp", "iron banner"])
+    mode_str = "PVP" if is_pvp else "PVE"
+
+    comp_db = get_compendium_db() or {}
+    raw_exo_armors = comp_db.get("exotic_armors") or {}
+    comp_exotic_armors: List[dict] = []
+    if isinstance(raw_exo_armors, dict):
+        for cls_key, items_val in raw_exo_armors.items():
+            if isinstance(items_val, list):
+                for entry in items_val:
+                    if isinstance(entry, dict):
+                        comp_exotic_armors.append({**entry, "class": entry.get("class") or cls_key})
+    elif isinstance(raw_exo_armors, list):
+        comp_exotic_armors = [e for e in raw_exo_armors if isinstance(e, dict)]
+
+    comp_armor_sets = [s for s in (comp_db.get("armor_sets") or []) if isinstance(s, dict)]
+    comp_exotic_weapons = [w for w in (comp_db.get("exotic_weapons") or []) if isinstance(w, dict)]
+    all_god_rolls = [g for g in (get_all_god_rolls() or []) if isinstance(g, dict)]
+
+    # 1. Exotic Armor detection
+    exotic_armor_name = ""
+    if verified_build and isinstance(verified_build.get("exotic_armor"), dict):
+        exotic_armor_name = verified_build["exotic_armor"].get("name", "")
+
+    # Check if reply mentions a specific exotic armor from Compendium or Guardian's inventory
+    matched_exo_armors: List[str] = []
+    for ea in comp_exotic_armors:
+        ea_name = (ea.get("name") or "").strip()
+        ea_class = (ea.get("class") or "").strip().lower()
+        if ea_name and len(ea_name) >= 4 and ea_name.lower() in reply_low:
+            if not ea_class or ea_class == (eff_class or "").lower() or ea_class == "any":
+                matched_exo_armors.append(ea_name)
+
+    if inv_ctx and isinstance(inv_ctx, dict):
+        for ch in inv_ctx.get("characters") or []:
+            if isinstance(ch, dict):
+                for a in (ch.get("equippedArmor") or []) + (ch.get("carriedArmor") or []):
+                    if isinstance(a, dict) and a.get("isExotic") and a.get("name"):
+                        nm = a["name"].strip()
+                        if nm.lower() in reply_low and nm not in matched_exo_armors:
+                            matched_exo_armors.insert(0, nm)
+        for a in inv_ctx.get("vaultArmor") or []:
+            if isinstance(a, dict) and a.get("isExotic") and a.get("name"):
+                nm = a["name"].strip()
+                if nm.lower() in reply_low and nm not in matched_exo_armors:
+                    matched_exo_armors.insert(0, nm)
+
+    if matched_exo_armors:
+        exotic_armor_name = matched_exo_armors[0]
+
+    # 2. Compendium Armor Set detection
+    armor_set_name = ""
+    if verified_build and isinstance(verified_build.get("armor_set"), dict):
+        armor_set_name = verified_build["armor_set"].get("name", "")
+
+    for s in comp_armor_sets:
+        s_name = (s.get("name") or "").strip()
+        if s_name and len(s_name) >= 3 and s_name.lower() in reply_low:
+            armor_set_name = s_name
+            break
+
+    # 3. Weapons detection (prioritizing Guardian's owned weapons mentioned in reply, then God Roll DB & Exotic Weapons)
+    rec_weapons: List[str] = []
+    seen_wep_low = set()
+
+    def _add_wep(w_name: str):
+        clean_w = (w_name or "").strip()
+        if clean_w and clean_w.lower() not in seen_wep_low:
+            seen_wep_low.add(clean_w.lower())
+            rec_weapons.append(clean_w)
+
+    if inv_ctx and isinstance(inv_ctx, dict):
+        owned_weps = []
+        for ch in inv_ctx.get("characters") or []:
+            if isinstance(ch, dict):
+                owned_weps.extend(ch.get("equippedWeapons") or [])
+                owned_weps.extend(ch.get("carriedWeapons") or [])
+        owned_weps.extend(inv_ctx.get("vaultWeapons") or [])
+        for w in owned_weps:
+            if isinstance(w, dict) and w.get("name"):
+                w_nm = w["name"].strip()
+                base_nm = re.sub(r"\s*\(.*?\)\s*", "", w_nm).strip()
+                if (len(w_nm) >= 4 and w_nm.lower() in reply_low) or (len(base_nm) >= 4 and base_nm.lower() in reply_low):
+                    _add_wep(w_nm)
+
+    for gr in all_god_rolls:
+        gr_nm = (gr.get("name") or "").strip()
+        base_nm = re.sub(r"\s*\(.*?\)\s*", "", gr_nm).strip()
+        if (len(gr_nm) >= 4 and gr_nm.lower() in reply_low) or (len(base_nm) >= 4 and base_nm.lower() in reply_low):
+            _add_wep(gr_nm)
+
+    for ew in comp_exotic_weapons:
+        ew_nm = (ew.get("name") or "").strip()
+        if len(ew_nm) >= 4 and ew_nm.lower() in reply_low:
+            _add_wep(ew_nm)
+
+    if verified_build and isinstance(verified_build.get("weapons"), dict):
+        for slot_key in ["kinetic", "energy", "heavy"]:
+            w_str = verified_build["weapons"].get(slot_key, "")
+            if w_str:
+                first_part = re.split(r"\(|—|-|/", w_str)[0].strip()
+                if len(first_part) >= 3:
+                    _add_wep(first_part)
+
+    # 4. Super, Aspects, Fragments extraction
+    super_name = verified_build.get("super", "") if verified_build else ""
+    aspects_list = list(verified_build.get("aspects", [])) if verified_build else []
+    fragments_list = list(verified_build.get("fragments", [])) if verified_build else []
+
+    if not super_name:
+        m_sup = re.search(r"\*\*Super:\*\*\s*([^\n•*]+)", reply_text or "", re.IGNORECASE)
+        if m_sup:
+            super_name = m_sup.group(1).strip()
+
+    if not aspects_list:
+        m_asp = re.search(r"\*\*Aspects:\*\*\s*([^\n]+)", reply_text or "", re.IGNORECASE)
+        if m_asp:
+            aspects_list = [x.strip(" *•-") for x in re.split(r",|\+|and|\|", m_asp.group(1)) if x.strip(" *•-")][:3]
+
+    if not fragments_list:
+        m_frag = re.search(r"\*\*Fragments:\*\*\s*([^\n]+)", reply_text or "", re.IGNORECASE)
+        if m_frag:
+            fragments_list = [x.strip(" *•-") for x in re.split(r",|\|", m_frag.group(1)) if x.strip(" *•-")][:6]
+
+    title = (
+        verified_build.get("title")
+        if verified_build and verified_build.get("title")
+        else f"F.E.L.I.C.I.A. // {eff_subclass} {eff_class} ({mode_str})"
+    )
+
+    return {
+        "isBuildRecommendation": True,
+        "title": title,
+        "className": eff_class or "Hunter",
+        "subclass": eff_subclass or "Solar",
+        "mode": mode_str,
+        "activity": eff_activity or ("PVP" if is_pvp else "Grandmaster+"),
+        "super": super_name,
+        "aspects": aspects_list,
+        "fragments": fragments_list,
+        "exoticArmor": exotic_armor_name,
+        "armorSet": armor_set_name,
+        "recommendedWeapons": rec_weapons[:6],
+    }
+
 # Endpoints
 
 @app.get("/api/health")
@@ -851,6 +1019,17 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
                 inventory_context=req.inventory_context,
             )
         
+        # Extract structured DIM Loadout blueprint if reply or query involves a build/loadout
+        rec_blueprint = extract_build_recommendation_blueprint(
+            reply_text=reply,
+            user_message=req.message,
+            eff_class=eff_class,
+            eff_subclass=eff_subclass,
+            eff_activity=eff_activity,
+            verified_build=verified_build,
+            inv_ctx=req.inventory_context,
+        )
+
         # Save to chat history
         history = load_json(HISTORY_PATH, [])
         history.append({
@@ -873,7 +1052,8 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             "effective_class": eff_class,
             "effective_subclass": eff_subclass,
             "compendium_active": bool(compendium_raw),
-            "snippets_used": [s.get("title") for s in top_snippets]
+            "snippets_used": [s.get("title") for s in top_snippets],
+            "recommended_build": rec_blueprint,
         }
     except Exception as exc:
         logging.error(f"[Chat Endpoint Exception] {traceback.format_exc()}")
@@ -890,12 +1070,22 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             history=req.history or [],
             inventory_context=req.inventory_context,
         )
+        rec_blueprint = extract_build_recommendation_blueprint(
+            reply_text=fallback_reply,
+            user_message=req.message,
+            eff_class=fallback_class,
+            eff_subclass=fallback_subclass,
+            eff_activity=fallback_activity,
+            verified_build=None,
+            inv_ctx=req.inventory_context,
+        )
         return {
             "reply": fallback_reply,
             "effective_class": fallback_class,
             "effective_subclass": fallback_subclass,
             "compendium_active": False,
-            "snippets_used": []
+            "snippets_used": [],
+            "recommended_build": rec_blueprint,
         }
 
 @app.get("/api/compendium/status")
@@ -1624,6 +1814,60 @@ async def post_bungie_equip_loadout_endpoint(body: BungieEquipLoadoutRequest, re
         if refresh_token:
             refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
             res = await run_in_threadpool(_do_equip, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+class BungieCustomLoadoutItem(BaseModel):
+    itemInstanceId: str
+    itemHash: Optional[int] = 0
+    name: Optional[str] = ""
+    slot: Optional[str] = ""
+    category: Optional[str] = ""
+    isExotic: Optional[bool] = False
+    sourceLocation: Optional[str] = "vault"
+    sourceCharacterId: Optional[str] = ""
+    isEquipped: Optional[bool] = False
+    fallbackEquipInstanceId: Optional[str] = ""
+
+
+class BungieEquipCustomLoadoutRequest(BaseModel):
+    membershipType: int
+    targetCharacterId: str
+    transferOnly: Optional[bool] = False
+    items: List[BungieCustomLoadoutItem]
+
+
+@app.post("/api/bungie/loadout/equip-custom")
+async def post_bungie_equip_custom_loadout_endpoint(body: BungieEquipCustomLoadoutRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    items_dicts = [it.model_dump() if hasattr(it, "model_dump") else it.dict() for it in body.items]
+
+    def _do_equip_custom(token: str):
+        return equip_custom_loadout(
+            access_token=token,
+            membership_type=body.membershipType,
+            target_character_id=body.targetCharacterId,
+            items_to_equip=items_dicts,
+            transfer_only=bool(body.transferOnly),
+        )
+
+    try:
+        res = await run_in_threadpool(_do_equip_custom, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(_do_equip_custom, refreshed_session["access_token"])
         else:
             raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
     except Exception as e:

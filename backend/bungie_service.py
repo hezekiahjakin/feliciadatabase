@@ -1213,6 +1213,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         equipped_items = []
         equipped_subclass = None
         equipped_artifact = None
+        char_subclasses = []
 
         for raw_eq in char_equip_raw.get(cid, {}).get("items", []):
             ehash = int(raw_eq.get("itemHash", 0))
@@ -1220,15 +1221,21 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             if edef and int(edef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_eq.get("itemInstanceId", ""))
                 sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
+                sub_name = edef.get("name", "")
+                sub_elem = "Prismatic" if "prismatic" in sub_name.lower() else DAMAGE_TYPE_MAP.get(int(edef.get("defaultDamageType", 1)), "Kinetic")
                 equipped_subclass = {
                     "itemInstanceId": sub_iid,
-                    "name": edef.get("name", ""),
+                    "itemHash": ehash,
+                    "name": sub_name,
                     "icon": edef.get("icon", ""),
-                    "element": DAMAGE_TYPE_MAP.get(int(edef.get("defaultDamageType", 1)), "Kinetic"),
+                    "element": sub_elem,
+                    "isEquipped": True,
+                    "characterId": cid,
                     **sub_details,
                 }
                 if sub_iid:
                     subclass_by_instance[sub_iid] = equipped_subclass
+                char_subclasses.append(equipped_subclass)
                 continue
 
             enriched = _enrich_item(raw_eq, defs, instances, stats_map, sockets_map, reusable_map, "character", cid, True)
@@ -1270,13 +1277,20 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                 sub_iid = str(raw_inv.get("itemInstanceId", ""))
                 if sub_iid:
                     sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
-                    subclass_by_instance[sub_iid] = {
+                    sub_name = idef.get("name", "")
+                    sub_elem = "Prismatic" if "prismatic" in sub_name.lower() else DAMAGE_TYPE_MAP.get(int(idef.get("defaultDamageType", 1)), "Kinetic")
+                    sub_obj = {
                         "itemInstanceId": sub_iid,
-                        "name": idef.get("name", ""),
+                        "itemHash": ihash,
+                        "name": sub_name,
                         "icon": idef.get("icon", ""),
-                        "element": DAMAGE_TYPE_MAP.get(int(idef.get("defaultDamageType", 1)), "Kinetic"),
+                        "element": sub_elem,
+                        "isEquipped": False,
+                        "characterId": cid,
                         **sub_details,
                     }
+                    subclass_by_instance[sub_iid] = sub_obj
+                    char_subclasses.append(sub_obj)
                 continue
 
             is_pm = int(raw_inv.get("bucketHash", 0)) == BUCKET_POSTMASTER
@@ -1304,6 +1318,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "emblemColor": cinfo.get("emblemColor", {}),
             "dateLastPlayed": cinfo.get("dateLastPlayed", ""),
             "subclass": equipped_subclass,
+            "subclasses": char_subclasses,
             "artifact": equipped_artifact,
             "stats": c_stats,
             "equipment": equipped_items,
@@ -1690,6 +1705,306 @@ def equip_guardian_loadout(
         access_token,
     )
     return {"status": "equipped", "characterId": str(character_id), "loadoutIndex": int(loadout_index)}
+
+
+def equip_custom_loadout(
+    access_token: str,
+    membership_type: int,
+    target_character_id: str,
+    items_to_equip: List[dict],
+    transfer_only: bool = False,
+) -> dict:
+    """
+    DIM-Style Multi-Item Loadout Assembler & Equipper:
+    1. Automatically frees space if a target bucket has 9/9 unequipped items.
+    2. Pulls required weapons/armor from Vault or other Characters to target_character_id.
+    3. Equips Legendary items before Exotic items to prevent Exotic slot conflicts,
+       using batch EquipItems with per-item EquipItem fallback.
+    """
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    if not api_key:
+        raise RuntimeError("Bungie API Key is not configured.")
+    if not target_character_id:
+        raise ValueError("A target character ID is required to apply a loadout.")
+    if not items_to_equip:
+        return {
+            "status": "ok",
+            "equippedIds": [],
+            "transferredIds": [],
+            "alreadyEquippedIds": [],
+            "failed": [],
+        }
+
+    target_cid = str(target_character_id)
+    loadout_iid_set: Set[str] = {
+        str(it.get("itemInstanceId", ""))
+        for it in items_to_equip
+        if it.get("itemInstanceId")
+    }
+
+    # Fetch live character inventories (201) & equipment (205) for accurate slot management
+    membership = get_active_destiny_membership(api_key, access_token)
+    m_id = membership["destinyMembershipId"]
+    live_prof = _bungie_get(
+        f"/Destiny2/{int(membership_type)}/Profile/{m_id}/?components=201,205",
+        api_key,
+        access_token,
+    )
+    char_inv_data = live_prof.get("characterInventories", {}).get("data", {})
+    char_eq_data = live_prof.get("characterEquipment", {}).get("data", {})
+
+    # Track unequipped items per bucket on each character
+    bucket_name_by_hash = {**WEAPON_BUCKETS, **ARMOR_BUCKETS, BUCKET_SUBCLASS: "Subclass"}
+    target_bucket_items: Dict[str, List[dict]] = {
+        "Kinetic": [],
+        "Energy": [],
+        "Heavy": [],
+        "Helmet": [],
+        "Gauntlets": [],
+        "Chest Armor": [],
+        "Leg Armor": [],
+        "Class Armor": [],
+        "Subclass": [],
+    }
+    live_item_loc: Dict[str, Tuple[str, str, bool]] = {}  # iid -> (loc, cid, is_equipped)
+
+    for cid_k, eq_wrap in char_eq_data.items():
+        for raw_it in eq_wrap.get("items", []):
+            iid_k = str(raw_it.get("itemInstanceId", ""))
+            if iid_k:
+                live_item_loc[iid_k] = ("character", str(cid_k), True)
+
+    for cid_k, inv_wrap in char_inv_data.items():
+        for raw_it in inv_wrap.get("items", []):
+            iid_k = str(raw_it.get("itemInstanceId", ""))
+            bhash = int(raw_it.get("bucketHash", 0))
+            if iid_k:
+                is_pm = bhash == BUCKET_POSTMASTER
+                live_item_loc[iid_k] = ("postmaster" if is_pm else "character", str(cid_k), False)
+            if str(cid_k) == target_cid and bhash in bucket_name_by_hash:
+                s_name = bucket_name_by_hash[bhash]
+                target_bucket_items.setdefault(s_name, []).append(raw_it)
+
+    transferred_ids: List[str] = []
+    transferred_names: List[str] = []
+    already_equipped_ids: List[str] = []
+    equipped_ids: List[str] = []
+    equipped_names: List[str] = []
+    failed: List[dict] = []
+    ready_to_equip: List[dict] = []
+
+    # Sort items so Legendaries/Subclasses are processed & equipped BEFORE Exotics (prevents 2-Exotic conflict)
+    sorted_items = sorted(
+        items_to_equip,
+        key=lambda x: (
+            0 if str(x.get("category", "")) == "Subclass" else (2 if x.get("isExotic") else 1)
+        ),
+    )
+
+    # PHASE 1: Ensure every item is on target_character_id
+    for entry in sorted_items:
+        iid = str(entry.get("itemInstanceId", ""))
+        ihash = int(entry.get("itemHash", 0))
+        nm = str(entry.get("name", "Item"))
+        slot_name = str(entry.get("slot", ""))
+        cat_name = str(entry.get("category", ""))
+        fallback_iid = str(entry.get("fallbackEquipInstanceId") or "")
+
+        if not iid:
+            continue
+
+        # Check live location first, falling back to client state
+        if iid in live_item_loc:
+            src_loc, src_cid, is_eq = live_item_loc[iid]
+        else:
+            src_loc = str(entry.get("sourceLocation", "vault"))
+            src_cid = str(entry.get("sourceCharacterId") or "")
+            is_eq = bool(entry.get("isEquipped", False))
+
+        # Already equipped on target character
+        if src_loc == "character" and src_cid == target_cid and is_eq:
+            already_equipped_ids.append(iid)
+            continue
+
+        # Already in target character's inventory bag
+        if src_loc == "character" and src_cid == target_cid and not is_eq:
+            ready_to_equip.append(entry)
+            continue
+
+        # Subclasses cannot be transferred across characters/vault
+        if cat_name == "Subclass" and src_cid != target_cid:
+            failed.append({"itemInstanceId": iid, "name": nm, "reason": "Subclass belongs to another character."})
+            continue
+
+        try:
+            # 1a. Pull from Postmaster if needed
+            if src_loc == "postmaster" and src_cid:
+                _bungie_post(
+                    "/Destiny2/Actions/Items/PullFromPostmaster/",
+                    {
+                        "itemReferenceHash": ihash,
+                        "stackSize": 1,
+                        "itemId": iid,
+                        "characterId": src_cid,
+                        "membershipType": int(membership_type),
+                    },
+                    api_key,
+                    access_token,
+                )
+                src_loc = "character"
+
+            # 1b. If on another character, move Source Character -> Vault
+            if src_loc == "character" and src_cid and src_cid != target_cid:
+                if is_eq:
+                    # Find a fallback unequipped item in the same slot on src_cid if none provided
+                    if not fallback_iid:
+                        for raw_cand in char_inv_data.get(src_cid, {}).get("items", []):
+                            b_cand = bucket_name_by_hash.get(int(raw_cand.get("bucketHash", 0)), "")
+                            cand_iid = str(raw_cand.get("itemInstanceId", ""))
+                            if b_cand == slot_name and cand_iid and cand_iid != iid:
+                                fallback_iid = cand_iid
+                                break
+                    if not fallback_iid:
+                        raise RuntimeError(f"Currently equipped on another character with no unequipped fallback in {slot_name}.")
+                    _bungie_post(
+                        "/Destiny2/Actions/Items/EquipItem/",
+                        {
+                            "itemId": fallback_iid,
+                            "characterId": src_cid,
+                            "membershipType": int(membership_type),
+                        },
+                        api_key,
+                        access_token,
+                    )
+                _bungie_post(
+                    "/Destiny2/Actions/Items/TransferItem/",
+                    {
+                        "itemReferenceHash": ihash,
+                        "stackSize": 1,
+                        "transferToVault": True,
+                        "itemId": iid,
+                        "characterId": src_cid,
+                        "membershipType": int(membership_type),
+                    },
+                    api_key,
+                    access_token,
+                )
+                src_loc = "vault"
+
+            # 1c. Move Vault -> Target Character (making room if bucket has 9/9 items)
+            if src_loc == "vault":
+                bucket_list = target_bucket_items.get(slot_name, [])
+                if len(bucket_list) >= 9:
+                    # Find an unequipped item not in our loadout to move to Vault
+                    evict_cand = next(
+                        (
+                            b_it
+                            for b_it in bucket_list
+                            if str(b_it.get("itemInstanceId", "")) not in loadout_iid_set
+                        ),
+                        None,
+                    )
+                    if evict_cand:
+                        _bungie_post(
+                            "/Destiny2/Actions/Items/TransferItem/",
+                            {
+                                "itemReferenceHash": int(evict_cand.get("itemHash", 0)),
+                                "stackSize": 1,
+                                "transferToVault": True,
+                                "itemId": str(evict_cand.get("itemInstanceId", "")),
+                                "characterId": target_cid,
+                                "membershipType": int(membership_type),
+                            },
+                            api_key,
+                            access_token,
+                        )
+                        bucket_list.remove(evict_cand)
+
+                _bungie_post(
+                    "/Destiny2/Actions/Items/TransferItem/",
+                    {
+                        "itemReferenceHash": ihash,
+                        "stackSize": 1,
+                        "transferToVault": False,
+                        "itemId": iid,
+                        "characterId": target_cid,
+                        "membershipType": int(membership_type),
+                    },
+                    api_key,
+                    access_token,
+                )
+                bucket_list.append({"itemInstanceId": iid, "itemHash": ihash})
+                transferred_ids.append(iid)
+                transferred_names.append(nm)
+                ready_to_equip.append(entry)
+
+        except PermissionError:
+            raise
+        except Exception as exc:
+            failed.append({"itemInstanceId": iid, "name": nm, "reason": str(exc)})
+
+    if transfer_only or not ready_to_equip:
+        return {
+            "status": "transferred" if transfer_only else "ok",
+            "characterId": target_cid,
+            "equippedIds": equipped_ids,
+            "equippedNames": equipped_names,
+            "transferredIds": transferred_ids,
+            "transferredNames": transferred_names,
+            "alreadyEquippedIds": already_equipped_ids,
+            "failed": failed,
+        }
+
+    # PHASE 2: Equip all ready items on target_character_id
+    # Order: Subclass -> Legendary Gear -> Exotic Gear (prevents Exotic slot collisions)
+    equip_ordered = sorted(
+        ready_to_equip,
+        key=lambda x: (
+            0 if str(x.get("category", "")) == "Subclass" else (2 if x.get("isExotic") else 1)
+        ),
+    )
+    batch_iids = [str(it.get("itemInstanceId")) for it in equip_ordered if it.get("itemInstanceId")]
+    name_by_iid = {str(it.get("itemInstanceId")): str(it.get("name", "Item")) for it in equip_ordered}
+
+    # Equip items sequentially in Legendary-first order or via batch EquipItems
+    # Doing Legendary-first then batch/individual guarantees zero Exotic replacement errors
+    combat_zone_blocked = False
+    for it_entry in equip_ordered:
+        iid = str(it_entry.get("itemInstanceId", ""))
+        nm = name_by_iid.get(iid, "Item")
+        try:
+            _bungie_post(
+                "/Destiny2/Actions/Items/EquipItem/",
+                {
+                    "itemId": iid,
+                    "characterId": target_cid,
+                    "membershipType": int(membership_type),
+                },
+                api_key,
+                access_token,
+            )
+            equipped_ids.append(iid)
+            equipped_names.append(nm)
+        except PermissionError:
+            raise
+        except Exception as exc:
+            err_str = str(exc)
+            if "CannotPerformActionAtThisLocation" in err_str or "1671" in err_str or "combat" in err_str.lower():
+                combat_zone_blocked = True
+            failed.append({"itemInstanceId": iid, "name": nm, "reason": err_str})
+
+    return {
+        "status": "equipped" if equipped_ids else ("transferred_combat_locked" if transferred_ids and combat_zone_blocked else "partial"),
+        "characterId": target_cid,
+        "equippedIds": equipped_ids,
+        "equippedNames": equipped_names,
+        "transferredIds": transferred_ids,
+        "transferredNames": transferred_names,
+        "alreadyEquippedIds": already_equipped_ids,
+        "combatZoneBlocked": combat_zone_blocked,
+        "failed": failed,
+    }
 
 
 def prepare_items_for_dismantle(

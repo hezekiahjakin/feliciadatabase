@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261109_v34">
+  <link rel="stylesheet" href="styles.css?v=20261114_v35">
 </head>
 <body class="theme-vanguard">
 
@@ -140,6 +140,9 @@
                 <span class="inv-platform-tag" id="invPlatformTag">Destiny 2</span>
               </div>
               <div class="inv-account-actions">
+                <button type="button" class="btn-tactical btn-primary btn-sm" id="btnOpenDimLoadoutBuilder" title="Open DIM-Style Tactical Loadout Builder & Equipper">
+                  🛠️ Loadout Builder
+                </button>
                 <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnRefreshInventory" title="Sync latest gear from Bungie">
                   <span id="refreshSpinIcon">🔄</span> Sync Gear
                 </button>
@@ -1450,6 +1453,102 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
+  <!-- MODAL: DIM-STYLE TACTICAL LOADOUT BUILDER & AI BUILD EQUIPPER -->
+  <dialog class="hud-modal modal-loadout-builder" id="modalLoadoutBuilder" closedby="any" aria-labelledby="loadoutBuilderTitle">
+    <div class="modal-content loadout-builder-modal-content">
+      <div class="saved-loadout-banner lb-header-banner">
+        <div class="saved-loadout-badge-lg lb-crest-badge" id="lbHeaderBadge">
+          <span>🛠️</span>
+        </div>
+        <div class="saved-loadout-title-wrap" style="flex:1;">
+          <div class="scanner-eyebrow" id="lbSubtitle">❖ VANGUARD DIM TACTICAL LOADOUT BUILDER // AI BUILD ASSEMBLER</div>
+          <div class="lb-title-input-row">
+            <input type="text" id="lbLoadoutNameInput" class="lb-name-input" value="F.E.L.I.C.I.A. Tactical Build" placeholder="Enter Loadout Name...">
+          </div>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="btn-modal-close" aria-label="Close Loadout Builder">&times;</button>
+        </form>
+      </div>
+
+      <div class="modal-body saved-loadout-body lb-modal-body">
+        <!-- Control Bar: Class, Subclass, Mode & Actions -->
+        <div class="lb-controls-bar">
+          <div class="lb-selectors-group">
+            <label class="lb-field-label">
+              <span>GUARDIAN CLASS</span>
+              <select id="lbClassSelect" class="lb-select">
+                <option value="Hunter">◆ Hunter</option>
+                <option value="Warlock">▲ Warlock</option>
+                <option value="Titan">■ Titan</option>
+              </select>
+            </label>
+            <label class="lb-field-label">
+              <span>SUBCLASS</span>
+              <select id="lbSubclassSelect" class="lb-select">
+                <option value="Solar">☀️ Solar</option>
+                <option value="Arc">⚡ Arc</option>
+                <option value="Void">🟣 Void</option>
+                <option value="Strand">🟢 Strand</option>
+                <option value="Stasis">❄️ Stasis</option>
+                <option value="Prismatic">🌈 Prismatic</option>
+              </select>
+            </label>
+            <label class="lb-field-label">
+              <span>STAT TUNING MODE</span>
+              <select id="lbModeSelect" class="lb-select">
+                <option value="PVE">⚔️ PVE (0 Health / Max Ability &amp; Weapon Stats)</option>
+                <option value="PVP">🎯 PVP (10+ Health Flinch Priority)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="lb-actions-group">
+            <button type="button" class="btn-item-action btn-lb-equip" id="btnLbEquipNow">
+              ⚡ Equip Loadout on Guardian
+            </button>
+            <button type="button" class="btn-item-action" id="btnLbPullOnly" title="Pull all items from Vault to Character inventory without unequipping current gear">
+              📥 Pull All to Bag
+            </button>
+            <button type="button" class="btn-item-action" id="btnLbAutoOptimize" title="Auto-select best owned weapons &amp; armor from Inventory + Vault">
+              ✨ Auto-Optimize Gear
+            </button>
+            <button type="button" class="btn-item-action btn-ask-felicia" id="btnLbSaveCustom">
+              💾 Save Loadout
+            </button>
+            <button type="button" class="btn-item-action btn-lb-delete hidden" id="btnLbDeleteCustom" title="Delete this saved custom loadout">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+
+        <!-- Transfer & Equip Feedback Banner -->
+        <div class="inspect-transfer-feedback hidden" id="lbFeedbackBanner"></div>
+
+        <!-- AI Blueprint Reference Banner (Super, Aspects, Fragments, Missing Gear) -->
+        <div class="lb-ai-blueprint-box hidden" id="lbAiBlueprintBox"></div>
+
+        <!-- Slot Picker Drawer (Opened when clicking any Weapon or Armor slot) -->
+        <div class="lb-slot-picker-drawer hidden" id="lbSlotPickerDrawer">
+          <div class="lb-picker-header">
+            <div>
+              <span class="lb-picker-eyebrow" id="lbPickerSlotLabel">SELECT ITEM FOR SLOT</span>
+              <h4 class="lb-picker-title" id="lbPickerTitle">Choose from Guardian Inventory &amp; Vault</h4>
+            </div>
+            <div class="lb-picker-search-wrap">
+              <input type="text" id="lbPickerSearchInput" class="lb-picker-search" placeholder="Filter by name, perk, set, or element...">
+              <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnLbClosePicker">Done</button>
+            </div>
+          </div>
+          <div class="lb-picker-grid" id="lbPickerGrid"></div>
+        </div>
+
+        <!-- Main 2-Column Loadout Slots Workspace (Weapons + Subclass | 5 Armor Slots + Stat Totals) -->
+        <div id="lbSlotsWorkspace"></div>
+      </div>
+    </div>
+  </dialog>
+
   <!-- MODAL: CLAN EARLY ACCESS FIELD ADVISORY -->
   <dialog class="hud-modal modal-advisory" id="modalFieldAdvisory" closedby="any" aria-labelledby="advisoryModalTitle">
     <div class="modal-content advisory-modal-content">
@@ -1535,6 +1634,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261109_v34"></script>
+  <script type="module" src="app.js?v=20261114_v35"></script>
 </body>
 </html>

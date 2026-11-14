@@ -791,8 +791,12 @@ async function sendChatMessage(userText) {
       }
     }
 
-    // Append F.E.L.I.C.I.A.'s Scottish reply
-    appendMessage('felicia', 'F.E.L.I.C.I.A.', reply, data.snippets_used);
+    // Append F.E.L.I.C.I.A.'s Scottish reply with DIM Loadout Blueprint if applicable
+    appendMessage('felicia', 'F.E.L.I.C.I.A.', reply, data.snippets_used, data.recommended_build || null, {
+      effectiveClass: data.effective_class,
+      effectiveSubclass: data.effective_subclass,
+      userPrompt: text
+    });
 
     // Save to local conversation history
     state.chatHistory.push({ role: 'user', content: text });
@@ -816,7 +820,7 @@ async function sendChatMessage(userText) {
   }
 }
 
-function appendMessage(role, sender, text, snippets = []) {
+function appendMessage(role, sender, text, snippets = [], recommendedBuild = null, meta = {}) {
   const container = document.getElementById('messagesContainer');
   if (!container) return;
 
@@ -835,8 +839,11 @@ function appendMessage(role, sender, text, snippets = []) {
     </div>`;
   }
 
-  const voiceBtn = isFelicia 
-    ? '<button class="btn-voice-play" title="Listen to Scottish Voice">🗣️ Listen</button>'
+  const headerActionsHtml = isFelicia 
+    ? `<div style="margin-left:auto; display:inline-flex; gap:6px; align-items:center;">
+         <button type="button" class="btn-voice-play btn-msg-loadout-builder" title="Open DIM Loadout Builder from this response">🛠️ Build Loadout</button>
+         <button type="button" class="btn-voice-play btn-msg-voice-listen" title="Listen to Scottish Voice">🗣️ Listen</button>
+       </div>`
     : '';
 
   row.innerHTML = `
@@ -845,23 +852,41 @@ function appendMessage(role, sender, text, snippets = []) {
       <div class="msg-header">
         <span class="msg-sender">${sender}</span>
         <span class="msg-tag">${isFelicia ? 'SCOTTISH CONSTRUCT' : (getActiveCharacter()?.className || state.guardianClass || 'GUARDIAN').toUpperCase()}</span>
-        ${voiceBtn}
+        ${headerActionsHtml}
       </div>
       <div class="msg-content">
         ${renderMarkdown(text)}
         ${snippetsHtml}
+        <div class="msg-dim-loadout-slot"></div>
       </div>
     </div>
   `;
 
-  // Attach speech button
   if (isFelicia) {
-    const playBtn = row.querySelector('.btn-voice-play');
+    const playBtn = row.querySelector('.btn-msg-voice-listen');
     if (playBtn) {
       playBtn.addEventListener('click', () => {
         sfx.playChirp();
         voice.speak(text);
       });
+    }
+
+    const blueprint = recommendedBuild || parseBlueprintFromTextFallback(text, meta, false);
+    const lbBtn = row.querySelector('.btn-msg-loadout-builder');
+    if (lbBtn) {
+      lbBtn.addEventListener('click', () => {
+        sfx.playChirp();
+        const forcedBp = recommendedBuild || parseBlueprintFromTextFallback(text, meta, true);
+        const assembled = assembleLoadoutFromBlueprint(forcedBp);
+        openLoadoutBuilderModal(assembled);
+      });
+    }
+
+    if (blueprint && blueprint.isBuildRecommendation) {
+      const slotEl = row.querySelector('.msg-dim-loadout-slot');
+      if (slotEl) {
+        renderInlineChatLoadoutCard(slotEl, blueprint);
+      }
     }
   }
 
@@ -1917,8 +1942,11 @@ function renderInventoryHeaderAndSwitcher() {
     });
     colWrap.appendChild(btn);
 
-    // Saved In-Game Loadouts Strip directly under this Character (minimized by default until clicked)
+    // Saved In-Game Loadouts + F.E.L.I.C.I.A. Custom AI Loadouts Strip directly under this Character
     const loadouts = ch.loadouts || [];
+    const customLoadouts = getCustomLoadoutsForClass(ch.className);
+    const totalLoadoutCount = loadouts.length + customLoadouts.length;
+
     const details = document.createElement('details');
     details.className = 'char-loadouts-details';
     if (state.loadoutsDrawerOpen[ch.characterId] === true) {
@@ -1930,44 +1958,85 @@ function renderInventoryHeaderAndSwitcher() {
 
     const summary = document.createElement('summary');
     summary.className = 'char-loadouts-summary';
-    summary.innerHTML = `<span>SAVED LOADOUTS (${loadouts.length})</span>`;
+    const aiBadgeHtml = customLoadouts.length > 0
+      ? `<span class="ai-loadout-count-pill">❖ ${customLoadouts.length} AI</span>`
+      : '';
+    summary.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">SAVED LOADOUTS (${totalLoadoutCount}) ${aiBadgeHtml}</span>`;
     details.appendChild(summary);
 
-    if (loadouts.length === 0) {
-      const emptyEl = document.createElement('div');
-      emptyEl.className = 'char-loadouts-empty';
-      emptyEl.textContent = 'No in-game loadouts saved.';
-      details.appendChild(emptyEl);
-    } else {
-      const ldGrid = document.createElement('div');
-      ldGrid.className = 'char-loadouts-grid';
-      loadouts.forEach(ld => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'saved-loadout-chip';
-        const colorStyle = ld.colorPath
-          ? `style="background-image:url('https://www.bungie.net${ld.colorPath}');"`
-          : '';
-        const iconHtml = ld.iconPath
-          ? `<img src="https://www.bungie.net${ld.iconPath}" alt="" width="18" height="18" loading="lazy">`
-          : '<span>⚡</span>';
-        const subParts = [];
-        if (ld.subclass?.name) subParts.push(ld.subclass.name);
-        if (ld.exoticItem?.name) subParts.push(ld.exoticItem.name);
-        const subLabel = subParts.join(' • ') || `Slot #${ld.slotNumber}`;
+    const ldGrid = document.createElement('div');
+    ldGrid.className = 'char-loadouts-grid';
 
-        chip.innerHTML = `
-          <div class="saved-loadout-swatch" ${colorStyle}>${iconHtml}</div>
-          <div class="saved-loadout-meta">
-            <span class="saved-loadout-name">${escapeHtml(ld.name)}</span>
-            <span class="saved-loadout-sub">${escapeHtml(subLabel)}</span>
-          </div>
-        `;
-        chip.addEventListener('click', () => openSavedLoadoutModal(ch, ld));
-        ldGrid.appendChild(chip);
+    // Action Chip: Create / Assemble New Custom Loadout for this Character
+    const newLdChip = document.createElement('button');
+    newLdChip.type = 'button';
+    newLdChip.className = 'saved-loadout-chip create-ai-loadout-chip';
+    newLdChip.innerHTML = `
+      <div class="saved-loadout-swatch ai-swatch"><span>🛠️</span></div>
+      <div class="saved-loadout-meta">
+        <span class="saved-loadout-name">+ Build Custom Loadout</span>
+        <span class="saved-loadout-sub">DIM Auto-Optimizer // ${escapeHtml(ch.className)}</span>
+      </div>
+    `;
+    newLdChip.addEventListener('click', () => {
+      const assembled = assembleLoadoutFromBlueprint({
+        title: `${ch.subclass?.element || 'Solar'} ${ch.className} // Tactical Loadout`,
+        className: ch.className,
+        subclass: ch.subclass?.element || 'Solar',
+        mode: 'PVE',
       });
-      details.appendChild(ldGrid);
-    }
+      openLoadoutBuilderModal(assembled);
+    });
+    ldGrid.appendChild(newLdChip);
+
+    // 1. Custom / AI Loadouts saved by the Guardian
+    customLoadouts.forEach(cld => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'saved-loadout-chip custom-ai-loadout-chip';
+      const subLabel = `${cld.subclass || 'Solar'} • ${cld.mode || 'PVE'} • AI Custom`;
+      chip.innerHTML = `
+        <div class="saved-loadout-swatch ai-saved-swatch"><span>❖</span></div>
+        <div class="saved-loadout-meta">
+          <span class="saved-loadout-name">${escapeHtml(cld.title || 'Custom Loadout')}</span>
+          <span class="saved-loadout-sub">${escapeHtml(subLabel)}</span>
+        </div>
+      `;
+      chip.addEventListener('click', () => {
+        const hydrated = hydrateSavedCustomLoadout(cld);
+        openLoadoutBuilderModal(hydrated);
+      });
+      ldGrid.appendChild(chip);
+    });
+
+    // 2. Saved In-Game Destiny 2 Loadouts
+    loadouts.forEach(ld => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'saved-loadout-chip';
+      const colorStyle = ld.colorPath
+        ? `style="background-image:url('https://www.bungie.net${ld.colorPath}');"`
+        : '';
+      const iconHtml = ld.iconPath
+        ? `<img src="https://www.bungie.net${ld.iconPath}" alt="" width="18" height="18" loading="lazy">`
+        : '<span>⚡</span>';
+      const subParts = [];
+      if (ld.subclass?.name) subParts.push(ld.subclass.name);
+      if (ld.exoticItem?.name) subParts.push(ld.exoticItem.name);
+      const subLabel = subParts.join(' • ') || `Slot #${ld.slotNumber}`;
+
+      chip.innerHTML = `
+        <div class="saved-loadout-swatch" ${colorStyle}>${iconHtml}</div>
+        <div class="saved-loadout-meta">
+          <span class="saved-loadout-name">${escapeHtml(ld.name)}</span>
+          <span class="saved-loadout-sub">${escapeHtml(subLabel)}</span>
+        </div>
+      `;
+      chip.addEventListener('click', () => openSavedLoadoutModal(ch, ld));
+      ldGrid.appendChild(chip);
+    });
+
+    details.appendChild(ldGrid);
 
     colWrap.appendChild(details);
     switcher.appendChild(colWrap);
@@ -3145,6 +3214,1139 @@ async function executeEquipSavedLoadout() {
     }
   } finally {
     if (equipBtn) equipBtn.disabled = false;
+  }
+}
+
+/* ==========================================================================
+   DIM-STYLE TACTICAL LOADOUT BUILDER, AUTO-OPTIMIZER & GUARDIAN EQUIPPER
+   ========================================================================== */
+const CUSTOM_LOADOUTS_STORAGE_KEY = 'felicia_custom_loadouts_v1';
+let activeLoadoutBuilderState = null;
+let activeLbPickerSlot = null;
+
+function getCustomLoadouts() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_LOADOUTS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function getCustomLoadoutsForClass(className) {
+  const target = (className || '').toLowerCase();
+  return getCustomLoadouts().filter(l => (l.className || '').toLowerCase() === target);
+}
+
+function saveCustomLoadoutToStorage(draft) {
+  const all = getCustomLoadouts();
+  const id = draft.id || `felicia_ld_${Date.now()}`;
+  const slotInstanceIds = {};
+  ['Kinetic', 'Energy', 'Heavy', 'Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'].forEach(slot => {
+    if (draft.slots && draft.slots[slot] && draft.slots[slot].itemInstanceId) {
+      slotInstanceIds[slot] = draft.slots[slot].itemInstanceId;
+    }
+  });
+
+  const record = {
+    id,
+    title: (draft.title || 'F.E.L.I.C.I.A. Custom Loadout').trim(),
+    className: draft.className || 'Hunter',
+    subclass: draft.subclass || 'Solar',
+    subclassInstanceId: draft.subclassItem?.itemInstanceId || '',
+    mode: draft.mode || 'PVE',
+    super: draft.super || '',
+    aspects: draft.aspects || [],
+    fragments: draft.fragments || [],
+    exoticArmor: draft.exoticArmor || '',
+    armorSet: draft.armorSet || '',
+    recommendedWeapons: draft.recommendedWeapons || [],
+    slotInstanceIds,
+    updatedAt: Date.now(),
+  };
+
+  const idx = all.findIndex(x => x.id === id);
+  if (idx >= 0) {
+    all[idx] = record;
+  } else {
+    all.unshift(record);
+  }
+  try {
+    localStorage.setItem(CUSTOM_LOADOUTS_STORAGE_KEY, JSON.stringify(all.slice(0, 40)));
+  } catch (_) {}
+  draft.id = id;
+  renderInventoryHeaderAndSwitcher();
+  return record;
+}
+
+function deleteCustomLoadoutFromStorage(id) {
+  if (!id) return;
+  const filtered = getCustomLoadouts().filter(x => x.id !== id);
+  try {
+    localStorage.setItem(CUSTOM_LOADOUTS_STORAGE_KEY, JSON.stringify(filtered));
+  } catch (_) {}
+  renderInventoryHeaderAndSwitcher();
+}
+
+function getArmorStatMap(item) {
+  const map = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  if (!item || !item.stats) return map;
+  if (Array.isArray(item.stats)) {
+    item.stats.forEach(s => {
+      if (s && s.name && map[s.name] !== undefined) {
+        map[s.name] = Number(s.value) || 0;
+      }
+    });
+  } else if (typeof item.stats === 'object') {
+    Object.keys(map).forEach(k => {
+      if (item.stats[k] !== undefined) {
+        map[k] = Number(item.stats[k]) || 0;
+      }
+    });
+  }
+  return map;
+}
+
+function collectAllOwnedGearForLoadout(targetClassName) {
+  const data = state.bungieData;
+  if (!data) return { character: null, weapons: [], armor: [], subclasses: [] };
+
+  const chars = data.characters || [];
+  const targetChar = chars.find(c => (c.className || '').toLowerCase() === (targetClassName || '').toLowerCase())
+    || getActiveCharacter()
+    || chars[0]
+    || null;
+
+  const weapons = [];
+  const armor = [];
+  const seenIds = new Set();
+
+  const addGear = (it, ownerCharId, loc, isEq) => {
+    if (!it || !it.itemInstanceId || seenIds.has(it.itemInstanceId)) return;
+    seenIds.add(it.itemInstanceId);
+    const copy = {
+      ...it,
+      location: loc || it.location || 'vault',
+      characterId: ownerCharId !== undefined ? ownerCharId : (it.characterId || ''),
+      isEquipped: Boolean(isEq),
+    };
+    if (copy.category === 'Weapon') {
+      weapons.push(copy);
+    } else if (copy.category === 'Armor') {
+      const cRestr = (copy.classRestriction || 'Any').toLowerCase();
+      const tLow = (targetChar?.className || targetClassName || 'Hunter').toLowerCase();
+      if (cRestr === tLow || cRestr === 'any') {
+        armor.push(copy);
+      }
+    }
+  };
+
+  if (targetChar) {
+    (targetChar.equipment || []).forEach(i => addGear(i, targetChar.characterId, 'character', true));
+    (targetChar.inventory || []).forEach(i => addGear(i, targetChar.characterId, 'character', false));
+  }
+  chars.forEach(c => {
+    if (!targetChar || c.characterId !== targetChar.characterId) {
+      (c.equipment || []).forEach(i => addGear(i, c.characterId, 'character', true));
+      (c.inventory || []).forEach(i => addGear(i, c.characterId, 'character', false));
+    }
+  });
+  (data.vault?.items || []).forEach(i => addGear(i, '', 'vault', false));
+
+  const subclasses = [];
+  if (targetChar) {
+    if (Array.isArray(targetChar.subclasses) && targetChar.subclasses.length > 0) {
+      subclasses.push(...targetChar.subclasses);
+    } else if (targetChar.subclass) {
+      subclasses.push({ ...targetChar.subclass, isEquipped: true, characterId: targetChar.characterId });
+    }
+  }
+
+  return { character: targetChar, weapons, armor, subclasses };
+}
+
+function parseBlueprintFromTextFallback(text, meta = {}, forceRecommend = false) {
+  const raw = text || '';
+  const low = raw.toLowerCase();
+  const promptLow = (meta.userPrompt || '').toLowerCase();
+  const combinedLow = `${promptLow} ${low}`;
+
+  const signals = ['super:', 'aspects:', 'fragments:', 'exotic', 'armor set', 'build', 'loadout', 'subclass', 'grandmaster', 'crucible', 'trials'];
+  const hitCount = signals.filter(s => combinedLow.includes(s)).length;
+  if (!forceRecommend && hitCount < 2) return null;
+
+  let className = meta.effectiveClass || '';
+  if (!className) {
+    if (combinedLow.includes('warlock')) className = 'Warlock';
+    else if (combinedLow.includes('titan')) className = 'Titan';
+    else if (combinedLow.includes('hunter')) className = 'Hunter';
+    else className = getActiveCharacter()?.className || 'Hunter';
+  }
+
+  let subclass = meta.effectiveSubclass || '';
+  if (!subclass) {
+    for (const sc of ['Prismatic', 'Solar', 'Arc', 'Void', 'Strand', 'Stasis']) {
+      if (combinedLow.includes(sc.toLowerCase())) {
+        subclass = sc;
+        break;
+      }
+    }
+  }
+  if (!subclass) subclass = 'Solar';
+
+  const isPvp = ['pvp', 'crucible', 'trials', 'comp', 'iron banner'].some(k => combinedLow.includes(k));
+  const mode = isPvp ? 'PVP' : 'PVE';
+
+  let superName = '';
+  const mSup = raw.match(/\*\*Super:\*\*\s*([^\n•*]+)/i);
+  if (mSup) superName = mSup[1].trim();
+
+  let aspects = [];
+  const mAsp = raw.match(/\*\*Aspects:\*\*\s*([^\n]+)/i);
+  if (mAsp) {
+    aspects = mAsp[1].split(/,|\+|and|\|/i).map(s => s.replace(/[*•-]/g, '').trim()).filter(Boolean).slice(0, 3);
+  }
+
+  let fragments = [];
+  const mFrag = raw.match(/\*\*Fragments:\*\*\s*([^\n]+)/i);
+  if (mFrag) {
+    fragments = mFrag[1].split(/,|\|/i).map(s => s.replace(/[*•-]/g, '').trim()).filter(Boolean).slice(0, 6);
+  }
+
+  // Match any owned exotic armor or weapons mentioned in the text
+  const { weapons, armor } = collectAllOwnedGearForLoadout(className);
+  let exoticArmor = '';
+  for (const a of armor) {
+    if (a.isExotic && a.name && low.includes(a.name.toLowerCase())) {
+      exoticArmor = a.name;
+      break;
+    }
+  }
+  if (!exoticArmor) {
+    const mExo = raw.match(/\*\*Exotic Armor:\*\*\s*\*?\*?([^(\n*]+)/i);
+    if (mExo) exoticArmor = mExo[1].trim();
+  }
+
+  let armorSet = '';
+  for (const a of armor) {
+    if (a.compendiumSet?.name && low.includes(a.compendiumSet.name.toLowerCase())) {
+      armorSet = a.compendiumSet.name;
+      break;
+    }
+  }
+
+  const recommendedWeapons = [];
+  weapons.forEach(w => {
+    const base = (w.name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
+    if (base.length >= 4 && low.includes(base.toLowerCase()) && !recommendedWeapons.includes(w.name)) {
+      recommendedWeapons.push(w.name);
+    }
+  });
+
+  return {
+    isBuildRecommendation: true,
+    title: `F.E.L.I.C.I.A. // ${subclass} ${className} (${mode})`,
+    className,
+    subclass,
+    mode,
+    super: superName,
+    aspects,
+    fragments,
+    exoticArmor,
+    armorSet,
+    recommendedWeapons: recommendedWeapons.slice(0, 6),
+  };
+}
+
+function scoreWeaponForLoadout(w, blueprint, targetCharId) {
+  let score = (Number(w.power) || 0) * 0.1;
+  if (w.godRollCheck?.isRankOneBest) score += 250;
+  else if (w.godRollCheck?.isGodRoll) score += 160;
+  else if (w.godRollCheck?.verdictCode === 'SOLID_KEEP') score += 70;
+
+  if (w.gearTier) score += Number(w.gearTier) * 15;
+  if (w.characterId === targetCharId && w.isEquipped) score += 25;
+  else if (w.characterId === targetCharId) score += 15;
+
+  const subElem = (blueprint.subclass || '').toLowerCase();
+  const wElem = (w.element || '').toLowerCase();
+  if (wElem && wElem === subElem) score += 45;
+  if (subElem === 'prismatic' && ['strand', 'stasis', 'arc', 'solar', 'void'].includes(wElem)) score += 20;
+
+  return score;
+}
+
+function scoreArmorForLoadout(a, blueprint, preferredSetName = '') {
+  const stats = getArmorStatMap(a);
+  const total = Number(a.totalStats) || Object.values(stats).reduce((s, v) => s + v, 0);
+  const isPvp = (blueprint.mode || 'PVE').toUpperCase() === 'PVP';
+
+  let score = total * 2.2;
+  if (isPvp) {
+    // PVP prioritizes 10+ Health for flinch resistance
+    if (stats.Health >= 10) score += 90 + stats.Health * 2.5;
+    else score -= 40;
+    score += (stats.Weapons + stats.Super + stats.Class) * 0.8;
+  } else {
+    // PVE strictly prioritizes 0 Health and high Grenade / Melee / Weapons / Super / Class
+    if (stats.Health === 0) score += 110;
+    else if (stats.Health < 10) score += 40;
+    else score -= stats.Health * 2;
+    score += (stats.Grenade + stats.Melee + stats.Weapons + stats.Super + stats.Class) * 1.1;
+  }
+
+  if (a.gearTier) score += Number(a.gearTier) * 12;
+
+  const setName = (a.compendiumSet?.name || '').toLowerCase();
+  const targetSet = (blueprint.armorSet || preferredSetName || '').toLowerCase();
+  if (targetSet && setName && (setName.includes(targetSet) || targetSet.includes(setName))) {
+    score += 140;
+  } else if (setName) {
+    score += 30;
+  }
+
+  return score;
+}
+
+function assembleLoadoutFromBlueprint(blueprint = {}) {
+  const className = blueprint.className || getActiveCharacter()?.className || 'Hunter';
+  const subclass = blueprint.subclass || 'Solar';
+  const mode = (blueprint.mode || 'PVE').toUpperCase();
+  const title = blueprint.title || `F.E.L.I.C.I.A. // ${subclass} ${className} (${mode})`;
+
+  const { character, weapons, armor, subclasses } = collectAllOwnedGearForLoadout(className);
+  const targetCharId = character?.characterId || '';
+
+  // 1. Match Subclass item
+  const subLow = subclass.toLowerCase();
+  const matchedSubclass = subclasses.find(
+    s => (s.element || '').toLowerCase() === subLow || (s.name || '').toLowerCase().includes(subLow)
+  ) || character?.subclass || null;
+
+  const slots = {
+    Kinetic: null,
+    Energy: null,
+    Heavy: null,
+    Helmet: null,
+    Gauntlets: null,
+    'Chest Armor': null,
+    'Leg Armor': null,
+    'Class Armor': null,
+  };
+
+  let exoticWeaponUsed = false;
+  const recWepNames = (blueprint.recommendedWeapons || []).map(n => n.toLowerCase());
+  const missingWeapons = [];
+
+  // 2a. First slot any explicitly recommended weapons that the Guardian owns
+  recWepNames.forEach(recLow => {
+    const cleanRec = recLow.replace(/\s*\(.*?\)\s*/g, '').trim();
+    const candidates = weapons
+      .filter(w => {
+        const wLow = (w.name || '').toLowerCase();
+        const wBase = wLow.replace(/\s*\(.*?\)\s*/g, '').trim();
+        return wLow === recLow || wBase === cleanRec || wLow.includes(cleanRec);
+      })
+      .sort((a, b) => scoreWeaponForLoadout(b, blueprint, targetCharId) - scoreWeaponForLoadout(a, blueprint, targetCharId));
+
+    if (candidates.length > 0) {
+      for (const cand of candidates) {
+        const slot = cand.slot;
+        if (['Kinetic', 'Energy', 'Heavy'].includes(slot) && !slots[slot]) {
+          if (cand.isExotic && exoticWeaponUsed) continue;
+          slots[slot] = cand;
+          if (cand.isExotic) exoticWeaponUsed = true;
+          break;
+        }
+      }
+    } else if (cleanRec.length >= 3) {
+      missingWeapons.push(cleanRec);
+    }
+  });
+
+  // 2b. Fill remaining Weapon slots with best owned God Rolls / synergistic weapons
+  ['Kinetic', 'Energy', 'Heavy'].forEach(wSlot => {
+    if (slots[wSlot]) return;
+    const pool = weapons
+      .filter(w => w.slot === wSlot && (!w.isExotic || !exoticWeaponUsed))
+      .sort((a, b) => scoreWeaponForLoadout(b, blueprint, targetCharId) - scoreWeaponForLoadout(a, blueprint, targetCharId));
+    if (pool.length > 0) {
+      slots[wSlot] = pool[0];
+      if (pool[0].isExotic) exoticWeaponUsed = true;
+    }
+  });
+
+  // 3a. Match Exotic Armor piece (max 1 Exotic Armor)
+  let missingExoticArmor = '';
+  const targetExoLow = (blueprint.exoticArmor || '').toLowerCase().trim();
+  const ownedExotics = armor.filter(a => a.isExotic);
+
+  let chosenExoticArmor = null;
+  if (targetExoLow) {
+    const matchingExos = ownedExotics
+      .filter(a => {
+        const aLow = (a.name || '').toLowerCase();
+        return aLow === targetExoLow || aLow.includes(targetExoLow) || targetExoLow.includes(aLow);
+      })
+      .sort((a, b) => scoreArmorForLoadout(b, blueprint) - scoreArmorForLoadout(a, blueprint));
+    if (matchingExos.length > 0) {
+      chosenExoticArmor = matchingExos[0];
+    } else {
+      missingExoticArmor = blueprint.exoticArmor;
+    }
+  }
+
+  // If recommended exotic armor isn't owned (or wasn't specified), pick the best owned Exotic armor for this mode
+  if (!chosenExoticArmor && ownedExotics.length > 0) {
+    const bestExos = [...ownedExotics].sort((a, b) => scoreArmorForLoadout(b, blueprint) - scoreArmorForLoadout(a, blueprint));
+    chosenExoticArmor = bestExos[0];
+  }
+
+  if (chosenExoticArmor && slots[chosenExoticArmor.slot] !== undefined) {
+    slots[chosenExoticArmor.slot] = chosenExoticArmor;
+  }
+
+  // 3b. Determine dominant Compendium Armor Set among Legendary armor if not explicitly specified
+  let preferredSetName = blueprint.armorSet || '';
+  if (!preferredSetName) {
+    const setCounts = {};
+    armor.filter(a => !a.isExotic && a.compendiumSet?.name).forEach(a => {
+      const sn = a.compendiumSet.name;
+      setCounts[sn] = (setCounts[sn] || 0) + 1;
+    });
+    const topSet = Object.entries(setCounts).sort((a, b) => b[1] - a[1])[0];
+    if (topSet && topSet[1] >= 2) {
+      preferredSetName = topSet[0];
+    }
+  }
+
+  // 3c. Fill the remaining 4 Armor slots with top-scoring Legendary pieces
+  ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'].forEach(aSlot => {
+    if (slots[aSlot]) return;
+    const legPool = armor
+      .filter(a => a.slot === aSlot && !a.isExotic)
+      .sort((a, b) => scoreArmorForLoadout(b, blueprint, preferredSetName) - scoreArmorForLoadout(a, blueprint, preferredSetName));
+    if (legPool.length > 0) {
+      slots[aSlot] = legPool[0];
+    } else {
+      // Fallback to any piece in that slot if no legendary exists
+      const anyPool = armor.filter(a => a.slot === aSlot && (!a.isExotic || !chosenExoticArmor));
+      if (anyPool.length > 0) slots[aSlot] = anyPool[0];
+    }
+  });
+
+  return {
+    id: blueprint.id || '',
+    title,
+    className: character?.className || className,
+    characterId: targetCharId,
+    subclass,
+    subclassItem: matchedSubclass,
+    mode,
+    super: blueprint.super || matchedSubclass?.super?.name || '',
+    aspects: blueprint.aspects?.length ? blueprint.aspects : (matchedSubclass?.aspects || []).map(a => a.name),
+    fragments: blueprint.fragments?.length ? blueprint.fragments : (matchedSubclass?.fragments || []).map(f => f.name),
+    exoticArmor: blueprint.exoticArmor || chosenExoticArmor?.name || '',
+    armorSet: blueprint.armorSet || preferredSetName || '',
+    recommendedWeapons: blueprint.recommendedWeapons || [],
+    missingExoticArmor,
+    missingWeapons,
+    slots,
+  };
+}
+
+function hydrateSavedCustomLoadout(savedObj) {
+  const base = assembleLoadoutFromBlueprint(savedObj);
+  base.id = savedObj.id || '';
+  base.title = savedObj.title || base.title;
+
+  if (savedObj.slotInstanceIds && state.bungieData) {
+    Object.entries(savedObj.slotInstanceIds).forEach(([slot, iid]) => {
+      if (iid) {
+        const liveIt = findLiveItemByInstanceId(iid);
+        if (liveIt) {
+          base.slots[slot] = liveIt;
+        }
+      }
+    });
+  }
+  return base;
+}
+
+function computeLoadoutArmorTelemetry(slots) {
+  const totals = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  const setMap = {};
+  let overallTotal = 0;
+
+  ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'].forEach(s => {
+    const it = slots?.[s];
+    if (!it) return;
+    const st = getArmorStatMap(it);
+    Object.keys(totals).forEach(k => {
+      totals[k] += st[k];
+      overallTotal += st[k];
+    });
+    if (it.compendiumSet?.name) {
+      const sn = it.compendiumSet.name;
+      if (!setMap[sn]) {
+        setMap[sn] = { count: 0, setObj: it.compendiumSet };
+      }
+      setMap[sn].count += 1;
+    }
+  });
+
+  const activeSets = Object.values(setMap).filter(x => x.count >= 2).sort((a, b) => b.count - a.count);
+  return { totals, overallTotal, activeSets };
+}
+
+function formatItemLocationBadge(item, targetCharId) {
+  if (!item) return '<span class="lb-loc-pill missing">EMPTY</span>';
+  if (item.location === 'character' && item.characterId === targetCharId && item.isEquipped) {
+    return '<span class="lb-loc-pill equipped">✓ EQUIPPED</span>';
+  }
+  if (item.location === 'character' && item.characterId === targetCharId) {
+    return '<span class="lb-loc-pill in-bag">🎒 IN BAG</span>';
+  }
+  if (item.location === 'vault') {
+    return '<span class="lb-loc-pill in-vault">🏛️ IN VAULT</span>';
+  }
+  return '<span class="lb-loc-pill other-char">🔄 OTHER CHAR</span>';
+}
+
+function renderInlineChatLoadoutCard(containerEl, blueprint) {
+  if (!containerEl || !blueprint) return;
+
+  const hasBungie = Boolean(state.bungieData && state.bungieSession?.access_token);
+  const assembled = assembleLoadoutFromBlueprint(blueprint);
+  const { totals, activeSets } = computeLoadoutArmorTelemetry(assembled.slots);
+
+  const slotOrder = ['Kinetic', 'Energy', 'Heavy', 'Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+  const itemsPreviewHtml = hasBungie
+    ? `<div class="chat-dim-slots-grid">
+        ${slotOrder.map(slotName => {
+          const it = assembled.slots[slotName];
+          if (!it) {
+            return `<div class="chat-dim-mini-slot empty">
+              <div class="chat-dim-slot-label">${escapeHtml(slotName)}</div>
+              <div class="chat-dim-slot-name">No Matching Item</div>
+            </div>`;
+          }
+          const iconUrl = it.icon ? `https://www.bungie.net${it.icon}` : '';
+          const exoClass = it.isExotic ? 'is-exotic' : '';
+          const locBadge = formatItemLocationBadge(it, assembled.characterId);
+          return `<div class="chat-dim-mini-slot ${exoClass}" title="${escapeHtml(it.name)} (${escapeHtml(slotName)})">
+            <img src="${iconUrl}" alt="" class="chat-dim-slot-icon" loading="lazy">
+            <div class="chat-dim-slot-info">
+              <div class="chat-dim-slot-top">
+                <span class="chat-dim-slot-label">${escapeHtml(slotName.replace(' Armor', ''))}</span>
+                ${locBadge}
+              </div>
+              <div class="chat-dim-slot-name">${escapeHtml(it.name)}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`
+    : `<div class="chat-dim-unlinked-note">
+        <span>🔗 Sign in with Bungie.net in the <strong>Inventory</strong> tab to auto-match this build against your live Character &amp; Vault gear and equip it in 1 click!</span>
+      </div>`;
+
+  const missingAlerts = [];
+  if (hasBungie && assembled.missingExoticArmor) {
+    const subExo = Object.values(assembled.slots).find(i => i && i.category === 'Armor' && i.isExotic);
+    missingAlerts.push(`Missing <strong>${escapeHtml(assembled.missingExoticArmor)}</strong> in Vault/Bag — auto-slotted <strong>${escapeHtml(subExo?.name || 'best owned armor')}</strong>.`);
+  }
+  const setBonusSummary = activeSets.length > 0
+    ? activeSets.map(s => `${s.setObj.name} (${s.count >= 4 ? '4pc + 2pc' : '2pc'})`).join(' • ')
+    : '';
+
+  containerEl.innerHTML = `
+    <div class="chat-dim-loadout-card">
+      <div class="chat-dim-header">
+        <div class="chat-dim-title-group">
+          <span class="chat-dim-eyebrow">⚡ DIM TACTICAL LOADOUT ASSEMBLER // ${escapeHtml(assembled.className.toUpperCase())} • ${escapeHtml(assembled.subclass.toUpperCase())} • ${escapeHtml(assembled.mode)}</span>
+          <h4 class="chat-dim-title">${escapeHtml(assembled.title)}</h4>
+        </div>
+        ${hasBungie ? `<div class="chat-dim-stat-pill">ARMOR STATS: <strong>${Object.values(totals).reduce((a,b)=>a+b,0)}</strong> (HP ${totals.Health} | GRN ${totals.Grenade} | MEL ${totals.Melee} | WEP ${totals.Weapons})</div>` : ''}
+      </div>
+
+      ${missingAlerts.length > 0 ? `<div class="chat-dim-missing-banner">⚠ ${missingAlerts.join(' ')}</div>` : ''}
+      ${setBonusSummary ? `<div class="chat-dim-set-banner">⛊ Active Armor Set Synergy: <strong>${escapeHtml(setBonusSummary)}</strong></div>` : ''}
+
+      ${itemsPreviewHtml}
+
+      <div class="inspect-transfer-feedback hidden" data-role="chat-dim-feedback"></div>
+
+      <div class="chat-dim-actions">
+        <button type="button" class="btn-item-action btn-lb-equip" data-role="chat-equip-now">
+          ⚡ Equip Build on ${escapeHtml(assembled.className)}
+        </button>
+        <button type="button" class="btn-item-action" data-role="chat-open-builder">
+          🛠️ Customize in Loadout Builder
+        </button>
+        <button type="button" class="btn-item-action btn-ask-felicia" data-role="chat-save-loadout">
+          💾 Save to My Loadouts
+        </button>
+      </div>
+    </div>
+  `;
+
+  const equipBtn = containerEl.querySelector('[data-role="chat-equip-now"]');
+  const openBuilderBtn = containerEl.querySelector('[data-role="chat-open-builder"]');
+  const saveBtn = containerEl.querySelector('[data-role="chat-save-loadout"]');
+  const feedbackEl = containerEl.querySelector('[data-role="chat-dim-feedback"]');
+
+  if (equipBtn) {
+    equipBtn.addEventListener('click', async () => {
+      if (!state.bungieData || !state.bungieSession?.access_token) {
+        showToast('Sign in to Bungie.net first so F.E.L.I.C.I.A. can equip your Guardian!', 'info');
+        switchTab('tab-inventory');
+        return;
+      }
+      const freshAssembled = assembleLoadoutFromBlueprint(blueprint);
+      await executeEquipCustomLoadout(freshAssembled, feedbackEl, equipBtn, false);
+      renderInlineChatLoadoutCard(containerEl, blueprint);
+    });
+  }
+
+  if (openBuilderBtn) {
+    openBuilderBtn.addEventListener('click', () => {
+      sfx.playChirp();
+      const freshAssembled = assembleLoadoutFromBlueprint(blueprint);
+      openLoadoutBuilderModal(freshAssembled);
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      sfx.playReceive();
+      const freshAssembled = assembleLoadoutFromBlueprint(blueprint);
+      saveCustomLoadoutToStorage(freshAssembled);
+      saveBtn.textContent = '✓ Saved to Loadouts!';
+      showToast(`Saved '${freshAssembled.title}' to ${freshAssembled.className} Loadouts!`, 'info');
+    });
+  }
+}
+
+function openLoadoutBuilderModal(initialLoadout = null) {
+  sfx.playChirp();
+  const modal = document.getElementById('modalLoadoutBuilder');
+  if (!modal) return;
+
+  if (!initialLoadout) {
+    const activeChar = getActiveCharacter() || state.bungieData?.characters?.[0];
+    initialLoadout = assembleLoadoutFromBlueprint({
+      title: `${activeChar?.subclass?.element || 'Solar'} ${activeChar?.className || 'Hunter'} // Tactical Loadout`,
+      className: activeChar?.className || 'Hunter',
+      subclass: activeChar?.subclass?.element || 'Solar',
+      mode: 'PVE',
+    });
+  }
+
+  activeLoadoutBuilderState = initialLoadout;
+  activeLbPickerSlot = null;
+
+  const nameInput = document.getElementById('lbLoadoutNameInput');
+  const classSelect = document.getElementById('lbClassSelect');
+  const subclassSelect = document.getElementById('lbSubclassSelect');
+  const modeSelect = document.getElementById('lbModeSelect');
+  const deleteBtn = document.getElementById('btnLbDeleteCustom');
+  const feedbackEl = document.getElementById('lbFeedbackBanner');
+  const pickerDrawer = document.getElementById('lbSlotPickerDrawer');
+
+  if (nameInput) nameInput.value = activeLoadoutBuilderState.title || 'F.E.L.I.C.I.A. Tactical Build';
+  if (classSelect) classSelect.value = activeLoadoutBuilderState.className || 'Hunter';
+  if (subclassSelect) subclassSelect.value = activeLoadoutBuilderState.subclass || 'Solar';
+  if (modeSelect) modeSelect.value = activeLoadoutBuilderState.mode || 'PVE';
+  if (deleteBtn) deleteBtn.classList.toggle('hidden', !activeLoadoutBuilderState.id);
+  if (feedbackEl) {
+    feedbackEl.classList.add('hidden');
+    feedbackEl.classList.remove('error');
+  }
+  if (pickerDrawer) pickerDrawer.classList.add('hidden');
+
+  renderLoadoutBuilderWorkspace();
+
+  try {
+    if (!modal.open) modal.showModal();
+  } catch (_) {
+    modal.setAttribute('open', '');
+  }
+}
+
+function renderLoadoutBuilderWorkspace() {
+  const draft = activeLoadoutBuilderState;
+  if (!draft) return;
+
+  const equipBtn = document.getElementById('btnLbEquipNow');
+  if (equipBtn) {
+    equipBtn.textContent = `⚡ Equip Loadout on ${draft.className}`;
+  }
+
+  // 1. Render AI Blueprint Reference Banner (Super, Aspects, Fragments, Missing Gear)
+  const bpBox = document.getElementById('lbAiBlueprintBox');
+  if (bpBox) {
+    const hasBpDetails = Boolean(draft.super || (draft.aspects && draft.aspects.length) || (draft.fragments && draft.fragments.length) || draft.missingExoticArmor);
+    if (hasBpDetails) {
+      bpBox.classList.remove('hidden');
+      bpBox.innerHTML = `
+        <div class="lb-bp-header">
+          <span>❖ F.E.L.I.C.I.A. RECOMMENDED SUBCLASS &amp; ABILITY CONFIGURATION</span>
+          <span class="lb-bp-sub-tag">${escapeHtml(draft.subclass.toUpperCase())} ${escapeHtml(draft.className.toUpperCase())} // ${escapeHtml(draft.mode)}</span>
+        </div>
+        <div class="lb-bp-chips-row">
+          ${draft.super ? `<div class="lb-bp-group"><span class="lb-bp-lbl">⚡ SUPER:</span> <span class="lb-bp-chip super">${escapeHtml(draft.super)}</span></div>` : ''}
+          ${(draft.aspects || []).length ? `<div class="lb-bp-group"><span class="lb-bp-lbl">❖ ASPECTS:</span> ${draft.aspects.map(a => `<span class="lb-bp-chip aspect">${escapeHtml(a)}</span>`).join('')}</div>` : ''}
+          ${(draft.fragments || []).length ? `<div class="lb-bp-group"><span class="lb-bp-lbl">✦ FRAGMENTS:</span> ${draft.fragments.map(f => `<span class="lb-bp-chip fragment">${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+        </div>
+        ${draft.missingExoticArmor ? `<div class="lb-bp-missing-note">⚠ Target Exotic <strong>${escapeHtml(draft.missingExoticArmor)}</strong> is not currently in your Inventory or Vault — auto-slotted your highest-stat Exotic armor instead. Click any slot below to customize!</div>` : ''}
+      `;
+    } else {
+      bpBox.classList.add('hidden');
+    }
+  }
+
+  // 2. Render 2-Column Slots Workspace
+  const workspace = document.getElementById('lbSlotsWorkspace');
+  if (!workspace) return;
+
+  const { totals, overallTotal, activeSets } = computeLoadoutArmorTelemetry(draft.slots);
+
+  const renderSlotCard = (slotName, category) => {
+    const it = draft.slots?.[slotName];
+    const isSelectedSlot = activeLbPickerSlot && activeLbPickerSlot.slotName === slotName;
+    if (!it) {
+      return `
+        <div class="lb-slot-card empty ${isSelectedSlot ? 'active-slot' : ''}" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">
+          <div class="lb-slot-icon-placeholder">+</div>
+          <div class="lb-slot-meta">
+            <div class="lb-slot-top-row">
+              <span class="lb-slot-type">${escapeHtml(slotName.toUpperCase())}</span>
+              <span class="lb-loc-pill missing">EMPTY SLOT</span>
+            </div>
+            <div class="lb-slot-name">Click to select ${escapeHtml(slotName)} from Inventory / Vault</div>
+          </div>
+          <button type="button" class="btn-tactical btn-secondary btn-sm btn-lb-swap" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">Select</button>
+        </div>
+      `;
+    }
+
+    const iconUrl = it.icon ? `https://www.bungie.net${it.icon}` : '';
+    const locBadge = formatItemLocationBadge(it, draft.characterId);
+    const exoClass = it.isExotic ? 'is-exotic' : '';
+    let subDetailsHtml = '';
+
+    if (category === 'Weapon') {
+      const perks = (it.activePerks || []).map(p => p.name).slice(0, 2).join(' + ');
+      const grBadge = it.godRollCheck?.isRankOneBest
+        ? '<span class="lb-mini-tag gold">👑 #1 GOD ROLL</span>'
+        : (it.godRollCheck?.isGodRoll ? '<span class="lb-mini-tag gold">★ GOD ROLL</span>' : '');
+      subDetailsHtml = `
+        <div class="lb-slot-sub">
+          <span>✦ ${it.power || ''} • ${escapeHtml(it.element || '')} ${escapeHtml(it.typeName || '')}</span>
+          ${grBadge}
+          ${perks ? `<span class="lb-slot-perks">[${escapeHtml(perks)}]</span>` : ''}
+        </div>
+      `;
+    } else {
+      const st = getArmorStatMap(it);
+      const setTag = it.compendiumSet?.name
+        ? `<span class="lb-mini-tag set">⛊ ${escapeHtml(it.compendiumSet.name)}</span>`
+        : '';
+      const hpTag = st.Health === 0
+        ? '<span class="lb-mini-tag pve">0 HP (PVE)</span>'
+        : (st.Health >= 10 ? `<span class="lb-mini-tag pvp">${st.Health} HP (PVP)</span>` : `<span class="lb-mini-tag">${st.Health} HP</span>`);
+      subDetailsHtml = `
+        <div class="lb-slot-sub">
+          <span>✦ ${it.power || ''} • Total: <strong>${it.totalStats || 0}</strong></span>
+          ${hpTag}
+          ${setTag}
+          <span class="lb-slot-perks">GRN ${st.Grenade} · MEL ${st.Melee} · WEP ${st.Weapons} · SUP ${st.Super}</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="lb-slot-card ${exoClass} ${isSelectedSlot ? 'active-slot' : ''}" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">
+        <img src="${iconUrl}" alt="" class="lb-slot-icon" loading="lazy">
+        <div class="lb-slot-meta">
+          <div class="lb-slot-top-row">
+            <span class="lb-slot-type">${escapeHtml(slotName.toUpperCase())} ${it.isExotic ? '• EXOTIC' : ''}</span>
+            ${locBadge}
+          </div>
+          <div class="lb-slot-name">${escapeHtml(it.name)}</div>
+          ${subDetailsHtml}
+        </div>
+        <button type="button" class="btn-tactical btn-secondary btn-sm btn-lb-swap" data-slot="${escapeHtml(slotName)}" data-category="${escapeHtml(category)}">🔄 Swap</button>
+      </div>
+    `;
+  };
+
+  const subItem = draft.subclassItem;
+  const subIconHtml = subItem?.icon ? `<img src="https://www.bungie.net${subItem.icon}" alt="" class="lb-slot-icon">` : `<div class="lb-slot-icon-placeholder">✦</div>`;
+  const subLocBadge = subItem
+    ? (subItem.isEquipped ? '<span class="lb-loc-pill equipped">✓ EQUIPPED</span>' : '<span class="lb-loc-pill in-bag">🎒 ON CHARACTER</span>')
+    : '<span class="lb-loc-pill missing">SUBCLASS</span>';
+
+  const setBonusesHtml = activeSets.length > 0
+    ? `<div class="lb-active-sets-box">
+        ${activeSets.map(s => `
+          <div class="lb-active-set-item">
+            <span class="lb-set-title">⛊ ${escapeHtml(s.setObj.name)} (${s.count} Pieces Equipped)</span>
+            <span class="lb-set-desc"><strong>2pc (${escapeHtml(s.setObj.perk2pc?.name || 'Active')}):</strong> ${escapeHtml(s.setObj.perk2pc?.desc || '')}</span>
+            ${s.count >= 4 && s.setObj.perk4pc?.name ? `<span class="lb-set-desc"><strong>4pc (${escapeHtml(s.setObj.perk4pc.name)}):</strong> ${escapeHtml(s.setObj.perk4pc.desc || '')}</span>` : ''}
+          </div>
+        `).join('')}
+      </div>`
+    : '';
+
+  workspace.innerHTML = `
+    <div class="saved-loadout-columns lb-two-columns">
+      <!-- LEFT COLUMN: SUBCLASS + 3 WEAPON SLOTS -->
+      <div class="loadout-col-panel">
+        <div class="loadout-col-header">⚔️ SUBCLASS &amp; WEAPON ARSENAL (CLICK ANY SLOT TO SWAP)</div>
+        <div class="lb-slots-stack">
+          <div class="lb-slot-card subclass-slot-card">
+            ${subIconHtml}
+            <div class="lb-slot-meta">
+              <div class="lb-slot-top-row">
+                <span class="lb-slot-type">SUBCLASS // ${escapeHtml(draft.subclass.toUpperCase())}</span>
+                ${subLocBadge}
+              </div>
+              <div class="lb-slot-name">${escapeHtml(subItem?.name || `${draft.subclass} ${draft.className}`)}</div>
+              <div class="lb-slot-sub">
+                <span>${escapeHtml(draft.super ? `Super: ${draft.super}` : 'Synced with Subclass Selector above')}</span>
+              </div>
+            </div>
+          </div>
+          ${renderSlotCard('Kinetic', 'Weapon')}
+          ${renderSlotCard('Energy', 'Weapon')}
+          ${renderSlotCard('Heavy', 'Weapon')}
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: 5 ARMOR SLOTS + LIVE 6-STAT SUMMARY -->
+      <div class="loadout-col-panel">
+        <div class="loadout-col-header">🛡️ ARMOR RIG &amp; COMBINED STAT TELEMETRY (${overallTotal} TOTAL)</div>
+        <div class="lb-armor-stats-strip">
+          ${Object.entries(totals).map(([sName, sVal]) => {
+            const isWarnPvEHealth = draft.mode === 'PVE' && sName === 'Health' && sVal >= 10;
+            const isGoodPvEZero = draft.mode === 'PVE' && sName === 'Health' && sVal === 0;
+            return `<div class="lb-stat-cell ${isWarnPvEHealth ? 'warn' : ''} ${isGoodPvEZero ? 'highlight' : ''}">
+              <span class="lb-stat-lbl">${escapeHtml(sName.toUpperCase())}</span>
+              <span class="lb-stat-val">${sVal}</span>
+            </div>`;
+          }).join('')}
+        </div>
+        ${setBonusesHtml}
+        <div class="lb-slots-stack">
+          ${renderSlotCard('Helmet', 'Armor')}
+          ${renderSlotCard('Gauntlets', 'Armor')}
+          ${renderSlotCard('Chest Armor', 'Armor')}
+          ${renderSlotCard('Leg Armor', 'Armor')}
+          ${renderSlotCard('Class Armor', 'Armor')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  workspace.querySelectorAll('.lb-slot-card[data-slot]').forEach(card => {
+    card.addEventListener('click', () => {
+      const sName = card.getAttribute('data-slot');
+      const cat = card.getAttribute('data-category');
+      if (sName && cat) {
+        openLbSlotPicker(sName, cat);
+      }
+    });
+  });
+}
+
+function openLbSlotPicker(slotName, category) {
+  sfx.playChirp();
+  const draft = activeLoadoutBuilderState;
+  if (!draft) return;
+
+  activeLbPickerSlot = { slotName, category };
+  const drawer = document.getElementById('lbSlotPickerDrawer');
+  const labelEl = document.getElementById('lbPickerSlotLabel');
+  const titleEl = document.getElementById('lbPickerTitle');
+  const searchInput = document.getElementById('lbPickerSearchInput');
+
+  if (!drawer) return;
+  drawer.classList.remove('hidden');
+  if (labelEl) labelEl.textContent = `SWAP ${slotName.toUpperCase()} // ${draft.className.toUpperCase()}`;
+  if (titleEl) titleEl.textContent = `Select ${slotName} from Inventory & Vault`;
+  if (searchInput) searchInput.value = '';
+
+  renderLbSlotPickerItems('');
+  renderLoadoutBuilderWorkspace();
+  drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderLbSlotPickerItems(searchQuery = '') {
+  const draft = activeLoadoutBuilderState;
+  const picker = activeLbPickerSlot;
+  const grid = document.getElementById('lbPickerGrid');
+  if (!draft || !picker || !grid) return;
+
+  const { weapons, armor } = collectAllOwnedGearForLoadout(draft.className);
+  const qLow = (searchQuery || '').toLowerCase().trim();
+
+  let pool = [];
+  if (picker.category === 'Weapon') {
+    pool = weapons
+      .filter(w => w.slot === picker.slotName)
+      .sort((a, b) => scoreWeaponForLoadout(b, draft, draft.characterId) - scoreWeaponForLoadout(a, draft, draft.characterId));
+  } else {
+    pool = armor
+      .filter(a => a.slot === picker.slotName)
+      .sort((a, b) => {
+        if (a.isExotic !== b.isExotic) return a.isExotic ? -1 : 1;
+        return scoreArmorForLoadout(b, draft, draft.armorSet) - scoreArmorForLoadout(a, draft, draft.armorSet);
+      });
+  }
+
+  if (qLow) {
+    pool = pool.filter(it => {
+      const nm = (it.name || '').toLowerCase();
+      const tp = (it.typeName || '').toLowerCase();
+      const el = (it.element || '').toLowerCase();
+      const st = (it.compendiumSet?.name || '').toLowerCase();
+      const pks = (it.activePerks || []).map(p => (p.name || '').toLowerCase()).join(' ');
+      return nm.includes(qLow) || tp.includes(qLow) || el.includes(qLow) || st.includes(qLow) || pks.includes(qLow) || (it.isExotic && 'exotic'.includes(qLow));
+    });
+  }
+
+  if (pool.length === 0) {
+    grid.innerHTML = `<div style="padding:14px; color:#94A3B8; font-size:13px;">No matching items found in your Inventory or Vault for ${escapeHtml(picker.slotName)}.</div>`;
+    return;
+  }
+
+  const currentSelectedIid = draft.slots?.[picker.slotName]?.itemInstanceId || '';
+
+  grid.innerHTML = pool.map(it => {
+    const iconUrl = it.icon ? `https://www.bungie.net${it.icon}` : '';
+    const isCurrent = it.itemInstanceId === currentSelectedIid;
+    const locBadge = formatItemLocationBadge(it, draft.characterId);
+    let metaLine = '';
+    if (picker.category === 'Weapon') {
+      const perks = (it.activePerks || []).map(p => p.name).slice(0, 2).join(' + ');
+      const gr = it.godRollCheck?.isGodRoll ? '★ GOD ROLL • ' : '';
+      metaLine = `${gr}✦ ${it.power || ''} • ${escapeHtml(it.element || '')} ${escapeHtml(it.typeName || '')} ${perks ? `• ${escapeHtml(perks)}` : ''}`;
+    } else {
+      const st = getArmorStatMap(it);
+      const setTxt = it.compendiumSet?.name ? `⛊ ${it.compendiumSet.name} • ` : '';
+      metaLine = `${setTxt}Total ${it.totalStats || 0} (HP ${st.Health} · GRN ${st.Grenade} · MEL ${st.Melee} · WEP ${st.Weapons})`;
+    }
+
+    return `
+      <button type="button" class="lb-picker-item-btn ${it.isExotic ? 'is-exotic' : ''} ${isCurrent ? 'is-selected' : ''}" data-iid="${escapeHtml(it.itemInstanceId)}">
+        <img src="${iconUrl}" alt="" class="lb-picker-item-icon" loading="lazy">
+        <div class="lb-picker-item-info">
+          <div class="lb-picker-item-top">
+            <span class="lb-picker-item-name">${escapeHtml(it.name)}</span>
+            ${locBadge}
+          </div>
+          <div class="lb-picker-item-sub">${metaLine}</div>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.lb-picker-item-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const iid = btn.getAttribute('data-iid');
+      const chosen = pool.find(x => x.itemInstanceId === iid);
+      if (!chosen) return;
+
+      sfx.playChirp();
+      draft.slots[picker.slotName] = chosen;
+
+      // Enforce Destiny 2 1-Exotic Weapon & 1-Exotic Armor rule automatically
+      if (chosen.isExotic) {
+        const siblingSlots = picker.category === 'Weapon'
+          ? ['Kinetic', 'Energy', 'Heavy']
+          : ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+        siblingSlots.forEach(sibSlot => {
+          if (sibSlot !== picker.slotName && draft.slots[sibSlot]?.isExotic) {
+            // Auto-replace conflicting Exotic in sibling slot with best Legendary owned in that slot
+            const { weapons: allW, armor: allA } = collectAllOwnedGearForLoadout(draft.className);
+            const fallbackLeg = (picker.category === 'Weapon' ? allW : allA)
+              .filter(x => x.slot === sibSlot && !x.isExotic)
+              .sort((a, b) => (picker.category === 'Weapon'
+                ? scoreWeaponForLoadout(b, draft, draft.characterId) - scoreWeaponForLoadout(a, draft, draft.characterId)
+                : scoreArmorForLoadout(b, draft, draft.armorSet) - scoreArmorForLoadout(a, draft, draft.armorSet)
+              ))[0] || null;
+            draft.slots[sibSlot] = fallbackLeg;
+            showToast(`Swapped ${sibSlot} to Legendary (${fallbackLeg?.name || 'empty'}) to keep 1 Exotic equipped.`, 'info');
+          }
+        });
+      }
+
+      const drawer = document.getElementById('lbSlotPickerDrawer');
+      if (drawer) drawer.classList.add('hidden');
+      activeLbPickerSlot = null;
+      renderLoadoutBuilderWorkspace();
+    });
+  });
+}
+
+async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, transferOnly = false) {
+  if (!state.bungieData || !state.bungieSession?.access_token) {
+    showToast('Please sign in to Bungie.net first to equip loadouts on your Guardian!', 'info');
+    return;
+  }
+  if (!loadoutDraft || !loadoutDraft.characterId) {
+    showToast('Could not find a matching Guardian character on your account.', 'error');
+    return;
+  }
+
+  const itemsPayload = [];
+  // Include Subclass if present and not already equipped
+  if (loadoutDraft.subclassItem && loadoutDraft.subclassItem.itemInstanceId && !transferOnly) {
+    itemsPayload.push({
+      itemInstanceId: String(loadoutDraft.subclassItem.itemInstanceId),
+      itemHash: Number(loadoutDraft.subclassItem.itemHash || 0),
+      name: loadoutDraft.subclassItem.name || loadoutDraft.subclass,
+      slot: 'Subclass',
+      category: 'Subclass',
+      isExotic: false,
+      sourceLocation: 'character',
+      sourceCharacterId: String(loadoutDraft.characterId),
+      isEquipped: Boolean(loadoutDraft.subclassItem.isEquipped),
+      fallbackEquipInstanceId: '',
+    });
+  }
+
+  const slotOrder = ['Kinetic', 'Energy', 'Heavy', 'Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+  slotOrder.forEach(sName => {
+    const it = loadoutDraft.slots?.[sName];
+    if (!it || !it.itemInstanceId) return;
+
+    let fallbackId = '';
+    if (it.location === 'character' && it.characterId && it.characterId !== loadoutDraft.characterId && it.isEquipped) {
+      const srcChar = (state.bungieData.characters || []).find(c => c.characterId === it.characterId);
+      const unequippedSameSlot = (srcChar?.inventory || []).find(cand => cand.slot === it.slot && !cand.isExotic);
+      if (unequippedSameSlot) {
+        fallbackId = unequippedSameSlot.itemInstanceId;
+      }
+    }
+
+    itemsPayload.push({
+      itemInstanceId: String(it.itemInstanceId),
+      itemHash: Number(it.itemHash || 0),
+      name: it.name || sName,
+      slot: sName,
+      category: it.category || (['Kinetic', 'Energy', 'Heavy'].includes(sName) ? 'Weapon' : 'Armor'),
+      isExotic: Boolean(it.isExotic),
+      sourceLocation: it.location || 'vault',
+      sourceCharacterId: it.characterId || '',
+      isEquipped: Boolean(it.isEquipped),
+      fallbackEquipInstanceId: fallbackId,
+    });
+  });
+
+  if (itemsPayload.length === 0) {
+    showToast('No items selected in this loadout to apply.', 'error');
+    return;
+  }
+
+  const origBtnText = triggerBtn ? triggerBtn.textContent : '';
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = transferOnly ? '📥 Pulling Gear from Vault...' : `⚡ Equipping on ${loadoutDraft.className}...`;
+  }
+  if (feedbackEl) {
+    feedbackEl.classList.remove('hidden', 'error');
+    feedbackEl.textContent = transferOnly
+      ? `Pulling loadout gear from Vault to ${loadoutDraft.className}...`
+      : `Assembling & equipping '${loadoutDraft.title}' on ${loadoutDraft.className} (transferring from Vault & equipping)...`;
+  }
+  sfx.playTransmit();
+
+  try {
+    const res = await fetch('/api/bungie/loadout/equip-custom', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.bungieSession.access_token}`,
+        'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+      },
+      body: JSON.stringify({
+        membershipType: state.bungieData.player.membershipType,
+        targetCharacterId: loadoutDraft.characterId,
+        transferOnly: Boolean(transferOnly),
+        items: itemsPayload,
+      }),
+    });
+
+    const rawText = await res.text().catch(() => '');
+    let data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch (_) {
+      data = null;
+    }
+
+    if (!res.ok || !data) {
+      throw new Error(data?.detail || `Failed to apply loadout (HTTP ${res.status}).`);
+    }
+
+    if (data.refreshed_session) {
+      saveBungieSession(data.refreshed_session);
+    }
+
+    const eqCount = (data.equippedIds || []).length + (data.alreadyEquippedIds || []).length;
+    const trCount = (data.transferredIds || []).length;
+    const failList = data.failed || [];
+
+    sfx.playReceive();
+    let summaryMsg = '';
+    if (transferOnly) {
+      summaryMsg = `✓ Pulled ${trCount} item(s) to ${loadoutDraft.className}'s inventory bag!`;
+    } else if (data.combatZoneBlocked) {
+      summaryMsg = `✓ Pulled ${trCount} item(s) to ${loadoutDraft.className}'s bag! (Note: Bungie blocks live equipping while in an active combat zone—return to Orbit/Tower to auto-equip, or click them in-game now).`;
+    } else if (failList.length > 0 && eqCount > 0) {
+      summaryMsg = `✓ Equipped ${eqCount} item(s) on ${loadoutDraft.className} (${trCount} pulled from Vault). ${failList.length} item(s) could not be equipped: ${failList[0].name} (${failList[0].reason}).`;
+    } else if (eqCount > 0) {
+      summaryMsg = `✓ '${loadoutDraft.title}' equipped on ${loadoutDraft.className}! (${eqCount} items active, ${trCount} pulled from Vault).`;
+    } else if (failList.length > 0) {
+      throw new Error(`${failList[0].name}: ${failList[0].reason}`);
+    } else {
+      summaryMsg = `✓ All loadout items are already equipped on ${loadoutDraft.className}!`;
+    }
+
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden', 'error');
+      feedbackEl.textContent = summaryMsg;
+    }
+    showToast(summaryMsg, 'info');
+
+    await loadBungieInventory(true);
+    if (activeLoadoutBuilderState) {
+      // Refresh live item locations in the open Loadout Builder
+      Object.keys(activeLoadoutBuilderState.slots || {}).forEach(sKey => {
+        const cur = activeLoadoutBuilderState.slots[sKey];
+        if (cur?.itemInstanceId) {
+          const updated = findLiveItemByInstanceId(cur.itemInstanceId);
+          if (updated) activeLoadoutBuilderState.slots[sKey] = updated;
+        }
+      });
+      renderLoadoutBuilderWorkspace();
+    }
+  } catch (err) {
+    sfx.playAlert();
+    if (feedbackEl) {
+      feedbackEl.classList.remove('hidden');
+      feedbackEl.classList.add('error');
+      feedbackEl.textContent = `⚠ ${err.message}`;
+    }
+    showToast(`Loadout error: ${err.message}`, 'error');
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = origBtnText;
+    }
   }
 }
 
@@ -5276,6 +6478,167 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   attachLightDismissFallback(modalGodRollScanner);
   attachLightDismissFallback(modalSavedLoadout);
+
+  // =========================================================================
+  // DIM TACTICAL LOADOUT BUILDER MODAL WIRING
+  // =========================================================================
+  const modalLoadoutBuilder = document.getElementById('modalLoadoutBuilder');
+  const btnOpenDimLoadoutBuilder = document.getElementById('btnOpenDimLoadoutBuilder');
+  const lbLoadoutNameInput = document.getElementById('lbLoadoutNameInput');
+  const lbClassSelect = document.getElementById('lbClassSelect');
+  const lbSubclassSelect = document.getElementById('lbSubclassSelect');
+  const lbModeSelect = document.getElementById('lbModeSelect');
+  const btnLbEquipNow = document.getElementById('btnLbEquipNow');
+  const btnLbPullOnly = document.getElementById('btnLbPullOnly');
+  const btnLbAutoOptimize = document.getElementById('btnLbAutoOptimize');
+  const btnLbSaveCustom = document.getElementById('btnLbSaveCustom');
+  const btnLbDeleteCustom = document.getElementById('btnLbDeleteCustom');
+  const lbPickerSearchInput = document.getElementById('lbPickerSearchInput');
+  const btnLbClosePicker = document.getElementById('btnLbClosePicker');
+  const lbFeedbackBanner = document.getElementById('lbFeedbackBanner');
+
+  if (modalLoadoutBuilder) {
+    attachLightDismissFallback(modalLoadoutBuilder);
+  }
+
+  if (btnOpenDimLoadoutBuilder) {
+    btnOpenDimLoadoutBuilder.addEventListener('click', () => {
+      openLoadoutBuilderModal(null);
+    });
+  }
+
+  if (lbLoadoutNameInput) {
+    lbLoadoutNameInput.addEventListener('input', () => {
+      if (activeLoadoutBuilderState) {
+        activeLoadoutBuilderState.title = lbLoadoutNameInput.value;
+      }
+    });
+  }
+
+  const handleLbParameterChange = (reoptimizeGear = false) => {
+    if (!activeLoadoutBuilderState) return;
+    const newClass = lbClassSelect?.value || activeLoadoutBuilderState.className;
+    const newSub = lbSubclassSelect?.value || activeLoadoutBuilderState.subclass;
+    const newMode = lbModeSelect?.value || activeLoadoutBuilderState.mode;
+    const classChanged = newClass.toLowerCase() !== (activeLoadoutBuilderState.className || '').toLowerCase();
+
+    if (classChanged || reoptimizeGear) {
+      const rebuilt = assembleLoadoutFromBlueprint({
+        id: classChanged ? '' : activeLoadoutBuilderState.id,
+        title: lbLoadoutNameInput?.value || `${newSub} ${newClass} (${newMode})`,
+        className: newClass,
+        subclass: newSub,
+        mode: newMode,
+        exoticArmor: classChanged ? '' : activeLoadoutBuilderState.exoticArmor,
+        armorSet: activeLoadoutBuilderState.armorSet,
+        recommendedWeapons: activeLoadoutBuilderState.recommendedWeapons,
+      });
+      // Keep current weapons if only optimizing armor or switching class
+      if (!reoptimizeGear && !classChanged) {
+        ['Kinetic', 'Energy', 'Heavy'].forEach(wSlot => {
+          if (activeLoadoutBuilderState.slots?.[wSlot]) {
+            rebuilt.slots[wSlot] = activeLoadoutBuilderState.slots[wSlot];
+          }
+        });
+      }
+      activeLoadoutBuilderState = rebuilt;
+    } else {
+      activeLoadoutBuilderState.subclass = newSub;
+      activeLoadoutBuilderState.mode = newMode;
+      const { subclasses } = collectAllOwnedGearForLoadout(newClass);
+      const subLow = newSub.toLowerCase();
+      activeLoadoutBuilderState.subclassItem = subclasses.find(
+        s => (s.element || '').toLowerCase() === subLow || (s.name || '').toLowerCase().includes(subLow)
+      ) || activeLoadoutBuilderState.subclassItem;
+    }
+
+    const drawer = document.getElementById('lbSlotPickerDrawer');
+    if (drawer) drawer.classList.add('hidden');
+    activeLbPickerSlot = null;
+    renderLoadoutBuilderWorkspace();
+  };
+
+  lbClassSelect?.addEventListener('change', () => {
+    sfx.playChirp();
+    handleLbParameterChange(true);
+  });
+
+  lbSubclassSelect?.addEventListener('change', () => {
+    sfx.playChirp();
+    handleLbParameterChange(false);
+  });
+
+  lbModeSelect?.addEventListener('change', () => {
+    sfx.playChirp();
+    handleLbParameterChange(true);
+  });
+
+  if (btnLbAutoOptimize) {
+    btnLbAutoOptimize.addEventListener('click', () => {
+      sfx.playReceive();
+      handleLbParameterChange(true);
+      showToast(`Auto-optimized gear for ${activeLoadoutBuilderState?.subclass} ${activeLoadoutBuilderState?.className} (${activeLoadoutBuilderState?.mode})!`, 'info');
+    });
+  }
+
+  if (btnLbEquipNow) {
+    btnLbEquipNow.addEventListener('click', async () => {
+      if (!activeLoadoutBuilderState) return;
+      activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
+      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbEquipNow, false);
+    });
+  }
+
+  if (btnLbPullOnly) {
+    btnLbPullOnly.addEventListener('click', async () => {
+      if (!activeLoadoutBuilderState) return;
+      activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
+      await executeEquipCustomLoadout(activeLoadoutBuilderState, lbFeedbackBanner, btnLbPullOnly, true);
+    });
+  }
+
+  if (btnLbSaveCustom) {
+    btnLbSaveCustom.addEventListener('click', () => {
+      if (!activeLoadoutBuilderState) return;
+      sfx.playReceive();
+      activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
+      saveCustomLoadoutToStorage(activeLoadoutBuilderState);
+      if (btnLbDeleteCustom) btnLbDeleteCustom.classList.remove('hidden');
+      if (lbFeedbackBanner) {
+        lbFeedbackBanner.classList.remove('hidden', 'error');
+        lbFeedbackBanner.textContent = `✓ Saved '${activeLoadoutBuilderState.title}' to ${activeLoadoutBuilderState.className}'s Saved Loadouts drawer!`;
+      }
+      showToast(`Saved '${activeLoadoutBuilderState.title}' to ${activeLoadoutBuilderState.className} Loadouts!`, 'info');
+    });
+  }
+
+  if (btnLbDeleteCustom) {
+    btnLbDeleteCustom.addEventListener('click', () => {
+      if (!activeLoadoutBuilderState || !activeLoadoutBuilderState.id) return;
+      if (confirm(`Delete custom loadout '${activeLoadoutBuilderState.title}'?`)) {
+        sfx.playAlert();
+        deleteCustomLoadoutFromStorage(activeLoadoutBuilderState.id);
+        modalLoadoutBuilder?.close();
+        showToast('Custom loadout deleted.', 'info');
+      }
+    });
+  }
+
+  if (lbPickerSearchInput) {
+    lbPickerSearchInput.addEventListener('input', () => {
+      renderLbSlotPickerItems(lbPickerSearchInput.value);
+    });
+  }
+
+  if (btnLbClosePicker) {
+    btnLbClosePicker.addEventListener('click', () => {
+      sfx.playChirp();
+      const drawer = document.getElementById('lbSlotPickerDrawer');
+      if (drawer) drawer.classList.add('hidden');
+      activeLbPickerSlot = null;
+      renderLoadoutBuilderWorkspace();
+    });
+  }
 
   if (btnSpeakAppraisal) {
     btnSpeakAppraisal.addEventListener('click', () => {
