@@ -581,8 +581,10 @@ function pickBySlot(list, slot) {
 }
 
 /**
- * Resolve 3 dye slots for a dye group (0 armor, 1 weapon, ...).
- * Precedence: item locked_dyes > applied shader custom_dyes > item default_dyes.
+ * Resolve 3 dye slots for a gear item.
+ * Precedence: item locked_dyes > applied shader custom_dyes (group 0) > item default_dyes.
+ * Note: Bungie's 15-entry custom_dyes array places the canonical armor/weapon palette in group 0
+ * (entries 0..2); entries 3..14 are secondary/vehicle channels (e.g. Superblack puts 0.22 grey there).
  */
 export function resolveDyeSlots(itemDyeData, shaderDyeData, changeColorIndex = 0) {
   const slots = [];
@@ -593,13 +595,7 @@ export function resolveDyeSlots(itemDyeData, shaderDyeData, changeColorIndex = 0
     const pool = (shaderDyeData.custom_dyes && shaderDyeData.custom_dyes.length)
       ? shaderDyeData.custom_dyes
       : (shaderDyeData.default_dyes || []);
-    if (pool.length > 3) {
-      const g = Math.max(0, Number(changeColorIndex) || 0);
-      const startIdx = g * 3 < pool.length ? g * 3 : 0;
-      shaderGroup = pool.slice(startIdx, startIdx + 3);
-    } else {
-      shaderGroup = pool;
-    }
+    shaderGroup = pool.slice(0, 3);
   }
   for (let slot = 0; slot < 3; slot++) {
     const d = pickBySlot(locked, slot)
@@ -645,6 +641,9 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
     uGearstackMap: { value: textures[2] || placeholders.gearstack },
     uDyeslotMap: { value: textures[3] || placeholders.dyeslot },
     uHasGearstack: { value: textures[2] ? 1.0 : 0.0 },
+    uHasDyeslot: { value: textures[3] ? 1.0 : 0.0 },
+    uFallbackSlot: { value: Math.abs(Number(changeColorIndex) || 0) % 3 },
+    uShaderApplied: { value: 0.0 },
   };
   writeDyeUniforms(uniforms, resolveDyeSlots(itemDyeData, null, changeColorIndex));
 
@@ -668,6 +667,9 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
         uniform sampler2D uGearstackMap;
         uniform sampler2D uDyeslotMap;
         uniform float uHasGearstack;
+        uniform float uHasDyeslot;
+        uniform float uFallbackSlot;
+        uniform float uShaderApplied;
         uniform vec3 uDyePrim[3];
         uniform vec3 uDyeSec[3];
         uniform vec3 uDyeWorn[3];
@@ -683,23 +685,40 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
         d2Gst = texture2D(uGearstackMap, vMapUv);
         d2Dsl = texture2D(uDyeslotMap, vMapUv);
         {
-          // Dyeslot plate colour-codes slots: black = slot 0, red = slot 1, yellow = slot 2.
-          float w2 = d2Dsl.r * d2Dsl.g;
-          float w1 = d2Dsl.r * (1.0 - d2Dsl.g);
-          float w0 = 1.0 - d2Dsl.r;
-          vec3 prim = uDyePrim[0] * w0 + uDyePrim[1] * w1 + uDyePrim[2] * w2;
-          vec3 sec = uDyeSec[0] * w0 + uDyeSec[1] * w1 + uDyeSec[2] * w2;
-          vec3 worn = uDyeWorn[0] * w0 + uDyeWorn[1] * w1 + uDyeWorn[2] * w2;
-          d2Emis = uDyeEmis[0] * w0 + uDyeEmis[1] * w1 + uDyeEmis[2] * w2;
-          vec3 tint = mix(prim, sec, clamp(1.0 - d2Dsl.a, 0.0, 1.0));
-          // Edge wear from gearstack alpha (low alpha = worn edges).
-          float wear = uHasGearstack > 0.5 ? smoothstep(0.42, 0.18, d2Gst.a) * 0.55 : 0.0;
-          tint = mix(tint, worn, wear);
-          // Diffuse plate is a grayscale detail map centred on mid-grey.
-          float lum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float detail = mix(0.55, 1.35, pow(max(lum, 0.0), 0.4545));
-          float ao = uHasGearstack > 0.5 ? mix(0.55, 1.05, d2Gst.r) : 1.0;
-          diffuseColor.rgb = clamp(tint * detail * ao, 0.0, 1.0);
+          float bakedSat = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b)) - min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));
+          if (uHasDyeslot < 0.5 && uShaderApplied < 0.5 && bakedSat > 0.05) {
+            // Preserve baked colors (e.g. gold trim) on items without a dyeslot plate when no custom shader is applied.
+            d2Emis = vec3(0.0);
+          } else {
+            vec3 prim;
+            vec3 sec;
+            vec3 worn;
+            if (uHasDyeslot > 0.5) {
+              // Dyeslot plate colour-codes slots: black = slot 0, red = slot 1, yellow = slot 2.
+              float w2 = d2Dsl.r * d2Dsl.g;
+              float w1 = d2Dsl.r * (1.0 - d2Dsl.g);
+              float w0 = 1.0 - d2Dsl.r;
+              prim = uDyePrim[0] * w0 + uDyePrim[1] * w1 + uDyePrim[2] * w2;
+              sec = uDyeSec[0] * w0 + uDyeSec[1] * w1 + uDyeSec[2] * w2;
+              worn = uDyeWorn[0] * w0 + uDyeWorn[1] * w1 + uDyeWorn[2] * w2;
+              d2Emis = uDyeEmis[0] * w0 + uDyeEmis[1] * w1 + uDyeEmis[2] * w2;
+            } else if (uFallbackSlot > 1.5) {
+              prim = uDyePrim[2]; sec = uDyeSec[2]; worn = uDyeWorn[2]; d2Emis = uDyeEmis[2];
+            } else if (uFallbackSlot > 0.5) {
+              prim = uDyePrim[1]; sec = uDyeSec[1]; worn = uDyeWorn[1]; d2Emis = uDyeEmis[1];
+            } else {
+              prim = uDyePrim[0]; sec = uDyeSec[0]; worn = uDyeWorn[0]; d2Emis = uDyeEmis[0];
+            }
+            vec3 tint = uHasDyeslot > 0.5 ? mix(prim, sec, clamp(1.0 - d2Dsl.a, 0.0, 1.0)) : prim;
+            // Edge wear from gearstack alpha (low alpha = worn edges).
+            float wear = uHasGearstack > 0.5 ? smoothstep(0.42, 0.18, d2Gst.a) * 0.45 : 0.0;
+            tint = mix(tint, worn, wear);
+            // Diffuse plate is a grayscale detail map centred on mid-grey.
+            float lum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+            float detail = mix(0.55, 1.35, pow(max(lum, 0.0), 0.4545));
+            float ao = uHasGearstack > 0.5 ? mix(0.55, 1.05, d2Gst.r) : 1.0;
+            diffuseColor.rgb = clamp(tint * detail * ao, 0.0, 1.0);
+          }
         }
         `
       )
@@ -735,6 +754,7 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
 
 function applyShaderDyeToMaterial(mat, shaderDyeData) {
   if (!mat || !mat.userData || !mat.userData.dyeUniforms) return;
+  mat.userData.dyeUniforms.uShaderApplied.value = shaderDyeData ? 1.0 : 0.0;
   writeDyeUniforms(
     mat.userData.dyeUniforms,
     resolveDyeSlots(mat.userData.itemDyeData, shaderDyeData || null, mat.userData.changeColorIndex)
