@@ -9382,7 +9382,7 @@ function init3DGuardianAndInspectTheatre() {
         if (inspect3DLoadingTxt) inspect3DLoadingTxt.textContent = msg;
       });
       if (!ok) {
-        inspect3DHost.innerHTML = `<div class="tgxm-empty-msg">No 3D mesh data published by Bungie for ${escapeHtml(item.name)}.</div>`;
+        inspect3DHost.innerHTML = `<div class="tgxm-empty-msg">Couldn't build a 3D model for ${escapeHtml(item.name)}${inspect3dStage?.lastError ? ` (${escapeHtml(inspect3dStage.lastError)})` : ''}.</div>`;
       }
     } catch (err) {
       inspect3DHost.innerHTML = `<div class="tgxm-empty-msg">3D load failed: ${escapeHtml(err.message)}</div>`;
