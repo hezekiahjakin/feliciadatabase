@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v46';
+} from './tgxm-viewer.js?v=20261115_v47';
 
 // Application State
 const state = {
@@ -1511,6 +1511,9 @@ function switchTabDirect(tabId) {
 
   if (tabId === 'tab-loadout-builder') {
     openLoadoutBuilderModal(activeLoadoutBuilderState || null, false);
+  }
+  if (tabId === 'tab-friends' && typeof window.__loadBungieFriends === 'function') {
+    window.__loadBungieFriends(false);
   }
 }
 
@@ -9927,3 +9930,311 @@ function init3DGuardianAndInspectTheatre() {
     }, 260);
   });
 }
+
+// =========================================================================
+// BUNGIE FRIENDS & GUARDIAN SEARCH TAB
+// =========================================================================
+(function initFriendsTab() {
+  const btnRefresh = document.getElementById('btnRefreshFriends');
+  const searchInput = document.getElementById('friendsSearchInput');
+  const btnSearch = document.getElementById('btnSearchBungiePlayers');
+  const filterPills = document.getElementById('friendsFilterPills');
+  const feedbackBar = document.getElementById('friendsFeedbackBar');
+  const searchSection = document.getElementById('friendsSearchResultsSection');
+  const searchTitle = document.getElementById('friendsSearchResultsTitle');
+  const searchGrid = document.getElementById('friendsSearchResultsGrid');
+  const btnClearSearch = document.getElementById('btnClearFriendsSearch');
+  const requestsSection = document.getElementById('friendsRequestsSection');
+  const requestsGrid = document.getElementById('friendsRequestsGrid');
+  const listSection = document.getElementById('friendsListSection');
+  const listHeading = document.getElementById('friendsListHeading');
+  const listGrid = document.getElementById('friendsListGrid');
+
+  if (!listGrid) return;
+
+  const friendsState = {
+    loaded: false,
+    filter: 'all',
+    friends: [],
+    incomingRequests: [],
+    outgoingRequests: [],
+  };
+
+  const setFeedback = (msg, type = 'info') => {
+    if (!feedbackBar) return;
+    if (!msg) {
+      feedbackBar.classList.add('hidden');
+      feedbackBar.classList.remove('is-error', 'is-warn');
+      feedbackBar.innerHTML = '';
+      return;
+    }
+    feedbackBar.classList.remove('hidden', 'is-error', 'is-warn');
+    if (type === 'error') feedbackBar.classList.add('is-error');
+    if (type === 'warn') feedbackBar.classList.add('is-warn');
+    feedbackBar.innerHTML = msg;
+  };
+
+  const renderFriendCard = (f) => {
+    const avatarUrl = f.avatarPath?.startsWith('http')
+      ? f.avatarPath
+      : `https://www.bungie.net${f.avatarPath || '/img/profile/avatars/default_avatar.gif'}`;
+
+    let actionsHtml = `<a class="btn-card-action" href="${escapeHtml(f.profileUrl)}" target="_blank" rel="noopener noreferrer">Bungie Profile ↗</a>`;
+    if (f.relationship === 'incoming') {
+      actionsHtml = `
+        <button type="button" class="btn-card-action btn-friend-act" data-faction="accept" data-mid="${escapeHtml(f.membershipId)}">✓ Accept</button>
+        <button type="button" class="btn-card-action btn-card-delete btn-friend-act" data-faction="decline" data-mid="${escapeHtml(f.membershipId)}">✕ Decline</button>
+        ${actionsHtml}
+      `;
+    } else if (f.relationship === 'friend') {
+      actionsHtml += ` <button type="button" class="btn-card-action btn-card-delete btn-friend-act" data-faction="remove" data-mid="${escapeHtml(f.membershipId)}">Remove</button>`;
+    }
+
+    const statusBadge = f.relationship === 'incoming'
+      ? '<span class="friend-badge req">INCOMING REQUEST</span>'
+      : f.relationship === 'outgoing'
+        ? '<span class="friend-badge out">SENT REQUEST</span>'
+        : `<span class="friend-badge ${f.isOnline ? 'online' : 'offline'}">${f.isOnline ? '● ONLINE' : '○ OFFLINE'}</span>`;
+
+    return `
+      <div class="friend-card">
+        <div class="friend-card-top">
+          <img src="${avatarUrl}" alt="" class="friend-avatar" loading="lazy">
+          <div class="friend-meta">
+            <div class="friend-name">${escapeHtml(f.fullBungieName)}</div>
+            <div class="friend-sub">${escapeHtml(f.onlineTitle || (f.isOnline ? 'Online' : 'Offline'))}</div>
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="friend-actions-row">${actionsHtml}</div>
+      </div>
+    `;
+  };
+
+  const bindFriendActionButtons = (container) => {
+    if (!container) return;
+    container.querySelectorAll('.btn-friend-act').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const action = btn.getAttribute('data-faction');
+        const membershipId = btn.getAttribute('data-mid');
+        if (!action || !membershipId) return;
+        if (!state.bungieSession?.access_token) {
+          showToast('Sign in with Bungie.net first!', 'info');
+          return;
+        }
+        if (action === 'remove' && !confirm('Remove this friend from your Bungie friends list?')) return;
+
+        btn.disabled = true;
+        sfx.playTransmit();
+        try {
+          const res = await fetch('/api/bungie/friends/action', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${state.bungieSession.access_token}`,
+              'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+            },
+            body: JSON.stringify({ action, membershipId }),
+          });
+          const data = await res.json().catch(() => null);
+          if (data?.refreshed_session) saveBungieSession(data.refreshed_session);
+
+          if (!res.ok || !data) {
+            throw new Error(data?.detail || `Action failed (HTTP ${res.status}).`);
+          }
+          if (data.status === 'requires_bnet_write') {
+            sfx.playAlert();
+            setFeedback(
+              `⚠ ${escapeHtml(data.message)} <a href="${escapeHtml(data.profileUrl)}" target="_blank" rel="noopener noreferrer" style="color:#FACC15; text-decoration:underline; margin-left:6px;">Open Bungie.net Profile ↗</a>`,
+              'warn'
+            );
+            return;
+          }
+          sfx.playReceive();
+          showToast(`✓ Friend ${action} completed!`, 'info');
+          await loadBungieFriends(true);
+        } catch (err) {
+          sfx.playAlert();
+          setFeedback(`⚠ ${escapeHtml(err.message)}`, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  };
+
+  const renderFriendsView = () => {
+    const reqAll = [...friendsState.incomingRequests, ...friendsState.outgoingRequests];
+    if (requestsSection && requestsGrid) {
+      const showReqs = reqAll.length > 0 && (friendsState.filter === 'all' || friendsState.filter === 'requests');
+      requestsSection.classList.toggle('hidden', !showReqs);
+      if (showReqs) {
+        requestsGrid.innerHTML = reqAll.map(renderFriendCard).join('');
+        bindFriendActionButtons(requestsGrid);
+      }
+    }
+
+    if (listSection) {
+      listSection.classList.toggle('hidden', friendsState.filter === 'requests');
+    }
+
+    const visibleFriends = friendsState.filter === 'online'
+      ? friendsState.friends.filter(f => f.isOnline)
+      : friendsState.friends;
+
+    const onlineCount = friendsState.friends.filter(f => f.isOnline).length;
+    if (listHeading) {
+      listHeading.textContent = `BUNGIE FRIENDS (${onlineCount} ONLINE / ${friendsState.friends.length} TOTAL)`;
+    }
+
+    if (!state.bungieSession?.access_token) {
+      listGrid.innerHTML = `
+        <div class="friends-empty-box">
+          <p>Sign in with Bungie.net in the Inventory tab to view your Bungie friends list and pending requests.</p>
+          <p style="font-size:12px; color:#94A3B8; margin-top:6px;">You can still search any Guardian by Bungie Name above without signing in.</p>
+        </div>
+      `;
+      return;
+    }
+
+    if (visibleFriends.length === 0) {
+      listGrid.innerHTML = `<div class="friends-empty-box">${friendsState.filter === 'online' ? 'No Bungie friends are currently online.' : 'No Bungie friends found.'}</div>`;
+      return;
+    }
+
+    listGrid.innerHTML = visibleFriends.map(renderFriendCard).join('');
+    bindFriendActionButtons(listGrid);
+  };
+
+  const loadBungieFriends = async (force = false) => {
+    if (!state.bungieSession?.access_token) {
+      renderFriendsView();
+      return;
+    }
+    if (friendsState.loaded && !force) {
+      renderFriendsView();
+      return;
+    }
+    if (btnRefresh) {
+      btnRefresh.disabled = true;
+      btnRefresh.textContent = 'Syncing…';
+    }
+    try {
+      const res = await fetch('/api/bungie/friends', {
+        headers: {
+          'Authorization': `Bearer ${state.bungieSession.access_token}`,
+          'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+        },
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.refreshed_session) saveBungieSession(data.refreshed_session);
+      if (!res.ok || !data) {
+        throw new Error(data?.detail || `Could not load friends (HTTP ${res.status}).`);
+      }
+      friendsState.loaded = true;
+      friendsState.friends = data.friends || [];
+      friendsState.incomingRequests = data.incomingRequests || [];
+      friendsState.outgoingRequests = data.outgoingRequests || [];
+      setFeedback('');
+      renderFriendsView();
+    } catch (err) {
+      setFeedback(`⚠ ${escapeHtml(err.message)}`, 'error');
+      renderFriendsView();
+    } finally {
+      if (btnRefresh) {
+        btnRefresh.disabled = false;
+        btnRefresh.textContent = '↻ Refresh Friends';
+      }
+    }
+  };
+
+  window.__loadBungieFriends = loadBungieFriends;
+
+  const runPlayerSearch = async () => {
+    const q = (searchInput?.value || '').trim();
+    if (!q) {
+      setFeedback('Enter a Bungie Name (or prefix) to search.', 'warn');
+      return;
+    }
+    sfx.playTransmit();
+    if (btnSearch) btnSearch.disabled = true;
+    setFeedback(`Searching Bungie.net for '${escapeHtml(q)}'…`, 'info');
+    try {
+      const res = await fetch('/api/bungie/friends/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, page: 0 }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        throw new Error(data?.detail || `Search failed (HTTP ${res.status}).`);
+      }
+      const results = data.results || [];
+      setFeedback('');
+      if (searchSection && searchGrid && searchTitle) {
+        searchSection.classList.remove('hidden');
+        searchTitle.textContent = `SEARCH RESULTS FOR "${q.toUpperCase()}" (${results.length})`;
+        if (results.length === 0) {
+          searchGrid.innerHTML = '<div class="friends-empty-box">No Guardians matched that Bungie Name.</div>';
+        } else {
+          searchGrid.innerHTML = results.map(u => {
+            const platforms = (u.destinyMemberships || []).map(m => escapeHtml(m.platformName)).join(' • ') || 'Bungie.net';
+            const addBtn = u.membershipId
+              ? `<button type="button" class="btn-card-action btn-friend-act" data-faction="add" data-mid="${escapeHtml(u.membershipId)}">➕ Add Friend</button>`
+              : '';
+            return `
+              <div class="friend-card">
+                <div class="friend-card-top">
+                  <div class="friend-avatar-glyph">❖</div>
+                  <div class="friend-meta">
+                    <div class="friend-name">${escapeHtml(u.fullBungieName)}</div>
+                    <div class="friend-sub">${platforms}</div>
+                  </div>
+                </div>
+                <div class="friend-actions-row">
+                  ${addBtn}
+                  <a class="btn-card-action" href="${escapeHtml(u.profileUrl)}" target="_blank" rel="noopener noreferrer">Bungie Profile ↗</a>
+                </div>
+              </div>
+            `;
+          }).join('');
+          bindFriendActionButtons(searchGrid);
+        }
+      }
+      sfx.playReceive();
+    } catch (err) {
+      sfx.playAlert();
+      setFeedback(`⚠ ${escapeHtml(err.message)}`, 'error');
+    } finally {
+      if (btnSearch) btnSearch.disabled = false;
+    }
+  };
+
+  btnRefresh?.addEventListener('click', () => {
+    sfx.playChirp();
+    loadBungieFriends(true);
+  });
+
+  btnSearch?.addEventListener('click', runPlayerSearch);
+  searchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runPlayerSearch();
+    }
+  });
+
+  btnClearSearch?.addEventListener('click', () => {
+    searchSection?.classList.add('hidden');
+    if (searchGrid) searchGrid.innerHTML = '';
+    if (searchInput) searchInput.value = '';
+  });
+
+  filterPills?.querySelectorAll('[data-friends-filter]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      sfx.playChirp();
+      friendsState.filter = pill.getAttribute('data-friends-filter') || 'all';
+      filterPills.querySelectorAll('[data-friends-filter]').forEach(p => p.classList.toggle('active', p === pill));
+      renderFriendsView();
+    });
+  });
+})();

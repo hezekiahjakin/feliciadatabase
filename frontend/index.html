@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261115_v46">
+  <link rel="stylesheet" href="styles.css?v=20261115_v47">
 </head>
 <body class="theme-vanguard">
 
@@ -65,6 +65,10 @@
       <button class="nav-tab" data-tab="tab-wiki">
         <span class="nav-icon">📚</span>
         <span class="nav-title">Guides</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-friends">
+        <span class="nav-icon">👥</span>
+        <span class="nav-title">Friends</span>
       </button>
       <button class="nav-tab" data-tab="tab-vault">
         <span class="nav-icon">🎯</span>
@@ -306,6 +310,60 @@
           <!-- Dynamically populated -->
         </div>
 
+      </div>
+    </section>
+
+    <!-- TAB: BUNGIE FRIENDS & GUARDIAN SEARCH -->
+    <section class="tab-pane" id="tab-friends">
+      <div class="friends-layout">
+        <div class="wiki-header-card">
+          <div class="wiki-title-group">
+            <h2 class="section-title">👥 BUNGIE FRIENDS &amp; GUARDIAN SEARCH</h2>
+            <p class="section-sub">View your Bungie.net friends list, check who is online, manage pending requests, and search any Guardian by Bungie Name.</p>
+          </div>
+          <div class="wiki-actions">
+            <button type="button" class="btn-tactical btn-primary" id="btnRefreshFriends">↻ Refresh Friends</button>
+          </div>
+        </div>
+
+        <div class="friends-controls-bar">
+          <div class="friends-search-group">
+            <input type="search" id="friendsSearchInput" class="input-tactical" placeholder="Search any Guardian by Bungie Name (e.g. Guardian#1234)…">
+            <button type="button" class="btn-tactical btn-secondary" id="btnSearchBungiePlayers">🔍 Search Bungie.net</button>
+          </div>
+          <div class="category-filters" id="friendsFilterPills">
+            <button type="button" class="cat-pill active" data-friends-filter="all">All Friends</button>
+            <button type="button" class="cat-pill" data-friends-filter="online">Online</button>
+            <button type="button" class="cat-pill" data-friends-filter="requests">Requests</button>
+          </div>
+        </div>
+
+        <div class="friends-feedback hidden" id="friendsFeedbackBar"></div>
+
+        <!-- SEARCH RESULTS -->
+        <div class="friends-section hidden" id="friendsSearchResultsSection">
+          <div class="friends-section-head">
+            <h3 id="friendsSearchResultsTitle">SEARCH RESULTS</h3>
+            <button type="button" class="btn-mini-action" id="btnClearFriendsSearch">Clear</button>
+          </div>
+          <div class="friends-grid" id="friendsSearchResultsGrid"></div>
+        </div>
+
+        <!-- FRIEND REQUESTS -->
+        <div class="friends-section hidden" id="friendsRequestsSection">
+          <div class="friends-section-head">
+            <h3>PENDING FRIEND REQUESTS</h3>
+          </div>
+          <div class="friends-grid" id="friendsRequestsGrid"></div>
+        </div>
+
+        <!-- BUNGIE FRIENDS LIST -->
+        <div class="friends-section" id="friendsListSection">
+          <div class="friends-section-head">
+            <h3 id="friendsListHeading">BUNGIE FRIENDS</h3>
+          </div>
+          <div class="friends-grid" id="friendsListGrid"></div>
+        </div>
       </div>
     </section>
 
@@ -1848,6 +1906,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       }
     }
   </script>
-  <script type="module" src="app.js?v=20261115_v46"></script>
+  <script type="module" src="app.js?v=20261115_v47"></script>
 </body>
 </html>

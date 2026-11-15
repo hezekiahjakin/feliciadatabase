@@ -8076,3 +8076,176 @@ dialog.modal-loadout-builder::backdrop {
   background: rgba(9, 13, 22, 0.72);
   line-height: 1.55;
 }
+
+/* ==========================================================================
+   BUNGIE FRIENDS & GUARDIAN SEARCH TAB
+   ========================================================================== */
+.friends-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.friends-controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.friends-search-group {
+  display: flex;
+  flex: 1;
+  min-width: 260px;
+  gap: 8px;
+}
+
+.friends-search-group .input-tactical {
+  flex: 1;
+}
+
+.friends-feedback {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #E2E8F0;
+}
+
+.friends-feedback.is-error {
+  background: rgba(127, 29, 29, 0.35);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #FECACA;
+}
+
+.friends-feedback.is-warn {
+  background: rgba(120, 53, 15, 0.38);
+  border-color: rgba(250, 204, 21, 0.5);
+  color: #FEF08A;
+}
+
+.friends-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.friends-section-head h3 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #94A3B8;
+  margin: 0;
+}
+
+.friends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.friend-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.friend-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.friend-avatar,
+.friend-avatar-glyph {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  object-fit: cover;
+}
+
+.friend-avatar-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(250, 204, 21, 0.14);
+  color: #FACC15;
+  font-size: 18px;
+}
+
+.friend-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #F8FAFC;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-sub {
+  font-size: 11.5px;
+  color: #94A3B8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.friend-badge.online {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ADE80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+}
+
+.friend-badge.offline {
+  background: rgba(100, 116, 139, 0.16);
+  color: #94A3B8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.friend-badge.req,
+.friend-badge.out {
+  background: rgba(250, 204, 21, 0.16);
+  color: #FACC15;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+}
+
+.friend-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.friends-empty-box {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px 18px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  color: #94A3B8;
+}

@@ -3893,3 +3893,185 @@ def analyze_arsenal_duplicates_and_trash(inventory_data: dict, god_rolls: List[d
                         l_grc["dismantleReason"] = l_grc["comparisonSummary"]
                         l_grc["dismantleAutoSelect"] = not loser.get("isLocked")
 
+
+# ==============================================================================
+# BUNGIE FRIENDS, FRIEND REQUESTS & GLOBAL NAME PLAYER SEARCH
+# ==============================================================================
+def _normalize_bungie_friend_entry(entry: dict, relationship: str) -> dict:
+    buser = entry.get("bungieNetUser") or {}
+    mid = str(
+        buser.get("membershipId")
+        or entry.get("lastSeenAsMembershipId")
+        or ""
+    )
+    gname = (
+        entry.get("bungieGlobalDisplayName")
+        or buser.get("cachedBungieGlobalDisplayName")
+        or buser.get("displayName")
+        or entry.get("lastSeenAsDisplayName")
+        or "Guardian"
+    )
+    gcode = (
+        entry.get("bungieGlobalDisplayNameCode")
+        if entry.get("bungieGlobalDisplayNameCode") is not None
+        else buser.get("cachedBungieGlobalDisplayNameCode")
+    )
+    if gcode is not None and str(gcode).isdigit():
+        full_name = f"{gname}#{int(gcode):04d}"
+    else:
+        full_name = str(gname)
+
+    online_status = int(entry.get("onlineStatus") or 0)
+    online_title = entry.get("onlineTitle") or ("Online" if online_status == 1 else "Offline")
+    avatar = buser.get("profilePicturePath") or "/img/profile/avatars/default_avatar.gif"
+    return {
+        "membershipId": mid,
+        "bungieGlobalDisplayName": gname,
+        "bungieGlobalDisplayNameCode": gcode,
+        "fullBungieName": full_name,
+        "onlineStatus": online_status,
+        "isOnline": online_status == 1,
+        "onlineTitle": online_title,
+        "relationship": relationship,
+        "avatarPath": avatar,
+        "profileUrl": f"https://www.bungie.net/7/en/User/Profile/254/{mid}" if mid else "https://www.bungie.net",
+    }
+
+
+def fetch_bungie_friends_and_requests(access_token: str) -> dict:
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+
+    friends_resp = _bungie_get("/Social/Friends/", api_key, access_token)
+    raw_friends = friends_resp.get("friends") or []
+    friends = [_normalize_bungie_friend_entry(f, "friend") for f in raw_friends]
+    friends.sort(key=lambda x: (0 if x["isOnline"] else 1, x["fullBungieName"].lower()))
+
+    incoming: List[dict] = []
+    outgoing: List[dict] = []
+    try:
+        req_resp = _bungie_get("/Social/Friends/Requests/", api_key, access_token)
+        incoming = [_normalize_bungie_friend_entry(r, "incoming") for r in (req_resp.get("incomingRequests") or [])]
+        outgoing = [_normalize_bungie_friend_entry(r, "outgoing") for r in (req_resp.get("outgoingRequests") or [])]
+    except PermissionError:
+        raise
+    except Exception:
+        pass
+
+    return {
+        "friends": friends,
+        "incomingRequests": incoming,
+        "outgoingRequests": outgoing,
+        "onlineCount": sum(1 for f in friends if f["isOnline"]),
+        "totalCount": len(friends),
+    }
+
+
+def search_bungie_players(query: str, page: int = 0) -> dict:
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    raw_q = (query or "").strip()
+    if not raw_q:
+        return {"results": [], "hasMore": False}
+
+    prefix = raw_q
+    code_filter = None
+    if "#" in raw_q:
+        parts = raw_q.rsplit("#", 1)
+        prefix = parts[0].strip()
+        if parts[1].strip().isdigit():
+            code_filter = int(parts[1].strip())
+
+    headers = {
+        "X-API-Key": api_key,
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(
+        f"{BUNGIE_API_BASE}/User/Search/GlobalName/{int(page)}/",
+        headers=headers,
+        json={"displayNamePrefix": prefix},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Bungie search failed (HTTP {resp.status_code}).")
+    data = resp.json()
+    if data.get("ErrorCode", 1) != 1:
+        raise RuntimeError(f"Bungie API Error ({data.get('ErrorStatus')}): {data.get('Message')}")
+
+    payload = data.get("Response") or {}
+    raw_results = payload.get("searchResults") or []
+    results = []
+    for r in raw_results:
+        gname = r.get("bungieGlobalDisplayName") or "Guardian"
+        gcode = r.get("bungieGlobalDisplayNameCode")
+        if code_filter is not None and gcode != code_filter:
+            continue
+        bnet_mid = str(r.get("bungieNetMembershipId") or "")
+        memberships = []
+        for m in (r.get("destinyMemberships") or []):
+            mtype = int(m.get("membershipType") or 0)
+            memberships.append({
+                "membershipId": str(m.get("membershipId") or ""),
+                "membershipType": mtype,
+                "platformName": MEMBERSHIP_TYPE_NAMES.get(mtype, "Destiny 2"),
+                "displayName": m.get("displayName") or gname,
+                "iconPath": m.get("iconPath") or "",
+            })
+        full_name = f"{gname}#{int(gcode):04d}" if gcode is not None and str(gcode).isdigit() else str(gname)
+        results.append({
+            "membershipId": bnet_mid,
+            "bungieGlobalDisplayName": gname,
+            "bungieGlobalDisplayNameCode": gcode,
+            "fullBungieName": full_name,
+            "destinyMemberships": memberships,
+            "profileUrl": f"https://www.bungie.net/7/en/User/Profile/254/{bnet_mid}" if bnet_mid else "https://www.bungie.net",
+        })
+
+    return {
+        "results": results,
+        "hasMore": bool(payload.get("hasMore")),
+    }
+
+
+def perform_bungie_friend_action(access_token: str, action: str, bungie_membership_id: str) -> dict:
+    creds = get_bungie_credentials()
+    api_key = creds["api_key"]
+    mid = str(bungie_membership_id or "").strip()
+    if not mid:
+        raise ValueError("Missing Bungie membershipId.")
+
+    action_map = {
+        "add": f"/Social/Friends/Add/{mid}/",
+        "accept": f"/Social/Friends/Requests/Accept/{mid}/",
+        "decline": f"/Social/Friends/Requests/Decline/{mid}/",
+        "remove": f"/Social/Friends/Remove/{mid}/",
+    }
+    path = action_map.get(action)
+    if not path:
+        raise ValueError(f"Unsupported friend action: {action}")
+
+    headers = {
+        "X-API-Key": api_key,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(f"{BUNGIE_API_BASE}{path}", headers=headers, json={}, timeout=15)
+    if resp.status_code == 401:
+        raise PermissionError("BUNGIE_TOKEN_EXPIRED")
+
+    data = resp.json()
+    if data.get("ErrorCode", 1) == 1:
+        return {"status": "success", "action": action, "membershipId": mid}
+
+    err_status = str(data.get("ErrorStatus") or "")
+    err_msg = str(data.get("Message") or "Bungie Social request rejected.")
+    if any(k in err_status for k in ("InsufficientPrivileges", "NotAuthorized", "WebAuthRequired", "Scope")):
+        return {
+            "status": "requires_bnet_write",
+            "action": action,
+            "membershipId": mid,
+            "message": f"Bungie restricts modifying friends to apps with the BnetWrite scope ({err_status}). Open their Bungie.net profile to {action} them directly.",
+            "profileUrl": f"https://www.bungie.net/7/en/User/Profile/254/{mid}",
+        }
+    raise RuntimeError(f"{err_msg} ({err_status})")
+

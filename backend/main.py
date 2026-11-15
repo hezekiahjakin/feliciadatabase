@@ -35,6 +35,9 @@ try:
         analyze_arsenal_duplicates_and_trash,
         resolve_gear_3d_assets,
         search_destiny_shaders,
+        fetch_bungie_friends_and_requests,
+        search_bungie_players,
+        perform_bungie_friend_action,
     )
 except ImportError:
     from bungie_service import (
@@ -54,6 +57,9 @@ except ImportError:
         analyze_arsenal_duplicates_and_trash,
         resolve_gear_3d_assets,
         search_destiny_shaders,
+        fetch_bungie_friends_and_requests,
+        search_bungie_players,
+        perform_bungie_friend_action,
     )
 
 try:
@@ -2528,6 +2534,70 @@ async def search_shaders_endpoint(q: str = "", limit: int = 40):
         return {"shaders": shaders}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Shader catalog lookup failed: {e}")
+
+
+class BungieFriendSearchRequest(BaseModel):
+    query: str
+    page: Optional[int] = 0
+
+
+class BungieFriendActionRequest(BaseModel):
+    action: str
+    membershipId: str
+
+
+@app.get("/api/bungie/friends")
+async def get_bungie_friends_endpoint(req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    try:
+        res = await run_in_threadpool(fetch_bungie_friends_and_requests, access_token)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(fetch_bungie_friends_and_requests, refreshed_session["access_token"])
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
+
+
+@app.post("/api/bungie/friends/search")
+async def search_bungie_players_endpoint(body: BungieFriendSearchRequest):
+    try:
+        return await run_in_threadpool(search_bungie_players, body.query, int(body.page or 0))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/bungie/friends/action")
+async def bungie_friend_action_endpoint(body: BungieFriendActionRequest, req: Request):
+    access_token, refresh_token = _extract_bungie_tokens(req)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
+
+    refreshed_session = None
+    try:
+        res = await run_in_threadpool(perform_bungie_friend_action, access_token, body.action, body.membershipId)
+    except PermissionError:
+        if refresh_token:
+            refreshed_session = await run_in_threadpool(refresh_bungie_tokens, refresh_token)
+            res = await run_in_threadpool(perform_bungie_friend_action, refreshed_session["access_token"], body.action, body.membershipId)
+        else:
+            raise HTTPException(status_code=401, detail="Bungie session expired. Please sign in again.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if refreshed_session:
+        res["refreshed_session"] = refreshed_session
+    return res
 
 
 # Mount frontend directory for static assets
