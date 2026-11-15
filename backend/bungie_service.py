@@ -551,6 +551,8 @@ def _slim_item_def(raw: dict) -> dict:
         "description": dp.get("description", ""),
         "icon": dp.get("icon", ""),
         "hasIcon": dp.get("hasIcon", False),
+        "secondaryIcon": raw.get("secondaryIcon", ""),
+        "secondarySpecial": raw.get("secondarySpecial", ""),
         "watermark": raw.get("iconWatermark") or raw.get("iconWatermarkShelved") or "",
         "screenshot": raw.get("screenshot", ""),
         "itemType": raw.get("itemType", 0),
@@ -933,6 +935,7 @@ def _enrich_item(
     shader_hash = 0
     shader_name = ""
     shader_icon = ""
+    shader_socket_index = -1
 
     if override_style_hash and override_style_hash in defs:
         odef = defs[override_style_hash]
@@ -945,7 +948,7 @@ def _enrich_item(
     seen_stat_mod_socket = False
 
     # Scan sockets for active Shader & Ornament plugs
-    for sk_cos in item_sockets:
+    for s_idx_cos, sk_cos in enumerate(item_sockets):
         ph_cos = sk_cos.get("plugHash")
         if not ph_cos:
             continue
@@ -955,16 +958,28 @@ def _enrich_item(
         pcat_cos = (pdef_cos.get("plugCategoryIdentifier") or "").lower()
         pname_cos = pdef_cos["name"]
         pname_cos_low = pname_cos.lower()
-        if "shader" in pcat_cos and "default" not in pname_cos_low and "empty" not in pname_cos_low:
-            if not shader_hash:
-                shader_hash = int(ph_cos)
-                shader_name = pname_cos
-                shader_icon = pdef_cos.get("icon", "")
+        if "shader" in pcat_cos:
+            if shader_socket_index < 0:
+                shader_socket_index = s_idx_cos
+            if "default" not in pname_cos_low and "empty" not in pname_cos_low:
+                if not shader_hash:
+                    shader_hash = int(ph_cos)
+                    shader_name = pname_cos
+                    shader_icon = pdef_cos.get("icon", "")
         elif ("skins" in pcat_cos or "ornament" in pcat_cos) and "default" not in pname_cos_low and "empty" not in pname_cos_low:
             if not override_style_hash:
                 override_style_hash = int(ph_cos)
                 ornament_name = pname_cos
                 ornament_icon = pdef_cos.get("icon", "")
+
+    if shader_socket_index < 0 and def_socket_entries:
+        for s_idx_def, s_ent_def in enumerate(def_socket_entries):
+            init_h = int(s_ent_def.get("singleInitialItemHash") or 0)
+            if init_h and init_h in defs:
+                pcat_def = (defs[init_h].get("plugCategoryIdentifier") or "").lower()
+                if "shader" in pcat_def:
+                    shader_socket_index = s_idx_def
+                    break
 
     if item_sockets and d.get("socketCategories"):
         for sc in d["socketCategories"]:
@@ -1228,6 +1243,7 @@ def _enrich_item(
         "shaderHash": shader_hash,
         "shaderName": shader_name,
         "shaderIcon": shader_icon,
+        "shaderSocketIndex": shader_socket_index,
     }
 
 
@@ -1818,10 +1834,22 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         equipped_subclass = None
         equipped_artifact = None
         char_subclasses = []
+        char_emblems = []
+        BUCKET_EMBLEM = 4274335291
 
         for raw_eq in char_equip_raw.get(cid, {}).get("items", []):
             ehash = int(raw_eq.get("itemHash", 0))
             edef = defs.get(ehash)
+            if edef and (int(edef.get("bucketTypeHash", 0)) == BUCKET_EMBLEM or int(raw_eq.get("bucketHash", 0)) == BUCKET_EMBLEM):
+                char_emblems.append({
+                    "itemHash": ehash,
+                    "itemInstanceId": str(raw_eq.get("itemInstanceId", "")),
+                    "name": edef.get("name", "Emblem"),
+                    "icon": edef.get("icon", ""),
+                    "backgroundPath": edef.get("secondarySpecial") or edef.get("secondaryIcon") or "",
+                    "isEquipped": True,
+                })
+                continue
             if edef and int(edef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_eq.get("itemInstanceId", ""))
                 sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map, reusable_map, edef, plug_sets_map)
@@ -1877,6 +1905,16 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         for raw_inv in char_inv_raw.get(cid, {}).get("items", []):
             ihash = int(raw_inv.get("itemHash", 0))
             idef = defs.get(ihash)
+            if idef and (int(idef.get("bucketTypeHash", 0)) == BUCKET_EMBLEM or int(raw_inv.get("bucketHash", 0)) == BUCKET_EMBLEM):
+                char_emblems.append({
+                    "itemHash": ihash,
+                    "itemInstanceId": str(raw_inv.get("itemInstanceId", "")),
+                    "name": idef.get("name", "Emblem"),
+                    "icon": idef.get("icon", ""),
+                    "backgroundPath": idef.get("secondarySpecial") or idef.get("secondaryIcon") or "",
+                    "isEquipped": False,
+                })
+                continue
             if idef and int(idef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_inv.get("itemInstanceId", ""))
                 if sub_iid:
@@ -1930,6 +1968,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "equipment": equipped_items,
             "inventory": bag_items,
             "postmaster": postmaster_items,
+            "emblems": char_emblems,
             "loadouts": [],
         })
 

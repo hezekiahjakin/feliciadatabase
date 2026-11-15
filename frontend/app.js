@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v44';
+} from './tgxm-viewer.js?v=20261115_v45';
 
 // Application State
 const state = {
@@ -1939,6 +1939,9 @@ function renderInventoryHeaderAndSwitcher() {
     const colWrap = document.createElement('div');
     colWrap.className = 'switcher-char-col';
 
+    const cardWrap = document.createElement('div');
+    cardWrap.className = 'switcher-card-wrap';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `switcher-card ${state.activeInventoryView === ch.characterId ? 'active' : ''}`;
@@ -1959,7 +1962,23 @@ function renderInventoryHeaderAndSwitcher() {
       renderInventoryHeaderAndSwitcher();
       renderInventoryStage();
     });
-    colWrap.appendChild(btn);
+    cardWrap.appendChild(btn);
+
+    if (Array.isArray(ch.emblems) && ch.emblems.length > 0) {
+      const embBtn = document.createElement('button');
+      embBtn.type = 'button';
+      embBtn.className = 'btn-switcher-emblem';
+      embBtn.title = `Change ${ch.className} Emblem In-Game (${ch.emblems.length} carried)`;
+      embBtn.innerHTML = '❖ Emblem';
+      embBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sfx.playChirp();
+        openEmblemPickerModal(ch);
+      });
+      cardWrap.appendChild(embBtn);
+    }
+
+    colWrap.appendChild(cardWrap);
 
     // Saved In-Game Loadouts + F.E.L.I.C.I.A. Custom AI Loadouts Strip directly under this Character
     const loadouts = ch.loadouts || [];
@@ -3383,6 +3402,162 @@ async function executeSingleItemModInsert(item, socketIndex, plugObj, feedbackEl
     showToast(`Mod error: ${err.message}`, 'error');
     return false;
   }
+}
+
+async function applyInGameShader(item, shaderHash, shaderName = 'Shader') {
+  if (!state.bungieData || !state.bungieSession?.access_token) {
+    throw new Error('Sign in with Bungie.net to apply shaders in-game.');
+  }
+  const isExoticWeapon = String(item?.category || '').toLowerCase() === 'weapon' && (item?.isExotic || item?.tierName === 'Exotic');
+  if (isExoticWeapon) {
+    throw new Error('Exotic weapons cannot equip shaders in Destiny 2.');
+  }
+  const sIdx = Number(item?.shaderSocketIndex ?? -1);
+  if (!item?.itemInstanceId || sIdx < 0) {
+    throw new Error(`${item?.name || 'This item'} does not expose a shader socket.`);
+  }
+  const charId = item.characterId || getActiveCharacter()?.characterId || state.bungieData?.characters?.[0]?.characterId || '';
+  if (!charId) {
+    throw new Error('Cannot determine target character for shader application.');
+  }
+
+  const res = await fetch('/api/bungie/item/insert-plug', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${state.bungieSession.access_token}`,
+      'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+    },
+    body: JSON.stringify({
+      membershipType: state.bungieData.player.membershipType,
+      characterId: String(charId),
+      itemInstanceId: String(item.itemInstanceId),
+      socketIndex: sIdx,
+      plugHash: Number(shaderHash),
+    }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    throw new Error(data?.detail || `Could not apply shader (HTTP ${res.status}).`);
+  }
+  if (data.refreshed_session) {
+    saveBungieSession(data.refreshed_session);
+  }
+  item.shaderHash = Number(shaderHash);
+  item.shaderName = shaderName || item.shaderName;
+  return data;
+}
+
+function openEmblemPickerModal(ch) {
+  const modal = document.getElementById('modalEmblemPicker');
+  const badge = document.getElementById('emblemPickerClassBadge');
+  const title = document.getElementById('emblemPickerTitle');
+  const grid = document.getElementById('emblemPickerGrid');
+  const fb = document.getElementById('emblemPickerFeedback');
+  const closeBtn = document.getElementById('btnCloseEmblemPicker');
+  if (!modal || !grid) return;
+
+  attachLightDismissFallback(modal);
+  if (badge) badge.textContent = (ch.className || 'GUARDIAN').toUpperCase();
+  if (title) title.textContent = `${(ch.className || 'GUARDIAN').toUpperCase()} EMBLEM SWITCHER`;
+  if (fb) {
+    fb.classList.add('hidden');
+    fb.classList.remove('error');
+    fb.textContent = '';
+  }
+
+  const emblems = ch.emblems || [];
+  grid.innerHTML = emblems.map((emb) => {
+    const bgStyle = emb.backgroundPath
+      ? `style="background-image: url('https://www.bungie.net${emb.backgroundPath}');"`
+      : '';
+    const iconHtml = emb.icon
+      ? `<img src="https://www.bungie.net${emb.icon}" alt="" class="emblem-opt-icon">`
+      : '';
+    return `
+      <button type="button" class="emblem-opt-card ${emb.isEquipped ? 'active' : ''}" data-emblem-id="${escapeHtml(emb.itemInstanceId)}" ${bgStyle}>
+        <div class="emblem-opt-overlay">
+          ${iconHtml}
+          <div class="emblem-opt-meta">
+            <div class="emblem-opt-name">${escapeHtml(emb.name || 'Emblem')}</div>
+            <div class="emblem-opt-tag">${emb.isEquipped ? '✓ EQUIPPED' : 'CLICK TO EQUIP'}</div>
+          </div>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.emblem-opt-card').forEach((cardBtn) => {
+    cardBtn.addEventListener('click', async () => {
+      const iid = cardBtn.getAttribute('data-emblem-id');
+      const emb = emblems.find(e => String(e.itemInstanceId) === String(iid));
+      if (!emb || emb.isEquipped) return;
+      if (!state.bungieData || !state.bungieSession?.access_token) {
+        showToast('Sign in with Bungie.net to equip emblems!', 'info');
+        return;
+      }
+
+      grid.querySelectorAll('.emblem-opt-card').forEach(b => { b.disabled = true; });
+      if (fb) {
+        fb.classList.remove('hidden', 'error');
+        fb.textContent = `Equipping '${emb.name}' on ${ch.className}...`;
+      }
+      sfx.playTransmit();
+
+      try {
+        const res = await fetch('/api/bungie/transfer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${state.bungieSession.access_token}`,
+            'X-Bungie-Refresh': state.bungieSession.refresh_token || '',
+          },
+          body: JSON.stringify({
+            membershipType: state.bungieData.player.membershipType,
+            itemInstanceId: String(emb.itemInstanceId),
+            itemHash: Number(emb.itemHash),
+            sourceLocation: 'character',
+            sourceCharacterId: String(ch.characterId),
+            targetType: 'equip',
+            targetCharacterId: String(ch.characterId),
+            isEquipped: false,
+            fallbackEquipInstanceId: '',
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+          throw new Error(data?.detail || `Could not equip emblem (HTTP ${res.status}).`);
+        }
+        if (data.refreshed_session) {
+          saveBungieSession(data.refreshed_session);
+        }
+
+        emblems.forEach(e => { e.isEquipped = (String(e.itemInstanceId) === String(emb.itemInstanceId)); });
+        if (emb.backgroundPath) ch.emblemBackgroundPath = emb.backgroundPath;
+        if (emb.icon) ch.emblemPath = emb.icon;
+
+        sfx.playReceive();
+        showToast(`✓ Equipped '${emb.name}' on ${ch.className}!`, 'info');
+        renderInventoryHeaderAndSwitcher();
+        modal.close();
+        loadBungieInventory(true);
+      } catch (err) {
+        sfx.playAlert();
+        if (fb) {
+          fb.classList.remove('hidden');
+          fb.classList.add('error');
+          fb.textContent = `⚠ ${err.message}`;
+        }
+        showToast(`Emblem error: ${err.message}`, 'error');
+        grid.querySelectorAll('.emblem-opt-card').forEach(b => { b.disabled = false; });
+      }
+    });
+  });
+
+  if (closeBtn) {
+    closeBtn.onclick = () => modal.close();
+  }
+  modal.showModal();
 }
 
 function renderInspectItemModSockets(item) {
@@ -9014,6 +9189,7 @@ function init3DGuardianAndInspectTheatre() {
   const btnAutoRotate = document.getElementById('btnG3dAutoRotate');
   const btnAuraToggle = document.getElementById('btnG3dAuraToggle');
   const shaderTargetLabel = document.getElementById('g3dShaderTargetLabel');
+  const btnApplyG3DShader = document.getElementById('btnG3dApplyInGame');
   const btnRevertEquipped = document.getElementById('btnG3dRevertEquipped');
   const shaderSearchInput = document.getElementById('g3dShaderSearchInput');
   const shaderGridTitle = document.getElementById('g3dShaderGridTitle');
@@ -9099,8 +9275,46 @@ function init3DGuardianAndInspectTheatre() {
         } else {
           renderG3DShaderSwatches(buildCombinedShaderChoices(g3dContext.slots));
         }
+        updateG3DApplyButton();
       });
     });
+  };
+
+  const getG3DApplyTargets = () => {
+    if (!g3dContext) return [];
+    if (g3dContext.selectedSlot === 'ALL') {
+      return (g3dContext.slots || [])
+        .map(s => s.item)
+        .filter(it => it && it.itemInstanceId && Number(it.shaderSocketIndex ?? -1) >= 0);
+    }
+    if (g3dContext.selectedSlot === 'weapon') {
+      const wpn = g3dContext.activeWeaponKey !== 'none' ? g3dContext.weapons[g3dContext.activeWeaponKey] : null;
+      const isEx = wpn && (wpn.isExotic || wpn.tierName === 'Exotic');
+      if (!wpn || isEx || !wpn.itemInstanceId || Number(wpn.shaderSocketIndex ?? -1) < 0) return [];
+      return [wpn];
+    }
+    const sl = (g3dContext.slots || []).find(s => s.slotKey === g3dContext.selectedSlot);
+    const it = sl?.item;
+    if (!it || !it.itemInstanceId || Number(it.shaderSocketIndex ?? -1) < 0) return [];
+    return [it];
+  };
+
+  const updateG3DApplyButton = () => {
+    if (!btnApplyG3DShader) return;
+    const sHash = Number(g3dContext?.previewedShaderHash || 0);
+    const targets = getG3DApplyTargets();
+    const canApply = Boolean(
+      sHash &&
+      state.bungieSession?.access_token &&
+      targets.length > 0 &&
+      targets.some(t => Number(t.shaderHash || 0) !== sHash)
+    );
+    btnApplyG3DShader.classList.toggle('hidden', !canApply);
+    if (canApply) {
+      btnApplyG3DShader.textContent = targets.length > 1
+        ? `⚡ Apply All (${targets.length})`
+        : '⚡ Apply In-Game';
+    }
   };
 
   const renderG3DShaderSwatches = (shaderList) => {
@@ -9116,9 +9330,11 @@ function init3DGuardianAndInspectTheatre() {
         const sHash = Number(btn.getAttribute('data-shader-hash'));
         const sName = btn.getAttribute('data-shader-name') || 'Shader';
         g3dContext.previewedShaderHash = sHash;
+        g3dContext.previewedShaderName = sName;
         shaderGridEl.querySelectorAll('[data-shader-hash]').forEach(b =>
           b.classList.toggle('active', Number(b.getAttribute('data-shader-hash')) === sHash)
         );
+        updateG3DApplyButton();
 
         const targetKeys = g3dContext.selectedSlot === 'ALL'
           ? ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor']
@@ -9310,7 +9526,57 @@ function init3DGuardianAndInspectTheatre() {
         await guardian3dStage.applyShaderToSlot('weapon', wpn?.shaderHash || null);
       }
       renderG3DShaderSwatches(buildCombinedShaderChoices(g3dContext.slots));
+      updateG3DApplyButton();
     } finally {
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    }
+  });
+
+  btnApplyG3DShader?.addEventListener('click', async () => {
+    if (!g3dContext || !g3dContext.previewedShaderHash) return;
+    const sHash = Number(g3dContext.previewedShaderHash);
+    const sName = g3dContext.previewedShaderName || 'Shader';
+    const targets = getG3DApplyTargets().filter(t => Number(t.shaderHash || 0) !== sHash);
+    if (!targets.length) return;
+
+    sfx.playTransmit();
+    btnApplyG3DShader.disabled = true;
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+
+    let applied = 0;
+    let firstError = '';
+    try {
+      for (const it of targets) {
+        if (loadingText) loadingText.textContent = `Applying ${sName} to ${it.name} in-game…`;
+        try {
+          await applyInGameShader(it, sHash, sName);
+          applied += 1;
+        } catch (err) {
+          if (!firstError) firstError = err.message;
+          break;
+        }
+      }
+      renderG3DSlotsPanel();
+      updateG3DApplyButton();
+      if (applied > 0 && !firstError) {
+        sfx.playReceive();
+        showToast(
+          applied > 1
+            ? `✓ Applied '${sName}' to ${applied} armor pieces in-game!`
+            : `✓ Applied '${sName}' onto ${targets[0].name} in-game!`,
+          'info'
+        );
+        loadBungieInventory(true);
+      } else if (applied > 0 && firstError) {
+        sfx.playAlert();
+        showToast(`Applied ${applied} piece(s), stopped: ${firstError}`, 'error');
+        loadBungieInventory(true);
+      } else {
+        sfx.playAlert();
+        showToast(`Shader error: ${firstError || 'Could not apply shader.'}`, 'error');
+      }
+    } finally {
+      btnApplyG3DShader.disabled = false;
       if (loadingOverlay) loadingOverlay.classList.add('hidden');
     }
   });
@@ -9344,6 +9610,24 @@ function init3DGuardianAndInspectTheatre() {
   const inspectShaderSearch = document.getElementById('inspect3DShaderSearch');
   const btnInspectRotate = document.getElementById('btnInspect3DRotate');
   const btnInspectResetSh = document.getElementById('btnInspect3DResetShader');
+  const btnInspectApplySh = document.getElementById('btnInspect3DApplyShader');
+  let inspectPreviewShader = { hash: null, name: '' };
+
+  const updateInspectApplyBtn = () => {
+    if (!btnInspectApplySh) return;
+    const it = state.inspectedItem;
+    const isExoticWpn = String(it?.category || '').toLowerCase() === 'weapon' && (it?.isExotic || it?.tierName === 'Exotic');
+    const canApply = Boolean(
+      it &&
+      !isExoticWpn &&
+      it.itemInstanceId &&
+      Number(it.shaderSocketIndex ?? -1) >= 0 &&
+      inspectPreviewShader.hash &&
+      Number(inspectPreviewShader.hash) !== Number(it.shaderHash || 0) &&
+      state.bungieSession?.access_token
+    );
+    btnInspectApplySh.classList.toggle('hidden', !canApply);
+  };
 
   const renderInspectShaderStrip = (list, activeHash) => {
     if (!inspectShaderGrid) return;
@@ -9353,9 +9637,12 @@ function init3DGuardianAndInspectTheatre() {
         if (!inspect3dStage) return;
         sfx.playChirp();
         const sHash = Number(btn.getAttribute('data-shader-hash'));
+        const sName = btn.getAttribute('data-shader-name') || 'Shader';
+        inspectPreviewShader = { hash: sHash, name: sName };
         inspectShaderGrid.querySelectorAll('[data-shader-hash]').forEach(b =>
           b.classList.toggle('active', Number(b.getAttribute('data-shader-hash')) === sHash)
         );
+        updateInspectApplyBtn();
         await inspect3dStage.applyShaderToSlots(['single'], sHash);
       });
     });
@@ -9388,6 +9675,8 @@ function init3DGuardianAndInspectTheatre() {
     const shaderStripEl = stage3dWrap.querySelector('.inspect-3d-shader-strip');
     if (shaderStripEl) shaderStripEl.classList.toggle('hidden', isExoticWpn);
     if (btnInspectResetSh) btnInspectResetSh.classList.toggle('hidden', isExoticWpn);
+    inspectPreviewShader = { hash: item.shaderHash || null, name: item.shaderName || '' };
+    updateInspectApplyBtn();
 
     if (!isExoticWpn) {
       const initialShaders = buildCombinedShaderChoices([{ slotKey: item.slot || 'Item', item }]);
@@ -9423,11 +9712,47 @@ function init3DGuardianAndInspectTheatre() {
   btnInspectResetSh?.addEventListener('click', async () => {
     if (!inspect3dStage || !state.inspectedItem) return;
     sfx.playChirp();
+    inspectPreviewShader = { hash: state.inspectedItem.shaderHash || null, name: state.inspectedItem.shaderName || '' };
+    updateInspectApplyBtn();
     await inspect3dStage.applyShaderToSlots(['single'], state.inspectedItem.shaderHash || null);
     renderInspectShaderStrip(
       buildCombinedShaderChoices([{ slotKey: state.inspectedItem.slot || 'Item', item: state.inspectedItem }]),
       state.inspectedItem.shaderHash || null
     );
+  });
+
+  btnInspectApplySh?.addEventListener('click', async () => {
+    const it = state.inspectedItem;
+    if (!it || !inspectPreviewShader.hash) return;
+    sfx.playTransmit();
+    btnInspectApplySh.disabled = true;
+    const fbEl = document.getElementById('inspectTransferFeedback');
+    if (fbEl) {
+      fbEl.classList.remove('hidden', 'error');
+      fbEl.textContent = `Applying '${inspectPreviewShader.name}' onto ${it.name} in-game...`;
+    }
+    try {
+      await applyInGameShader(it, inspectPreviewShader.hash, inspectPreviewShader.name);
+      sfx.playReceive();
+      const msg = `✓ Applied '${inspectPreviewShader.name}' onto ${it.name} in-game!`;
+      if (fbEl) {
+        fbEl.classList.remove('hidden', 'error');
+        fbEl.textContent = msg;
+      }
+      showToast(msg, 'info');
+      updateInspectApplyBtn();
+      loadBungieInventory(true);
+    } catch (err) {
+      sfx.playAlert();
+      if (fbEl) {
+        fbEl.classList.remove('hidden');
+        fbEl.classList.add('error');
+        fbEl.textContent = `⚠ ${err.message}`;
+      }
+      showToast(`Shader error: ${err.message}`, 'error');
+    } finally {
+      btnInspectApplySh.disabled = false;
+    }
   });
 
   let inspectSearchTimer = null;

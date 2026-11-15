@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261115_v44">
+  <link rel="stylesheet" href="styles.css?v=20261115_v45">
 </head>
 <body class="theme-vanguard">
 
@@ -1435,6 +1435,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
             <div class="inspect-3d-controls-bar">
               <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnInspect3DRotate" title="Toggle Auto-Rotate">⟳ Auto-Rotate</button>
               <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnInspect3DResetShader" title="Revert to Equipped Shader">↺ Equipped Shader</button>
+              <button type="button" class="btn-tactical btn-primary btn-xs hidden" id="btnInspect3DApplyShader" title="Apply previewed shader to this item in-game">⚡ Apply In-Game</button>
             </div>
           </div>
           <div class="inspect-3d-shader-strip">
@@ -1736,7 +1737,10 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
         <aside class="g3d-shaders-panel">
           <div class="g3d-shader-target-row">
             <span class="g3d-panel-label" id="g3dShaderTargetLabel">TARGET: ALL ARMOR</span>
-            <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnG3dRevertEquipped">↺ Equipped</button>
+            <div class="g3d-shader-target-actions">
+              <button type="button" class="btn-tactical btn-primary btn-xs hidden" id="btnG3dApplyInGame" title="Apply previewed shader in-game">⚡ Apply In-Game</button>
+              <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnG3dRevertEquipped">↺ Equipped</button>
+            </div>
           </div>
 
           <input type="search" class="tactical-input g3d-shader-search" id="g3dShaderSearchInput" placeholder="Search all Destiny 2 shaders…">
@@ -1748,6 +1752,24 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
+  <!-- CHARACTER EMBLEM SWITCHER MODAL -->
+  <dialog class="hud-modal modal-emblem-picker" id="modalEmblemPicker">
+    <div class="modal-card emblem-picker-card">
+      <div class="modal-header">
+        <div class="emblem-picker-title-wrap">
+          <span class="guardian-3d-badge" id="emblemPickerClassBadge">GUARDIAN</span>
+          <div>
+            <h3 id="emblemPickerTitle">SELECT CHARACTER EMBLEM</h3>
+            <p class="emblem-picker-sub">Equip any emblem carried in this character's inventory live in-game.</p>
+          </div>
+        </div>
+        <button type="button" class="btn-modal-close" id="btnCloseEmblemPicker" aria-label="Close emblem picker">&times;</button>
+      </div>
+      <div class="transfer-feedback hidden" id="emblemPickerFeedback"></div>
+      <div class="emblem-picker-grid" id="emblemPickerGrid"></div>
+    </div>
+  </dialog>
+
   <script type="importmap">
     {
       "imports": {
@@ -1756,6 +1778,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       }
     }
   </script>
-  <script type="module" src="app.js?v=20261115_v44"></script>
+  <script type="module" src="app.js?v=20261115_v45"></script>
 </body>
 </html>
