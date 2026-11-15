@@ -1503,6 +1503,10 @@ function switchTabDirect(tabId) {
   document.querySelectorAll('.tab-pane').forEach(pane => {
     pane.classList.toggle('active', pane.id === tabId);
   });
+
+  if (tabId === 'tab-loadout-builder') {
+    openLoadoutBuilderModal(activeLoadoutBuilderState || null, false);
+  }
 }
 
 function switchTab(tabId) {
@@ -1885,6 +1889,16 @@ async function loadBungieInventory(silent = false) {
     updateBungieAuthUI();
     renderInventoryHeaderAndSwitcher();
     renderInventoryStage();
+
+    if (activeLoadoutBuilderState) {
+      const hadNoGear = !Object.values(activeLoadoutBuilderState.slots || {}).some(Boolean);
+      if (hadNoGear) {
+        activeLoadoutBuilderState = assembleLoadoutFromBlueprint(activeLoadoutBuilderState);
+      }
+      renderLoadoutBuilderWorkspace();
+    } else if (state.currentTab === 'tab-loadout-builder') {
+      openLoadoutBuilderModal(null, false);
+    }
   } catch (err) {
     console.error('[Bungie Inventory Error]', err);
     if (stageEl) {
@@ -5037,10 +5051,16 @@ function renderInlineChatLoadoutCard(containerEl, blueprint) {
   }
 }
 
-function openLoadoutBuilderModal(initialLoadout = null) {
+function openLoadoutBuilderModal(initialLoadout = null, switchTabFlag = true) {
   sfx.playChirp();
-  const modal = document.getElementById('modalLoadoutBuilder');
-  if (!modal) return;
+
+  // Close any open overlay modals if the user clicked "Customize in Loadout Builder" from a modal
+  ['modalSavedLoadout', 'modalInspectItem', 'modalGodRollScanner'].forEach(mid => {
+    const m = document.getElementById(mid);
+    if (m && m.open) {
+      try { m.close(); } catch (_) { m.removeAttribute('open'); }
+    }
+  });
 
   if (!initialLoadout) {
     const activeChar = getActiveCharacter() || state.bungieData?.characters?.[0];
@@ -5075,13 +5095,79 @@ function openLoadoutBuilderModal(initialLoadout = null) {
   }
   if (pickerDrawer) pickerDrawer.classList.add('hidden');
 
-  renderLoadoutBuilderWorkspace();
-
-  try {
-    if (!modal.open) modal.showModal();
-  } catch (_) {
-    modal.setAttribute('open', '');
+  if (switchTabFlag) {
+    switchTabDirect('tab-loadout-builder');
+  } else {
+    renderLoadoutBuilderWorkspace();
   }
+
+  const pagePane = document.getElementById('tab-loadout-builder');
+  if (pagePane) {
+    pagePane.scrollTop = 0;
+  }
+}
+
+function renderLbPageSavedLoadoutsStrip(draft) {
+  const stripEl = document.getElementById('lbPageSavedLoadoutsStrip');
+  if (!stripEl || !draft) return;
+
+  const customLoadouts = getCustomLoadoutsForClass(draft.className);
+  const charObj = (state.bungieData?.characters || []).find(
+    c => (c.className || '').toLowerCase() === (draft.className || '').toLowerCase()
+  );
+  const inGameLoadouts = charObj?.loadouts || [];
+
+  if (customLoadouts.length === 0 && inGameLoadouts.length === 0) {
+    stripEl.innerHTML = '';
+    stripEl.classList.add('hidden');
+    return;
+  }
+
+  stripEl.classList.remove('hidden');
+  stripEl.innerHTML = `
+    <span class="lb-saved-strip-lbl">📂 ${escapeHtml(draft.className.toUpperCase())} LOADOUTS:</span>
+    <div class="lb-saved-strip-scroll">
+      ${customLoadouts.map((cld, idx) => {
+        const isCurrent = draft.id && draft.id === cld.id;
+        return `
+          <button type="button" class="lb-strip-chip custom ${isCurrent ? 'active' : ''}" data-custom-idx="${idx}" title="Load custom build: ${escapeHtml(cld.title)}">
+            <span class="lb-strip-chip-icon">❖</span>
+            <span>${escapeHtml(cld.title || 'AI Loadout')}</span>
+            <span class="lb-strip-chip-sub">${escapeHtml(cld.subclass || '')} • ${escapeHtml(cld.mode || 'PVE')}</span>
+          </button>
+        `;
+      }).join('')}
+      ${inGameLoadouts.map((ld, idx) => `
+        <button type="button" class="lb-strip-chip ingame" data-ingame-idx="${idx}" title="Import in-game Destiny 2 Loadout #${ld.slotNumber}: ${escapeHtml(ld.name)}">
+          <span class="lb-strip-chip-icon">⚡</span>
+          <span>#${ld.slotNumber} ${escapeHtml(ld.name)}</span>
+          <span class="lb-strip-chip-sub">${escapeHtml(ld.subclass?.name || 'In-Game')}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  stripEl.querySelectorAll('[data-custom-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.getAttribute('data-custom-idx'));
+      const cld = customLoadouts[idx];
+      if (!cld) return;
+      const hydrated = hydrateSavedCustomLoadout(cld);
+      openLoadoutBuilderModal(hydrated, false);
+      showToast(`Loaded '${hydrated.title}' into Loadout Builder!`, 'info');
+    });
+  });
+
+  stripEl.querySelectorAll('[data-ingame-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.getAttribute('data-ingame-idx'));
+      const ld = inGameLoadouts[idx];
+      if (!ld || !charObj) return;
+      const imported = convertInGameSavedLoadoutToDraft(charObj, ld);
+      openLoadoutBuilderModal(imported, false);
+      showToast(`Imported In-Game Loadout #${ld.slotNumber} (${ld.name}) into Loadout Builder!`, 'info');
+    });
+  });
 }
 
 function renderLoadoutBuilderWorkspace() {
@@ -5108,6 +5194,8 @@ function renderLoadoutBuilderWorkspace() {
   if (equipBtn) {
     equipBtn.textContent = `⚡ Equip Loadout & Mods on ${draft.className}`;
   }
+
+  renderLbPageSavedLoadoutsStrip(draft);
 
   // 1. Render Interactive Subclass & Ability Configurator (Super, Aspects, Fragments, Grenade, Melee, Class Ability)
   const bpBox = document.getElementById('lbAiBlueprintBox');
@@ -5616,9 +5704,7 @@ function renderLoadoutBuilderWorkspace() {
   if (btnAskAiStat) {
     btnAskAiStat.addEventListener('click', () => {
       sfx.playChirp();
-      const modal = document.getElementById('modalLoadoutBuilder');
-      if (modal && modal.open) modal.close();
-      switchTab('tab-chat');
+      switchTabDirect('tab-comms');
       const tStr = Object.entries(draft.targetStats || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
       const prompt = `Search my ${draft.className} Inventory and Vault and help me optimize my ${draft.subclass} ${draft.className} (${draft.mode}) build to hit these Target Stats: [${tStr}] using Exotic '${draft.exoticArmor || 'Best Owned'}', optimal Armor Stat Mods, and Subclass Fragments!`;
       const chatInput = document.getElementById('chatInput');
@@ -8470,10 +8556,11 @@ document.addEventListener('DOMContentLoaded', () => {
   attachLightDismissFallback(modalSavedLoadout);
 
   // =========================================================================
-  // DIM TACTICAL LOADOUT BUILDER MODAL WIRING
+  // DIM TACTICAL LOADOUT BUILDER PAGE WIRING
   // =========================================================================
-  const modalLoadoutBuilder = document.getElementById('modalLoadoutBuilder');
   const btnOpenDimLoadoutBuilder = document.getElementById('btnOpenDimLoadoutBuilder');
+  const btnLbNewBlankBuild = document.getElementById('btnLbNewBlankBuild');
+  const btnLbBackToInventory = document.getElementById('btnLbBackToInventory');
   const lbLoadoutNameInput = document.getElementById('lbLoadoutNameInput');
   const lbClassSelect = document.getElementById('lbClassSelect');
   const lbSubclassSelect = document.getElementById('lbSubclassSelect');
@@ -8488,13 +8575,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnLbClosePicker = document.getElementById('btnLbClosePicker');
   const lbFeedbackBanner = document.getElementById('lbFeedbackBanner');
 
-  if (modalLoadoutBuilder) {
-    attachLightDismissFallback(modalLoadoutBuilder);
-  }
-
   if (btnOpenDimLoadoutBuilder) {
     btnOpenDimLoadoutBuilder.addEventListener('click', () => {
-      openLoadoutBuilderModal(null);
+      openLoadoutBuilderModal(null, true);
+    });
+  }
+
+  if (btnLbNewBlankBuild) {
+    btnLbNewBlankBuild.addEventListener('click', () => {
+      const curClass = lbClassSelect?.value || getActiveCharacter()?.className || 'Hunter';
+      const curSub = lbSubclassSelect?.value || 'Solar';
+      const curMode = lbModeSelect?.value || 'PVE';
+      const fresh = assembleLoadoutFromBlueprint({
+        title: `${curSub} ${curClass} // Tactical Loadout`,
+        className: curClass,
+        subclass: curSub,
+        mode: curMode,
+      });
+      openLoadoutBuilderModal(fresh, false);
+      showToast(`Started new ${curSub} ${curClass} loadout!`, 'info');
+    });
+  }
+
+  if (btnLbBackToInventory) {
+    btnLbBackToInventory.addEventListener('click', () => {
+      switchTabDirect('tab-inventory');
     });
   }
 
@@ -8619,9 +8724,10 @@ document.addEventListener('DOMContentLoaded', () => {
       activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
       saveCustomLoadoutToStorage(activeLoadoutBuilderState);
       if (btnLbDeleteCustom) btnLbDeleteCustom.classList.remove('hidden');
+      renderLbPageSavedLoadoutsStrip(activeLoadoutBuilderState);
       if (lbFeedbackBanner) {
         lbFeedbackBanner.classList.remove('hidden', 'error');
-        lbFeedbackBanner.textContent = `✓ Saved '${activeLoadoutBuilderState.title}' to ${activeLoadoutBuilderState.className}'s Saved Loadouts drawer!`;
+        lbFeedbackBanner.textContent = `✓ Saved '${activeLoadoutBuilderState.title}' to ${activeLoadoutBuilderState.className}'s Saved Loadouts!`;
       }
       showToast(`Saved '${activeLoadoutBuilderState.title}' to ${activeLoadoutBuilderState.className} Loadouts!`, 'info');
     });
@@ -8633,7 +8739,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (confirm(`Delete custom loadout '${activeLoadoutBuilderState.title}'?`)) {
         sfx.playAlert();
         deleteCustomLoadoutFromStorage(activeLoadoutBuilderState.id);
-        modalLoadoutBuilder?.close();
+        openLoadoutBuilderModal(null, false);
         showToast('Custom loadout deleted.', 'info');
       }
     });
