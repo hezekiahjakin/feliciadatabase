@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261115_v45">
+  <link rel="stylesheet" href="styles.css?v=20261115_v46">
 </head>
 <body class="theme-vanguard">
 
@@ -275,6 +275,9 @@
             <p class="section-sub">Clan tactical guides, gun stats, armor set bonuses, catalyst walkthroughs, and verified blueprints. F.E.L.I.C.I.A. automatically incorporates these into her live tactical calculations!</p>
           </div>
           <div class="wiki-actions">
+            <button type="button" class="btn-tactical btn-secondary" id="btnOpenYoutubeWiki">
+              <span class="icon">📺</span> Import YouTube Guide
+            </button>
             <button class="btn-tactical btn-primary" id="btnOpenAddWiki">
               <span class="icon">🔒</span> Add Intel Entry
             </button>
@@ -731,6 +734,73 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
           <button type="submit" class="btn-tactical btn-primary">Archive Intel</button>
         </div>
       </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: YOUTUBE VIDEO TO READABLE GUIDE CONVERTER -->
+  <dialog class="hud-modal modal-wide" id="modalYoutubeWiki">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 class="modal-title">📺 YOUTUBE VIDEO &rarr; READABLE GUIDE</h3>
+          <span class="modal-sub">Paste any Destiny 2 YouTube guide to convert it into a structured F.E.L.I.C.I.A. guide</span>
+        </div>
+        <button type="button" class="btn-modal-close" id="btnCloseYoutubeWiki">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex: 2.2;">
+            <label for="ytGuideUrl">YOUTUBE VIDEO URL</label>
+            <input type="url" id="ytGuideUrl" class="input-tactical" placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/...">
+          </div>
+          <div class="form-group flex-1">
+            <label for="ytGuideCategory">GUIDE CATEGORY</label>
+            <select id="ytGuideCategory" class="input-tactical select-tactical">
+              <option value="Raids" selected>Raids</option>
+              <option value="Dungeons">Dungeons</option>
+              <option value="Builds">Builds</option>
+              <option value="Catalysts">Catalysts</option>
+              <option value="Mechanics">Mechanics</option>
+              <option value="Weapons">Weapons</option>
+              <option value="Armor">Armor</option>
+              <option value="Custom">Custom Intel</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="yt-guide-action-row">
+          <button type="button" class="btn-tactical btn-primary" id="btnGenerateYtGuide">⚡ Convert Video to Guide</button>
+          <span class="yt-guide-status hidden" id="ytGuideStatus"></span>
+        </div>
+
+        <div class="yt-guide-preview-wrap hidden" id="ytGuidePreviewWrap">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="ytPreviewTitle">GUIDE TITLE</label>
+              <input type="text" id="ytPreviewTitle" class="input-tactical">
+            </div>
+            <div class="form-group flex-1">
+              <label for="ytPreviewTags">TAGS (COMMA-SEPARATED)</label>
+              <input type="text" id="ytPreviewTags" class="input-tactical">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ytPreviewSummary">SUMMARY</label>
+            <input type="text" id="ytPreviewSummary" class="input-tactical">
+          </div>
+          <div class="yt-preview-tabs">
+            <button type="button" class="btn-mini-action active" id="btnYtTabRendered">📖 Readable Guide Preview</button>
+            <button type="button" class="btn-mini-action" id="btnYtTabMarkdown">✏️ Edit Markdown</button>
+          </div>
+          <div class="yt-rendered-preview markdown-body" id="ytGuideRenderedPreview"></div>
+          <textarea id="ytPreviewContent" class="input-tactical textarea-tactical hidden" rows="12"></textarea>
+
+          <div class="modal-footer" style="margin-top: 14px;">
+            <button type="button" class="btn-tactical btn-secondary" id="btnCancelYoutubeWiki">Close</button>
+            <button type="button" class="btn-tactical btn-primary" id="btnSaveYtGuide">💾 Archive to Guides</button>
+          </div>
+        </div>
+      </div>
     </div>
   </dialog>
 
@@ -1778,6 +1848,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       }
     }
   </script>
-  <script type="module" src="app.js?v=20261115_v45"></script>
+  <script type="module" src="app.js?v=20261115_v46"></script>
 </body>
 </html>

@@ -14,6 +14,8 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Redirect
 from pydantic import BaseModel
 import requests
 import re
+import html as html_lib
+import xml.etree.ElementTree as ET
 
 try:
     from backend.bungie_service import (
@@ -1317,6 +1319,273 @@ async def upload_wiki_file(file: UploadFile = File(...), category: str = Form("I
     cfg = get_config()
     sync_to_firebase("felicia/wiki_data", user_data, cfg.get("firebase_auth_token", ""))
     return {"status": "success", "count": 1, "entry": new_entry}
+
+
+class YoutubeWikiImportRequest(BaseModel):
+    url: str
+    category: Optional[str] = "Raids"
+    save: Optional[bool] = False
+
+
+def _extract_youtube_video_id(url: str) -> str:
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    patterns = [
+        r"(?:youtube\.com/watch\?(?:.*&)?v=)([A-Za-z0-9_-]{11})",
+        r"(?:youtu\.be/)([A-Za-z0-9_-]{11})",
+        r"(?:youtube\.com/shorts/)([A-Za-z0-9_-]{11})",
+        r"(?:youtube\.com/live/)([A-Za-z0-9_-]{11})",
+        r"(?:youtube\.com/embed/)([A-Za-z0-9_-]{11})",
+        r"^([A-Za-z0-9_-]{11})$",
+    ]
+    for pat in patterns:
+        m = re.search(pat, raw)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _format_ts(seconds_val: float) -> str:
+    total_sec = max(0, int(seconds_val))
+    mins, secs = divmod(total_sec, 60)
+    hrs, mins = divmod(mins, 60)
+    if hrs > 0:
+        return f"{hrs}:{mins:02d}:{secs:02d}"
+    return f"{mins:02d}:{secs:02d}"
+
+
+def _fetch_youtube_video_context(video_id: str) -> Dict[str, Any]:
+    watch_url = f"https://www.youtube.com/watch?v={video_id}"
+    title = ""
+    author = ""
+    transcript_lines: List[str] = []
+
+    # 1. Fetch oEmbed metadata for reliable title + creator name
+    try:
+        oe_resp = requests.get(
+            "https://www.youtube.com/oembed",
+            params={"url": watch_url, "format": "json"},
+            timeout=10,
+        )
+        if oe_resp.status_code == 200:
+            oe = oe_resp.json()
+            title = oe.get("title", "") or ""
+            author = oe.get("author_name", "") or ""
+    except Exception:
+        pass
+
+    # 2. Fetch watch page to locate captionTracks (manual English -> auto English -> first track)
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        page_resp = requests.get(watch_url, headers=headers, timeout=12)
+        if page_resp.status_code == 200:
+            html_text = page_resp.text
+            if not title:
+                t_match = re.search(r"<title>(.*?)</title>", html_text, re.DOTALL | re.IGNORECASE)
+                if t_match:
+                    title = html_lib.unescape(t_match.group(1)).replace(" - YouTube", "").strip()
+
+            cap_match = re.search(r'"captionTracks"\s*:\s*(\[.*?\])', html_text)
+            if cap_match:
+                tracks = json.loads(cap_match.group(1))
+                chosen = None
+                for tr in tracks:
+                    if str(tr.get("languageCode", "")).startswith("en") and tr.get("kind") != "asr":
+                        chosen = tr
+                        break
+                if not chosen:
+                    for tr in tracks:
+                        if str(tr.get("languageCode", "")).startswith("en"):
+                            chosen = tr
+                            break
+                if not chosen and tracks:
+                    chosen = tracks[0]
+
+                if chosen and chosen.get("baseUrl"):
+                    cap_resp = requests.get(chosen["baseUrl"], headers=headers, timeout=12)
+                    if cap_resp.status_code == 200 and cap_resp.text.strip().startswith("<"):
+                        root = ET.fromstring(cap_resp.text)
+                        for node in root.findall(".//text"):
+                            txt = html_lib.unescape("".join(node.itertext())).replace("\n", " ").strip()
+                            if not txt:
+                                continue
+                            start_s = float(node.attrib.get("start", "0") or 0)
+                            transcript_lines.append(f"[{_format_ts(start_s)}] {txt}")
+    except Exception:
+        pass
+
+    transcript_text = "\n".join(transcript_lines)
+    if len(transcript_text) > 45000:
+        transcript_text = transcript_text[:45000] + "\n...[transcript truncated for length]"
+
+    return {
+        "videoId": video_id,
+        "url": watch_url,
+        "title": title or f"YouTube Guide ({video_id})",
+        "author": author or "YouTube Creator",
+        "transcript": transcript_text,
+        "hasTranscript": bool(transcript_text.strip()),
+    }
+
+
+def _generate_guide_from_youtube(video_ctx: Dict[str, Any], category: str) -> Dict[str, Any]:
+    config = get_config()
+    api_key = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key") or ""
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured in Admin Settings.")
+
+    prompt_parts_text = (
+        f"Convert this Destiny 2 YouTube guide video into a clear, readable, step-by-step tactical guide for F.E.L.I.C.I.A.\n"
+        f"Video Title: {video_ctx['title']}\n"
+        f"Creator: {video_ctx['author']}\n"
+        f"Category: {category}\n"
+        f"Source URL: {video_ctx['url']}\n\n"
+        "Return ONLY valid JSON with these exact keys:\n"
+        "{\n"
+        '  "title": "Clean, concise guide title",\n'
+        '  "summary": "1-2 sentence overview of what this guide covers",\n'
+        '  "tags": ["Tag1", "Tag2", "Tag3", "Tag4"],\n'
+        '  "content": "Full Markdown guide with sections: ## Overview, ## Recommended Loadout & Subclasses, ## Step-by-Step Walkthrough (include [MM:SS] timestamps), and ## Key Callouts & Tips"\n'
+        "}\n"
+    )
+    if video_ctx["hasTranscript"]:
+        prompt_parts_text += f"\nVideo Transcript:\n{video_ctx['transcript']}\n"
+    else:
+        prompt_parts_text += "\nNo captions were available; analyze the video directly from the YouTube URL."
+
+    candidate_models = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview",
+    ]
+
+    # Try native YouTube fileData first (allows visual + audio comprehension), then transcript-only fallback
+    part_strategies = []
+    part_strategies.append([
+        {"fileData": {"fileUri": video_ctx["url"]}},
+        {"text": prompt_parts_text},
+    ])
+    if video_ctx["hasTranscript"]:
+        part_strategies.append([{"text": prompt_parts_text}])
+
+    last_error = ""
+    raw_reply = ""
+    for parts in part_strategies:
+        for model_name in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"role": "user", "parts": parts}],
+                "systemInstruction": {
+                    "parts": [{"text": "You are F.E.L.I.C.I.A., a Destiny 2 tactical intelligence construct. Produce accurate, clean, scannable Markdown guides from Destiny 2 YouTube videos. Never invent mechanics not present in the video."}]
+                },
+                "generationConfig": {
+                    "temperature": 0.35,
+                    "maxOutputTokens": 4096,
+                    "responseMimeType": "application/json",
+                },
+            }
+            try:
+                resp = requests.post(url, json=payload, timeout=45)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    cands = data.get("candidates", [])
+                    if cands and "content" in cands[0]:
+                        txt_chunks = [p.get("text", "") for p in cands[0]["content"].get("parts", []) if p.get("text")]
+                        if txt_chunks:
+                            raw_reply = "\n".join(txt_chunks).strip()
+                            break
+                else:
+                    last_error = f"{model_name} HTTP {resp.status_code}: {resp.text[:180]}"
+            except Exception as e:
+                last_error = f"{model_name} error: {str(e)}"
+        if raw_reply:
+            break
+
+    if not raw_reply:
+        raise RuntimeError(f"Gemini could not process this video ({last_error or 'no response'}).")
+
+    cleaned = raw_reply.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        parsed = {
+            "title": video_ctx["title"],
+            "summary": f"Written guide generated from {video_ctx['author']}'s video.",
+            "tags": ["YouTube Guide", category],
+            "content": raw_reply,
+        }
+
+    guide_title = str(parsed.get("title") or video_ctx["title"]).strip()
+    guide_summary = str(parsed.get("summary") or f"Guide converted from {video_ctx['author']}'s YouTube video.").strip()
+    guide_tags = parsed.get("tags") if isinstance(parsed.get("tags"), list) else ["YouTube Guide", category]
+    guide_tags = [str(t).strip() for t in guide_tags if str(t).strip()][:8]
+    if "YouTube" not in guide_tags:
+        guide_tags.append("YouTube")
+    guide_content = str(parsed.get("content") or "").strip()
+    source_header = f"> **Source Video:** [{video_ctx['title']}]({video_ctx['url']}) by **{video_ctx['author']}**\n\n"
+    if video_ctx["url"] not in guide_content:
+        guide_content = source_header + guide_content
+
+    return {
+        "title": guide_title,
+        "category": category,
+        "tags": guide_tags,
+        "summary": guide_summary,
+        "content": guide_content,
+    }
+
+
+@app.post("/api/wiki/import-youtube")
+async def import_youtube_wiki_guide(body: YoutubeWikiImportRequest, background_tasks: BackgroundTasks):
+    video_id = _extract_youtube_video_id(body.url)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Please enter a valid YouTube video URL (youtube.com/watch?v=... or youtu.be/...).")
+
+    video_ctx = await run_in_threadpool(_fetch_youtube_video_context, video_id)
+    try:
+        draft = await run_in_threadpool(_generate_guide_from_youtube, video_ctx, body.category or "Raids")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    res_payload: Dict[str, Any] = {
+        "status": "success",
+        "video": {
+            "videoId": video_ctx["videoId"],
+            "url": video_ctx["url"],
+            "title": video_ctx["title"],
+            "author": video_ctx["author"],
+            "hasTranscript": video_ctx["hasTranscript"],
+        },
+        "draft": draft,
+    }
+
+    if body.save:
+        user_data = load_json(USER_WIKI_PATH, [])
+        new_entry = {
+            "id": f"yt-{uuid.uuid4().hex[:8]}",
+            "title": draft["title"],
+            "category": draft["category"],
+            "tags": draft["tags"],
+            "summary": draft["summary"],
+            "content": draft["content"],
+            "is_custom": True,
+        }
+        user_data.append(new_entry)
+        save_json(USER_WIKI_PATH, user_data)
+        cfg = get_config()
+        background_tasks.add_task(sync_to_firebase, "felicia/wiki_data", user_data, cfg.get("firebase_auth_token", ""))
+        res_payload["entry"] = new_entry
+
+    return res_payload
 
 @app.get("/api/builds")
 def get_builds_endpoint():

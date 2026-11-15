@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v45';
+} from './tgxm-viewer.js?v=20261115_v46';
 
 // Application State
 const state = {
@@ -7738,6 +7738,160 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+  }
+
+  // YouTube Video -> Readable Guide Importer
+  const modalYtWiki = document.getElementById('modalYoutubeWiki');
+  const btnOpenYtWiki = document.getElementById('btnOpenYoutubeWiki');
+  const btnCloseYtWiki = document.getElementById('btnCloseYoutubeWiki');
+  const btnCancelYtWiki = document.getElementById('btnCancelYoutubeWiki');
+  const btnGenerateYtGuide = document.getElementById('btnGenerateYtGuide');
+  const btnSaveYtGuide = document.getElementById('btnSaveYtGuide');
+  const ytUrlInput = document.getElementById('ytGuideUrl');
+  const ytCategorySelect = document.getElementById('ytGuideCategory');
+  const ytStatusEl = document.getElementById('ytGuideStatus');
+  const ytPreviewWrap = document.getElementById('ytGuidePreviewWrap');
+  const ytTitleInput = document.getElementById('ytPreviewTitle');
+  const ytTagsInput = document.getElementById('ytPreviewTags');
+  const ytSummaryInput = document.getElementById('ytPreviewSummary');
+  const ytContentInput = document.getElementById('ytPreviewContent');
+  const ytRenderedEl = document.getElementById('ytGuideRenderedPreview');
+  const btnYtTabRendered = document.getElementById('btnYtTabRendered');
+  const btnYtTabMarkdown = document.getElementById('btnYtTabMarkdown');
+
+  if (btnOpenYtWiki && modalYtWiki) {
+    attachLightDismissFallback(modalYtWiki);
+
+    const setYtStatus = (msg, isError = false) => {
+      if (!ytStatusEl) return;
+      if (!msg) {
+        ytStatusEl.classList.add('hidden');
+        ytStatusEl.classList.remove('is-error');
+        ytStatusEl.textContent = '';
+        return;
+      }
+      ytStatusEl.classList.remove('hidden');
+      ytStatusEl.classList.toggle('is-error', isError);
+      ytStatusEl.textContent = msg;
+    };
+
+    const showRenderedTab = () => {
+      btnYtTabRendered?.classList.add('active');
+      btnYtTabMarkdown?.classList.remove('active');
+      ytRenderedEl?.classList.remove('hidden');
+      ytContentInput?.classList.add('hidden');
+      if (ytRenderedEl && ytContentInput) {
+        ytRenderedEl.innerHTML = renderMarkdown(ytContentInput.value || '');
+      }
+    };
+
+    const showMarkdownTab = () => {
+      btnYtTabMarkdown?.classList.add('active');
+      btnYtTabRendered?.classList.remove('active');
+      ytContentInput?.classList.remove('hidden');
+      ytRenderedEl?.classList.add('hidden');
+    };
+
+    btnYtTabRendered?.addEventListener('click', () => {
+      sfx.playChirp();
+      showRenderedTab();
+    });
+    btnYtTabMarkdown?.addEventListener('click', () => {
+      sfx.playChirp();
+      showMarkdownTab();
+    });
+
+    btnOpenYtWiki.addEventListener('click', () => {
+      sfx.playChirp();
+      setYtStatus('');
+      ytPreviewWrap?.classList.add('hidden');
+      modalYtWiki.showModal();
+      setTimeout(() => ytUrlInput?.focus(), 60);
+    });
+
+    [btnCloseYtWiki, btnCancelYtWiki].forEach(b => {
+      b?.addEventListener('click', () => modalYtWiki.close());
+    });
+
+    btnGenerateYtGuide?.addEventListener('click', async () => {
+      const url = (ytUrlInput?.value || '').trim();
+      const category = ytCategorySelect?.value || 'Raids';
+      if (!url) {
+        setYtStatus('Please paste a YouTube video link first.', true);
+        return;
+      }
+
+      sfx.playTransmit();
+      btnGenerateYtGuide.disabled = true;
+      ytPreviewWrap?.classList.add('hidden');
+      setYtStatus('Fetching video metadata & transcript, then generating guide with Gemini…');
+
+      try {
+        const res = await fetch('/api/wiki/import-youtube', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, category, save: false }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.draft) {
+          throw new Error(data?.detail || `Could not convert video (HTTP ${res.status}).`);
+        }
+
+        const draft = data.draft;
+        if (ytTitleInput) ytTitleInput.value = draft.title || '';
+        if (ytTagsInput) ytTagsInput.value = (draft.tags || []).join(', ');
+        if (ytSummaryInput) ytSummaryInput.value = draft.summary || '';
+        if (ytContentInput) ytContentInput.value = draft.content || '';
+        showRenderedTab();
+        ytPreviewWrap?.classList.remove('hidden');
+
+        const modeNote = data.video?.hasTranscript ? 'Transcript + Gemini' : 'Direct Gemini Video';
+        setYtStatus(`✓ Ready (${modeNote}) — review below and click Archive to Guides.`);
+        sfx.playReceive();
+      } catch (err) {
+        sfx.playAlert();
+        setYtStatus(`⚠ ${err.message}`, true);
+      } finally {
+        btnGenerateYtGuide.disabled = false;
+      }
+    });
+
+    btnSaveYtGuide?.addEventListener('click', async () => {
+      const title = (ytTitleInput?.value || '').trim();
+      const category = ytCategorySelect?.value || 'Raids';
+      const tags = (ytTagsInput?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+      const summary = (ytSummaryInput?.value || '').trim();
+      const content = (ytContentInput?.value || '').trim();
+
+      if (!title || !content) {
+        setYtStatus('Guide title and content cannot be empty.', true);
+        return;
+      }
+
+      btnSaveYtGuide.disabled = true;
+      sfx.playTransmit();
+      try {
+        const res = await fetch('/api/wiki', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, category, tags, summary, content }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || data?.status !== 'success' || !data.entry) {
+          throw new Error(data?.detail || `Failed to save guide (HTTP ${res.status}).`);
+        }
+        state.wikiList.push(data.entry);
+        renderWikiGrid();
+        modalYtWiki.close();
+        sfx.playReceive();
+        showToast(`✓ Archived YouTube guide '${title}'!`, 'info');
+      } catch (err) {
+        sfx.playAlert();
+        setYtStatus(`⚠ ${err.message}`, true);
+      } finally {
+        btnSaveYtGuide.disabled = false;
+      }
+    });
   }
 
   // =========================================================================

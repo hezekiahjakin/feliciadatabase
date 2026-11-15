@@ -8022,3 +8022,57 @@ dialog.modal-loadout-builder::backdrop {
   color: #FACC15;
   margin-top: 2px;
 }
+
+/* ==========================================================================
+   YOUTUBE VIDEO TO GUIDE IMPORTER MODAL
+   ========================================================================== */
+.wiki-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.yt-guide-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+
+.yt-guide-status {
+  font-size: 12.5px;
+  color: #93C5FD;
+}
+
+.yt-guide-status.is-error {
+  color: #FCA5A5;
+}
+
+.yt-guide-preview-wrap {
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  padding-top: 14px;
+}
+
+.yt-preview-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.yt-preview-tabs .btn-mini-action.active {
+  background: rgba(168, 85, 247, 0.28);
+  border-color: #C084FC;
+  color: #FFFFFF;
+}
+
+.yt-rendered-preview {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(9, 13, 22, 0.72);
+  line-height: 1.55;
+}
