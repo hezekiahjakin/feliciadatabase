@@ -3480,6 +3480,12 @@ function saveCustomLoadoutToStorage(draft) {
     super: draft.super || '',
     aspects: draft.aspects || [],
     fragments: draft.fragments || [],
+    grenade: draft.grenade || '',
+    melee: draft.melee || '',
+    classAbility: draft.classAbility || '',
+    subclassMods: draft.subclassMods || {},
+    targetStats: draft.targetStats || null,
+    lockExoticForStatOpt: draft.lockExoticForStatOpt !== false,
     exoticArmor: draft.exoticArmor || '',
     armorSet: draft.armorSet || '',
     recommendedWeapons: draft.recommendedWeapons || [],
@@ -3957,7 +3963,28 @@ function assembleLoadoutFromBlueprint(blueprint = {}) {
     selectedArtifactPerks = [...chosenPreset.perks];
   }
 
-  return {
+  const defaultTargetStats = blueprint.targetStats
+    ? { ...blueprint.targetStats }
+    : (mode === 'PVP'
+      ? { Health: 130, Melee: 70, Grenade: 80, Super: 90, Class: 100, Weapons: 110 }
+      : { Health: 0, Melee: 90, Grenade: 130, Super: 100, Class: 90, Weapons: 120 });
+
+  const resolvedSuper = blueprint.super || matchedSubclass?.super?.name || getDefaultSubclassOption(character?.className || className, subclass, 'super');
+  const resolvedAspects = blueprint.aspects?.length
+    ? [...blueprint.aspects]
+    : ((matchedSubclass?.aspects || []).length
+      ? (matchedSubclass.aspects || []).map(a => a.name)
+      : getDefaultSubclassOption(character?.className || className, subclass, 'aspects'));
+  const resolvedFragments = blueprint.fragments?.length
+    ? [...blueprint.fragments]
+    : ((matchedSubclass?.fragments || []).length
+      ? (matchedSubclass.fragments || []).map(f => f.name)
+      : getDefaultSubclassOption(character?.className || className, subclass, 'fragments'));
+  const resolvedGrenade = blueprint.grenade || matchedSubclass?.grenade?.name || getDefaultSubclassOption(character?.className || className, subclass, 'grenade');
+  const resolvedMelee = blueprint.melee || matchedSubclass?.melee?.name || getDefaultSubclassOption(character?.className || className, subclass, 'melee');
+  const resolvedClassAbility = blueprint.classAbility || matchedSubclass?.classAbility?.name || getDefaultSubclassOption(character?.className || className, subclass, 'classAbility');
+
+  const draftObj = {
     id: blueprint.id || '',
     title,
     className: character?.className || className,
@@ -3965,9 +3992,16 @@ function assembleLoadoutFromBlueprint(blueprint = {}) {
     subclass,
     subclassItem: matchedSubclass,
     mode,
-    super: blueprint.super || matchedSubclass?.super?.name || '',
-    aspects: blueprint.aspects?.length ? blueprint.aspects : (matchedSubclass?.aspects || []).map(a => a.name),
-    fragments: blueprint.fragments?.length ? blueprint.fragments : (matchedSubclass?.fragments || []).map(f => f.name),
+    super: resolvedSuper,
+    aspects: resolvedAspects,
+    fragments: resolvedFragments,
+    grenade: resolvedGrenade,
+    melee: resolvedMelee,
+    classAbility: resolvedClassAbility,
+    subclassMods: blueprint.subclassMods ? JSON.parse(JSON.stringify(blueprint.subclassMods)) : {},
+    targetStats: defaultTargetStats,
+    lockExoticForStatOpt: blueprint.lockExoticForStatOpt !== false,
+    statOptReport: null,
     exoticArmor: blueprint.exoticArmor || chosenExoticArmor?.name || '',
     armorSet: blueprint.armorSet || preferredSetName || '',
     recommendedWeapons: blueprint.recommendedWeapons || [],
@@ -3981,6 +4015,9 @@ function assembleLoadoutFromBlueprint(blueprint = {}) {
     artifactPresetKey: chosenPreset?.key || '',
     selectedArtifactPerks,
   };
+
+  syncSubclassSelectionsToSockets(draftObj);
+  return draftObj;
 }
 
 function collectArtifactPresetsAndPerks(targetClassName, blueprint = {}) {
@@ -4130,6 +4167,350 @@ function convertInGameSavedLoadoutToDraft(character, loadout) {
   return draft;
 }
 
+// ─── SUBCLASS COMPENDIUM OPTIONS & STAT OPTIMIZER ENGINE ────────────────────
+
+const SUBCLASS_COMPENDIUM_OPTIONS = {
+  supers: {
+    Hunter: {
+      Solar: ['Blade Barrage', 'Golden Gun: Marksman', 'Golden Gun: Deadshot'],
+      Void: ['Shadowshot: Deadfall', 'Shadowshot: Moebius Quiver', 'Spectral Blades'],
+      Arc: ['Gathering Storm', 'Arc Staff', "Storm's Edge"],
+      Stasis: ['Silence and Squall'],
+      Strand: ['Silkstrike'],
+      Prismatic: ['Golden Gun: Marksman', 'Silence and Squall', "Storm's Edge", 'Shadowshot: Deadfall', 'Silkstrike'],
+    },
+    Warlock: {
+      Solar: ['Song of Flame', 'Well of Radiance', 'Daybreak'],
+      Void: ['Nova Bomb: Cataclysm', 'Nova Bomb: Vortex', 'Nova Warp'],
+      Arc: ['Chaos Reach', 'Stormtrance'],
+      Stasis: ["Winter's Wrath"],
+      Strand: ['Needlestorm'],
+      Prismatic: ['Song of Flame', 'Nova Bomb: Cataclysm', "Winter's Wrath", 'Needlestorm', 'Stormtrance'],
+    },
+    Titan: {
+      Solar: ['Burning Maul', 'Hammer of Sol'],
+      Void: ['Twilight Arsenal', 'Ward of Dawn', 'Sentinel Shield'],
+      Arc: ['Thundercrash', 'Fists of Havoc'],
+      Stasis: ['Glacial Quake'],
+      Strand: ['Bladefury'],
+      Prismatic: ['Twilight Arsenal', 'Thundercrash', 'Bladefury', 'Hammer of Sol', 'Glacial Quake'],
+    },
+  },
+  aspects: {
+    Hunter: {
+      Solar: ['Knock \'Em Down', 'On Your Mark', 'Gunpowder Gamble'],
+      Void: ['Stylish Executioner', 'Vanishing Step', "Trapper's Ambush", 'On the Prowl'],
+      Arc: ['Flow State', 'Lethal Current', 'Tempest Strike', 'Ascension'],
+      Stasis: ['Grim Harvest', 'Touch of Winter', 'Shatterdive', "Winter's Shroud"],
+      Strand: ['Whirling Maelstrom', 'Widow\'s Silk', 'Threaded Specter', 'Ensnaring Slam'],
+      Prismatic: ['Stylish Executioner', "Winter's Shroud", 'Gunpowder Gamble', 'Threaded Specter', 'Ascension'],
+    },
+    Warlock: {
+      Solar: ['Touch of Flame', 'Hellion', 'Heat Rises', 'Icarus Dash'],
+      Void: ['Feed the Void', 'Child of the Old Gods', 'Chaos Accelerant'],
+      Arc: ['Arc Soul', 'Electrostatic Mind', 'Lightning Surge', 'Ionic Sentry'],
+      Stasis: ['Bleak Watcher', 'Iceflare Bolts', 'Glacial Harvest', 'Frostpulse'],
+      Strand: ['Weaver\'s Call', 'Mindspun Invocation', 'The Wanderer', 'Weavewalk'],
+      Prismatic: ['Feed the Void', 'Bleak Watcher', 'Hellion', 'Lightning Surge', "Weaver's Call"],
+    },
+    Titan: {
+      Solar: ['Sol Invictus', 'Roaring Flames', 'Consecration'],
+      Void: ['Controlled Demolition', 'Bastion', 'Offensive Bulwark', 'Unbreakable'],
+      Arc: ['Knockout', 'Touch of Thunder', 'Juggernaut', "Storm's Keep"],
+      Stasis: ['Tectonic Harvest', 'Diamond Lance', 'Howl of the Storm', 'Cryoclasm'],
+      Strand: ['Banner of War', 'Into the Fray', 'Drengr\'s Lash', 'Flechette Storm'],
+      Prismatic: ['Consecration', 'Knockout', 'Diamond Lance', 'Unbreakable', "Drengr's Lash"],
+    },
+  },
+  fragments: {
+    Solar: [
+      'Ember of Ashes', 'Ember of Torches', 'Ember of Solace', 'Ember of Empyrean',
+      'Ember of Singeing', 'Ember of Searing', 'Ember of Mercy', 'Ember of Resolve',
+      'Ember of Char', 'Ember of Eruption', 'Ember of Benevolence', 'Ember of Wonder',
+      'Ember of Blistering', 'Ember of Tempering',
+    ],
+    Void: [
+      'Echo of Persistence', 'Echo of Undermining', 'Echo of Starvation', 'Echo of Vigilance',
+      'Echo of Harvest', 'Echo of Instability', 'Echo of Remnants', 'Echo of Provision',
+      'Echo of Cessation', 'Echo of Domineering', 'Echo of Dilation', 'Echo of Reprisal',
+      'Echo ofExpulsion', 'Echo of Leeching', 'Echo of Obscurity',
+    ].map(s => s.replace('Echo ofExpulsion', 'Echo of Expulsion')),
+    Arc: [
+      'Spark of Ions', 'Spark of Shock', 'Spark of Resistance', 'Spark of Magnitude',
+      'Spark of Amplitude', 'Spark of Beacons', 'Spark of Brilliance', 'Spark of Discharge',
+      'Spark of Feedback', 'Spark of Focus', 'Spark of Frequency', 'Spark of Haste',
+      'Spark of Instinct', 'Spark of Recharge', 'Spark of Volts',
+    ],
+    Stasis: [
+      'Whisper of Rime', 'Whisper of Fissures', 'Whisper of Shards', 'Whisper of Torment',
+      'Whisper of Durance', 'Whisper of Chains', 'Whisper of Conduction', 'Whisper of Impetus',
+      'Whisper of Refraction', 'Whisper of Rending', 'Whisper of Hedrons', 'Whisper of Hunger',
+    ],
+    Strand: [
+      'Thread of Generation', 'Thread of Warding', 'Thread of Continuity', 'Thread of Rebirth',
+      'Thread of Mind', 'Thread of Fury', 'Thread of Evolution', 'Thread of Ascent',
+      'Thread of Binding', 'Thread of Finality', 'Thread of Isolation', 'Thread of Propagation',
+      'Thread of Transmutation', 'Thread of Wisdom',
+    ],
+    Prismatic: [
+      'Facet of Protection', 'Facet of Purpose', 'Facet of Courage', 'Facet of Dominance',
+      'Facet of Hope', 'Facet of Dawn', 'Facet of Balance', 'Facet of Ruin',
+      'Facet of Command', 'Facet of Devotion', 'Facet of Sacrifice', 'Facet of Honor',
+      'Facet of Grace', 'Facet of Mending', 'Facet of Bravery', 'Facet of Awakening',
+      'Facet of Solitude', 'Facet of Defiance', 'Facet of Generosity', 'Facet of Blessing',
+    ],
+  },
+  grenades: {
+    Solar: ['Healing Grenade', 'Solar Grenade', 'Fusion Grenade', 'Thermite Grenade', 'Incendiary Grenade', 'Tripmine Grenade', 'Swarm Grenade', 'Firebolt Grenade'],
+    Void: ['Vortex Grenade', 'Suppressor Grenade', 'Scatter Grenade', 'Void Spike', 'Magnetic Grenade', 'Axion Bolt', 'Void Wall'],
+    Arc: ['Pulse Grenade', 'Storm Grenade', 'Flashbang Grenade', 'Arcbolt Grenade', 'Skip Grenade', 'Flux Grenade', 'Lightning Grenade'],
+    Stasis: ['Duskfield Grenade', 'Coldsnap Grenade', 'Glacier Grenade'],
+    Strand: ['Grapple', 'Shackle Grenade', 'Threadling Grenade'],
+    Prismatic: ['Grapple', 'Duskfield Grenade', 'Coldsnap Grenade', 'Pulse Grenade', 'Storm Grenade', 'Vortex Grenade', 'Suppressor Grenade', 'Healing Grenade', 'Solar Grenade', 'Thermite Grenade', 'Shackle Grenade', 'Threadling Grenade'],
+  },
+  melees: {
+    Hunter: {
+      Solar: ['Knife Trick', 'Weighted Throwing Knife', 'Lightweight Knife', 'Proximity Explosive Knife'],
+      Void: ['Snare Bomb'],
+      Arc: ['Combination Blow', 'Disorienting Blow'],
+      Stasis: ['Withering Blade'],
+      Strand: ['Threaded Spike'],
+      Prismatic: ['Combination Blow', 'Withering Blade', 'Threaded Spike', 'Knife Trick', 'Snare Bomb'],
+    },
+    Warlock: {
+      Solar: ['Incinerator Snap', 'Celestial Fire'],
+      Void: ['Pocket Singularity'],
+      Arc: ['Chain Lightning', 'Ball Lightning'],
+      Stasis: ['Penumbral Blast'],
+      Strand: ['Arcane Needle'],
+      Prismatic: ['Arcane Needle', 'Incinerator Snap', 'Penumbral Blast', 'Pocket Singularity', 'Chain Lightning'],
+    },
+    Titan: {
+      Solar: ['Throwing Hammer', 'Hammer Strike'],
+      Void: ['Shield Throw', 'Shield Bash'],
+      Arc: ['Thunderclap', 'Seismic Strike', 'Ballistic Slam'],
+      Stasis: ['Shiver Strike'],
+      Strand: ['Frenzied Blade'],
+      Prismatic: ['Frenzied Blade', 'Thunderclap', 'Hammer Strike', 'Shiver Strike', 'Shield Throw'],
+    },
+  },
+  classAbilities: {
+    Hunter: ["Gambler's Dodge", "Marksman's Dodge", "Acrobat's Dodge"],
+    Warlock: ['Healing Rift', 'Empowering Rift', 'Phoenix Dive'],
+    Titan: ['Rally Barricade', 'Towering Barricade', 'Thruster'],
+  },
+};
+
+const FRAGMENT_STAT_BONUSES = {
+  'Ember of Resolve': { Grenade: 10 },
+  'Ember of Mercy': { Health: 10 },
+  'Ember of Searing': { Melee: 10 },
+  'Ember of Wonder': { Health: 10 },
+  'Ember of Char': { Grenade: 10 },
+  'Ember of Eruption': { Melee: 10 },
+  'Echo of Persistence': { Class: -10 },
+  'Echo of Undermining': { Grenade: -20 },
+  'Echo of Vigilance': { Health: -10 },
+  'Echo of Harvest': { Super: -10 },
+  'Echo of Instability': { Melee: 10 },
+  'Echo of Domineering': { Grenade: 10 },
+  'Echo of Dilation': { Class: 10, Super: 10 },
+  'Echo of Leeching': { Health: 10 },
+  'Echo of Obscurity': { Class: 10 },
+  'Spark of Resistance': { Melee: 10 },
+  'Spark of Shock': { Grenade: -10 },
+  'Spark of Brilliance': { Super: 10 },
+  'Spark of Feedback': { Health: 10 },
+  'Spark of Instinct': { Grenade: 10 },
+  'Whisper of Chains': { Health: 10 },
+  'Whisper of Shards': { Health: 10 },
+  'Whisper of Durance': { Melee: 10 },
+  'Whisper of Conduction': { Super: 10, Health: 10 },
+  'Thread of Warding': { Health: -10 },
+  'Thread of Generation': { Grenade: -10 },
+  'Thread of Continuity': { Melee: 10 },
+  'Thread of Evolution': { Super: 10 },
+  'Thread of Ascent': { Weapons: 10 },
+  'Facet of Protection': { Melee: 10 },
+  'Facet of Courage': { Grenade: 10 },
+  'Facet of Dominance': { Grenade: -10 },
+  'Facet of Hope': { Class: 10 },
+  'Facet of Dawn': { Melee: -10 },
+  'Facet of Ruin': { Super: 10 },
+  'Facet of Command': { Weapons: 10 },
+  'Facet of Devotion': { Melee: 10 },
+  'Facet of Sacrifice': { Grenade: 10 },
+  'Facet of Honor': { Melee: 10 },
+  'Facet of Mending': { Grenade: 10 },
+  'Facet of Blessing': { Melee: 10 },
+};
+
+function getDefaultSubclassOption(className, subclass, category) {
+  const cName = ['Hunter', 'Warlock', 'Titan'].find(c => c.toLowerCase() === (className || '').toLowerCase()) || 'Hunter';
+  const sName = ['Solar', 'Void', 'Arc', 'Stasis', 'Strand', 'Prismatic'].find(s => s.toLowerCase() === (subclass || '').toLowerCase()) || 'Solar';
+  if (category === 'super') {
+    return SUBCLASS_COMPENDIUM_OPTIONS.supers[cName]?.[sName]?.[0] || '';
+  }
+  if (category === 'aspects') {
+    return (SUBCLASS_COMPENDIUM_OPTIONS.aspects[cName]?.[sName] || []).slice(0, 2);
+  }
+  if (category === 'fragments') {
+    return (SUBCLASS_COMPENDIUM_OPTIONS.fragments[sName] || []).slice(0, 4);
+  }
+  if (category === 'grenade') {
+    return SUBCLASS_COMPENDIUM_OPTIONS.grenades[sName]?.[0] || '';
+  }
+  if (category === 'melee') {
+    return SUBCLASS_COMPENDIUM_OPTIONS.melees[cName]?.[sName]?.[0] || '';
+  }
+  if (category === 'classAbility') {
+    return SUBCLASS_COMPENDIUM_OPTIONS.classAbilities[cName]?.[0] || '';
+  }
+  return '';
+}
+
+function getSubclassOptionsCatalog(draft, subCategory) {
+  const cName = ['Hunter', 'Warlock', 'Titan'].find(c => c.toLowerCase() === (draft?.className || '').toLowerCase()) || 'Hunter';
+  const sName = ['Solar', 'Void', 'Arc', 'Stasis', 'Strand', 'Prismatic'].find(s => s.toLowerCase() === (draft?.subclass || '').toLowerCase()) || 'Solar';
+  const subSockets = draft?.subclassItem?.subclassSockets || [];
+
+  const options = [];
+  const seenNames = new Set();
+
+  // 1. Live Bungie Subclass Socket availablePlugs
+  subSockets
+    .filter(sk => sk.category === subCategory)
+    .forEach(sk => {
+      (sk.availablePlugs || []).forEach(p => {
+        if (!p || !p.name || p.isEmpty) return;
+        const low = p.name.toLowerCase();
+        if (seenNames.has(low)) return;
+        seenNames.add(low);
+        const fBonus = FRAGMENT_STAT_BONUSES[p.name] || null;
+        options.push({
+          name: p.name,
+          plugHash: Number(p.plugHash || 0),
+          socketIndex: Number(sk.socketIndex),
+          icon: p.icon || '',
+          description: p.description || '',
+          statBonus: fBonus,
+        });
+      });
+    });
+
+  // 2. Merge Compendium fallback options so every Super/Aspect/Fragment/Ability is always selectable
+  let compendiumList = [];
+  if (subCategory === 'super') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.supers[cName]?.[sName] || [];
+  else if (subCategory === 'aspect') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.aspects[cName]?.[sName] || [];
+  else if (subCategory === 'fragment') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.fragments[sName] || [];
+  else if (subCategory === 'grenade') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.grenades[sName] || [];
+  else if (subCategory === 'melee') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.melees[cName]?.[sName] || [];
+  else if (subCategory === 'classAbility') compendiumList = SUBCLASS_COMPENDIUM_OPTIONS.classAbilities[cName] || [];
+
+  compendiumList.forEach(nm => {
+    const low = nm.toLowerCase();
+    if (seenNames.has(low)) return;
+    seenNames.add(low);
+    const fBonus = FRAGMENT_STAT_BONUSES[nm] || null;
+    const bonusTxt = fBonus
+      ? Object.entries(fBonus).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(', ')
+      : '';
+    options.push({
+      name: nm,
+      plugHash: 0,
+      socketIndex: null,
+      icon: '',
+      description: bonusTxt ? `${sName} ${subCategory} (${bonusTxt})` : `${sName} ${cName} ${subCategory}`,
+      statBonus: fBonus,
+    });
+  });
+
+  return options;
+}
+
+function syncSubclassSelectionsToSockets(draft) {
+  if (!draft) return;
+  const subSockets = draft.subclassItem?.subclassSockets || [];
+  if (!subSockets.length) return;
+  if (!draft.subclassMods) draft.subclassMods = {};
+
+  const stageCategoryList = (catKey, targetNames) => {
+    const matchingSockets = subSockets.filter(sk => sk.category === catKey);
+    targetNames.forEach((tName, idx) => {
+      if (!tName || idx >= matchingSockets.length) return;
+      const sk = matchingSockets[idx];
+      const tLow = String(tName).toLowerCase().trim();
+      const foundPlug = (sk.availablePlugs || []).find(
+        p => !p.isEmpty && (p.name.toLowerCase() === tLow || p.name.toLowerCase().includes(tLow) || tLow.includes(p.name.toLowerCase()))
+      );
+      if (foundPlug && foundPlug.plugHash) {
+        draft.subclassMods[sk.socketIndex] = {
+          socketIndex: Number(sk.socketIndex),
+          plugHash: Number(foundPlug.plugHash),
+          name: foundPlug.name,
+          category: catKey,
+        };
+      }
+    });
+  };
+
+  if (draft.super) stageCategoryList('super', [draft.super]);
+  if (Array.isArray(draft.aspects) && draft.aspects.length) stageCategoryList('aspect', draft.aspects);
+  if (Array.isArray(draft.fragments) && draft.fragments.length) stageCategoryList('fragment', draft.fragments);
+  if (draft.grenade) stageCategoryList('grenade', [draft.grenade]);
+  if (draft.melee) stageCategoryList('melee', [draft.melee]);
+  if (draft.classAbility) stageCategoryList('classAbility', [draft.classAbility]);
+}
+
+function parseStatBonusFromModName(modName, modDesc = '') {
+  const nm = String(modName || '').toLowerCase().trim();
+  const ds = String(modDesc || '').toLowerCase().trim();
+  if (!nm || nm.includes('empty') || nm.includes('font') || nm.includes('kickstart') || nm.includes('siphon') || nm.includes('surge') || nm.includes('loader') || nm.includes('dexterity') || nm.includes('targeting') || nm.includes('unflinching') || nm.includes('holster') || nm.includes('scavenger') || nm.includes('reserves') || nm.includes('induction') || nm.includes('momentum') || nm.includes('bomber') || nm.includes('outreach') || nm.includes('distribution') || nm.includes('dynamo') || nm.includes('ashes') || nm.includes('hands-on') || nm.includes('heavy handed') || nm.includes('firepower') || nm.includes('reaper') || nm.includes('recuperation') || nm.includes('better already') || nm.includes('innervation') || nm.includes('invigoration') || nm.includes('insulation') || nm.includes('absolution') || nm.includes('orbs of')) {
+    return null;
+  }
+
+  const isMinor = nm.includes('minor');
+  const isArtifice = nm.includes('artifice') || nm.includes('forged');
+  const amt = isArtifice ? 3 : (isMinor ? 5 : 10);
+
+  if (/\b(grenade|discipline)\b/.test(nm) || /\+\d+\s*(grenade|discipline)/.test(ds)) {
+    return { stat: 'Grenade', value: amt };
+  }
+  if (/\b(melee|strength)\b/.test(nm) || /\+\d+\s*(melee|strength)/.test(ds)) {
+    return { stat: 'Melee', value: amt };
+  }
+  if (/\b(super|intellect)\b/.test(nm) || /\+\d+\s*(super|intellect)/.test(ds)) {
+    return { stat: 'Super', value: amt };
+  }
+  if (/\b(weapons|weapon|gunner)\b/.test(nm) || /\+\d+\s*weapons?/.test(ds)) {
+    return { stat: 'Weapons', value: amt };
+  }
+  if (/\b(class|paragon|mobility)\b/.test(nm) || /\+\d+\s*(class|mobility)/.test(ds)) {
+    return { stat: 'Class', value: amt };
+  }
+  if (/\b(health|resilience|recovery|bulwark)\b/.test(nm) || /\+\d+\s*(health|resilience|recovery)/.test(ds)) {
+    return { stat: 'Health', value: amt };
+  }
+  return null;
+}
+
+function getBaseArmorStatMapWithoutRemovableStatMod(item) {
+  const raw = getArmorStatMap(item);
+  const base = { ...raw };
+  if (!item || !Array.isArray(item.modSockets)) return base;
+
+  // Subtract any currently socketed general/artifice stat mod so we know the true un-modded armor stats
+  item.modSockets.forEach(ms => {
+    if (ms && !ms.isEmpty && ms.name) {
+      const parsed = parseStatBonusFromModName(ms.name, ms.description);
+      if (parsed && base[parsed.stat] !== undefined) {
+        base[parsed.stat] = Math.max(0, base[parsed.stat] - parsed.value);
+      }
+    }
+  });
+  return base;
+}
+
 function hydrateSavedCustomLoadout(savedObj) {
   const base = assembleLoadoutFromBlueprint(savedObj);
   base.id = savedObj.id || '';
@@ -4148,6 +4529,12 @@ function hydrateSavedCustomLoadout(savedObj) {
   if (savedObj.slotMods) {
     base.slotMods = JSON.parse(JSON.stringify(savedObj.slotMods));
   }
+  if (savedObj.subclassMods) {
+    base.subclassMods = JSON.parse(JSON.stringify(savedObj.subclassMods));
+  }
+  if (savedObj.targetStats) {
+    base.targetStats = { ...savedObj.targetStats };
+  }
   if (savedObj.artifact) {
     base.artifact = savedObj.artifact;
   }
@@ -4160,19 +4547,36 @@ function hydrateSavedCustomLoadout(savedObj) {
   return base;
 }
 
-function computeLoadoutArmorTelemetry(slots) {
+function computeLoadoutArmorTelemetry(slots, slotMods = null, fragments = null) {
   const totals = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  const baseTotals = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  const modBonuses = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  const fragmentBonuses = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
   const setMap = {};
   let overallTotal = 0;
 
   ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'].forEach(s => {
     const it = slots?.[s];
     if (!it) return;
-    const st = getArmorStatMap(it);
-    Object.keys(totals).forEach(k => {
-      totals[k] += st[k];
-      overallTotal += st[k];
+    const baseSt = getBaseArmorStatMapWithoutRemovableStatMod(it);
+    Object.keys(baseTotals).forEach(k => {
+      baseTotals[k] += baseSt[k];
     });
+
+    // Check active/staged stat mods on this slot
+    const stagedForSlot = slotMods?.[s] || {};
+    (it.modSockets || []).forEach(ms => {
+      const staged = stagedForSlot[ms.socketIndex];
+      const effName = staged ? (staged.isEmpty ? '' : staged.name) : (ms.isEmpty ? '' : ms.name);
+      const effDesc = staged ? (staged.description || '') : (ms.description || '');
+      if (effName) {
+        const bonus = parseStatBonusFromModName(effName, effDesc);
+        if (bonus && modBonuses[bonus.stat] !== undefined) {
+          modBonuses[bonus.stat] += bonus.value;
+        }
+      }
+    });
+
     if (it.compendiumSet?.name) {
       const sn = it.compendiumSet.name;
       if (!setMap[sn]) {
@@ -4182,8 +4586,318 @@ function computeLoadoutArmorTelemetry(slots) {
     }
   });
 
+  // Include Fragment stat bonuses if fragments are provided
+  if (Array.isArray(fragments)) {
+    fragments.forEach(fName => {
+      const fb = FRAGMENT_STAT_BONUSES[fName];
+      if (fb) {
+        Object.entries(fb).forEach(([k, v]) => {
+          if (fragmentBonuses[k] !== undefined) {
+            fragmentBonuses[k] += v;
+          }
+        });
+      }
+    });
+  }
+
+  Object.keys(totals).forEach(k => {
+    totals[k] = Math.max(0, baseTotals[k] + modBonuses[k] + fragmentBonuses[k]);
+    overallTotal += totals[k];
+  });
+
   const activeSets = Object.values(setMap).filter(x => x.count >= 2).sort((a, b) => b.count - a.count);
-  return { totals, overallTotal, activeSets };
+  return { totals, baseTotals, modBonuses, fragmentBonuses, overallTotal, activeSets };
+}
+
+function findStatModPlugForArmorItem(armorItem, targetStatName, preferMinor = false) {
+  if (!armorItem || !Array.isArray(armorItem.modSockets)) return null;
+  // Find the General / Stat mod socket (usually socketIndex 0 or slotType === 'armor_stat')
+  const statSocket = armorItem.modSockets.find(ms => ms.slotType === 'armor_stat') || armorItem.modSockets[0];
+  if (!statSocket) return null;
+
+  const avail = getAvailablePlugsForModSocket(armorItem, statSocket);
+  const matching = avail.filter(p => {
+    if (p.isEmpty) return false;
+    const parsed = parseStatBonusFromModName(p.name, p.description);
+    return parsed && parsed.stat === targetStatName;
+  });
+
+  if (matching.length > 0) {
+    const desiredVal = preferMinor ? 5 : 10;
+    const exact = matching.find(p => parseStatBonusFromModName(p.name, p.description)?.value === desiredVal) || matching[0];
+    return {
+      socketIndex: statSocket.socketIndex,
+      plug: exact,
+      bonusValue: parseStatBonusFromModName(exact.name, exact.description)?.value || 10,
+    };
+  }
+
+  // Fallback synthetic stat mod if manifest plugSet did not list individual stat mods
+  return {
+    socketIndex: statSocket.socketIndex,
+    plug: {
+      plugHash: Number(statSocket.plugHash || 1),
+      name: preferMinor ? `Minor ${targetStatName} Mod (+5)` : `${targetStatName} Mod (+10)`,
+      icon: statSocket.icon || '',
+      description: `Grants +${preferMinor ? 5 : 10} ${targetStatName}.`,
+      isEmpty: false,
+    },
+    bonusValue: preferMinor ? 5 : 10,
+  };
+}
+
+function optimizeLoadoutForTargetStats(draft) {
+  if (!draft) return null;
+  const { armor } = collectAllOwnedGearForLoadout(draft.className);
+  if (!armor || armor.length === 0) {
+    showToast('Sign in to Bungie.net so F.E.L.I.C.I.A. can search your Inventory & Vault armor!', 'info');
+    return null;
+  }
+
+  const targets = draft.targetStats || { Health: 0, Melee: 90, Grenade: 130, Super: 100, Class: 90, Weapons: 120 };
+  const enforceZeroHealth = draft.mode === 'PVE' && Number(targets.Health || 0) === 0;
+  const armorSlots = ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+  const statNames = ['Health', 'Melee', 'Grenade', 'Super', 'Class', 'Weapons'];
+
+  // Compute current Fragment stat bonuses
+  const fragBonuses = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+  (draft.fragments || []).forEach(fName => {
+    const fb = FRAGMENT_STAT_BONUSES[fName];
+    if (fb) {
+      Object.entries(fb).forEach(([k, v]) => {
+        if (fragBonuses[k] !== undefined) fragBonuses[k] += v;
+      });
+    }
+  });
+
+  // Score an individual armor piece by how well its base stats align with targetStats
+  const scoreCandidateForTargets = (it) => {
+    const b = getBaseArmorStatMapWithoutRemovableStatMod(it);
+    let s = 0;
+    statNames.forEach(k => {
+      const tVal = Number(targets[k] || 0);
+      if (k === 'Health' && enforceZeroHealth) {
+        if (b.Health === 0) s += 160;
+        else s -= b.Health * 8;
+      } else if (tVal > 0) {
+        // Weight stats proportionally to the user's target!
+        const weight = 1.0 + (tVal / 50);
+        s += b[k] * weight;
+      } else {
+        s += b[k] * 0.4;
+      }
+    });
+    if (it.compendiumSet?.name) {
+      if (draft.armorSet && it.compendiumSet.name.toLowerCase() === draft.armorSet.toLowerCase()) {
+        s += 65;
+      } else {
+        s += 20;
+      }
+    }
+    return s;
+  };
+
+  // Identify candidate Exotic Armor(s)
+  const currentExoItem = armorSlots.map(sl => draft.slots?.[sl]).find(it => it && it.isExotic) || null;
+  const lockExotic = draft.lockExoticForStatOpt !== false && currentExoItem;
+
+  const exoticCandidates = lockExotic
+    ? [currentExoItem]
+    : [
+        ...(currentExoItem ? [currentExoItem] : []),
+        ...armor
+          .filter(a => a.isExotic && (!currentExoItem || a.itemInstanceId !== currentExoItem.itemInstanceId))
+          .sort((a, b) => scoreCandidateForTargets(b) - scoreCandidateForTargets(a))
+          .slice(0, 6),
+        null, // Also allow all-Legendary if it hits way better stats
+      ];
+
+  // Pre-filter top 10 Legendary candidates per slot for fast combinatorial evaluation
+  const legBySlot = {};
+  armorSlots.forEach(sl => {
+    const list = armor
+      .filter(a => a.slot === sl && !a.isExotic)
+      .sort((a, b) => scoreCandidateForTargets(b) - scoreCandidateForTargets(a))
+      .slice(0, 10);
+    legBySlot[sl] = list.length > 0 ? list : [draft.slots?.[sl]].filter(Boolean);
+  });
+
+  let bestCombo = null;
+  let bestScore = -Infinity;
+
+  const evaluateFivePieceCombo = (comboItems) => {
+    const baseSum = { Health: 0, Melee: 0, Grenade: 0, Super: 0, Class: 0, Weapons: 0 };
+    const setCounts = {};
+    comboItems.forEach(it => {
+      if (!it) return;
+      const b = getBaseArmorStatMapWithoutRemovableStatMod(it);
+      statNames.forEach(k => {
+        baseSum[k] += b[k];
+      });
+      if (it.compendiumSet?.name) {
+        setCounts[it.compendiumSet.name] = (setCounts[it.compendiumSet.name] || 0) + 1;
+      }
+    });
+
+    // Add fragment bonuses
+    const workingStats = {};
+    statNames.forEach(k => {
+      workingStats[k] = Math.max(0, baseSum[k] + fragBonuses[k]);
+    });
+
+    // Greedily allocate up to 5 General Armor Stat Mods (+10 or +5) to close the largest target deficits
+    const modPlan = []; // [{ slot, stat, bonus }]
+    comboItems.forEach(it => {
+      if (!it) return;
+      let worstStat = null;
+      let maxWeightedDeficit = 0;
+
+      statNames.forEach(k => {
+        if (k === 'Health' && enforceZeroHealth) return;
+        const tVal = Number(targets[k] || 0);
+        const deficit = tVal - workingStats[k];
+        if (deficit > 0) {
+          const priority = deficit * (1 + tVal / 100);
+          if (priority > maxWeightedDeficit) {
+            maxWeightedDeficit = priority;
+            worstStat = k;
+          }
+        }
+      });
+
+      // If all targets are already met, boost the highest non-Health target stat (up to 200)
+      if (!worstStat) {
+        const rankedTargets = statNames
+          .filter(k => !(k === 'Health' && enforceZeroHealth) && workingStats[k] < 200)
+          .sort((a, b) => Number(targets[b] || 0) - Number(targets[a] || 0));
+        worstStat = rankedTargets[0] || 'Grenade';
+      }
+
+      const needed = Number(targets[worstStat] || 0) - workingStats[worstStat];
+      const useMinor = needed > 0 && needed <= 5;
+      const bonusVal = useMinor ? 5 : 10;
+      workingStats[worstStat] += bonusVal;
+      modPlan.push({ slot: it.slot, stat: worstStat, bonus: bonusVal, useMinor });
+    });
+
+    // Score how closely workingStats achieves targets
+    let comboScore = 0;
+    let metCount = 0;
+    let activeTargetCount = 0;
+
+    statNames.forEach(k => {
+      const tVal = Number(targets[k] || 0);
+      const val = workingStats[k];
+      if (k === 'Health' && enforceZeroHealth) {
+        activeTargetCount++;
+        if (val === 0) {
+          comboScore += 600;
+          metCount++;
+        } else {
+          comboScore -= val * 30;
+        }
+      } else if (tVal > 0) {
+        activeTargetCount++;
+        const deficit = Math.max(0, tVal - val);
+        const surplus = Math.max(0, val - tVal);
+        if (deficit === 0) {
+          comboScore += 350 + Math.min(surplus, 30) * 1.5;
+          metCount++;
+        } else {
+          comboScore -= deficit * 14;
+        }
+      } else {
+        comboScore += val * 0.5;
+      }
+    });
+
+    // Bonus for 2pc / 4pc Compendium Armor Set synergies
+    Object.entries(setCounts).forEach(([sName, cnt]) => {
+      if (cnt >= 4) comboScore += 180;
+      else if (cnt >= 2) comboScore += 95;
+      if (draft.armorSet && sName.toLowerCase() === draft.armorSet.toLowerCase() && cnt >= 2) {
+        comboScore += 60;
+      }
+    });
+
+    if (comboScore > bestScore) {
+      bestScore = comboScore;
+      bestCombo = {
+        items: comboItems,
+        achievedStats: workingStats,
+        baseSum,
+        modPlan,
+        metCount,
+        activeTargetCount,
+      };
+    }
+  };
+
+  // Enumerate combinations across exoticCandidates
+  exoticCandidates.forEach(exoIt => {
+    const slotPools = armorSlots.map(sl => {
+      if (exoIt && exoIt.slot === sl) return [exoIt];
+      return legBySlot[sl]?.slice(0, 7) || [];
+    });
+    if (slotPools.some(p => p.length === 0)) return;
+
+    for (const h of slotPools[0]) {
+      for (const g of slotPools[1]) {
+        for (const c of slotPools[2]) {
+          for (const l of slotPools[3]) {
+            for (const cl of slotPools[4]) {
+              evaluateFivePieceCombo([h, g, c, l, cl]);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!bestCombo) return null;
+
+  // Apply bestCombo items and stage optimal Armor Stat Mods in draft.slotMods
+  const pulledItems = [];
+  if (!draft.slotMods) draft.slotMods = {};
+
+  bestCombo.items.forEach(it => {
+    if (!it || !it.slot) return;
+    const prev = draft.slots[it.slot];
+    draft.slots[it.slot] = it;
+    if (!prev || prev.itemInstanceId !== it.itemInstanceId) {
+      pulledItems.push(it);
+    }
+    if (!draft.slotMods[it.slot]) draft.slotMods[it.slot] = {};
+  });
+
+  const appliedStatMods = [];
+  bestCombo.modPlan.forEach(mp => {
+    const it = draft.slots[mp.slot];
+    if (!it) return;
+    const foundMod = findStatModPlugForArmorItem(it, mp.stat, mp.useMinor);
+    if (foundMod) {
+      draft.slotMods[mp.slot][foundMod.socketIndex] = {
+        socketIndex: foundMod.socketIndex,
+        plugHash: foundMod.plug.plugHash,
+        name: foundMod.plug.name,
+        icon: foundMod.plug.icon || '',
+        description: foundMod.plug.description || '',
+        isEmpty: false,
+      };
+      appliedStatMods.push(`${mp.slot.replace(' Armor', '')}: +${foundMod.bonusValue} ${mp.stat}`);
+    }
+  });
+
+  draft.statOptReport = {
+    metCount: bestCombo.metCount,
+    activeTargetCount: bestCombo.activeTargetCount,
+    achievedStats: bestCombo.achievedStats,
+    pulledItemsCount: pulledItems.length,
+    pulledItemNames: pulledItems.map(i => `${i.name} (${i.location === 'vault' ? 'Vault' : (i.isEquipped ? 'Equipped' : 'Bag')})`),
+    appliedStatMods,
+  };
+
+  return draft.statOptReport;
 }
 
 function formatItemLocationBadge(item, targetCharId) {
@@ -4374,39 +5088,130 @@ function renderLoadoutBuilderWorkspace() {
   const draft = activeLoadoutBuilderState;
   if (!draft) return;
 
+  if (!draft.targetStats) {
+    draft.targetStats = draft.mode === 'PVP'
+      ? { Health: 130, Melee: 70, Grenade: 80, Super: 90, Class: 100, Weapons: 110 }
+      : { Health: 0, Melee: 90, Grenade: 130, Super: 100, Class: 90, Weapons: 120 };
+  }
+  if (!Array.isArray(draft.aspects) || draft.aspects.length === 0) {
+    draft.aspects = getDefaultSubclassOption(draft.className, draft.subclass, 'aspects');
+  }
+  if (!Array.isArray(draft.fragments) || draft.fragments.length === 0) {
+    draft.fragments = getDefaultSubclassOption(draft.className, draft.subclass, 'fragments');
+  }
+  if (!draft.super) draft.super = getDefaultSubclassOption(draft.className, draft.subclass, 'super');
+  if (!draft.grenade) draft.grenade = getDefaultSubclassOption(draft.className, draft.subclass, 'grenade');
+  if (!draft.melee) draft.melee = getDefaultSubclassOption(draft.className, draft.subclass, 'melee');
+  if (!draft.classAbility) draft.classAbility = getDefaultSubclassOption(draft.className, draft.subclass, 'classAbility');
+
   const equipBtn = document.getElementById('btnLbEquipNow');
   if (equipBtn) {
     equipBtn.textContent = `⚡ Equip Loadout & Mods on ${draft.className}`;
   }
 
-  // 1. Render AI Blueprint Reference Banner (Super, Aspects, Fragments, Missing Gear)
+  // 1. Render Interactive Subclass & Ability Configurator (Super, Aspects, Fragments, Grenade, Melee, Class Ability)
   const bpBox = document.getElementById('lbAiBlueprintBox');
   if (bpBox) {
-    const hasBpDetails = Boolean(draft.super || (draft.aspects && draft.aspects.length) || (draft.fragments && draft.fragments.length) || draft.missingExoticArmor);
-    if (hasBpDetails) {
-      bpBox.classList.remove('hidden');
-      bpBox.innerHTML = `
-        <div class="lb-bp-header">
+    bpBox.classList.remove('hidden');
+    const isSubActive = (subCat, idx = null) =>
+      activeLbPickerSlot &&
+      activeLbPickerSlot.mode === 'subclass' &&
+      activeLbPickerSlot.subCategory === subCat &&
+      (idx === null || Number(activeLbPickerSlot.itemIndex) === Number(idx));
+
+    bpBox.innerHTML = `
+      <div class="lb-bp-header">
+        <div>
           <span>❖ F.E.L.I.C.I.A. RECOMMENDED SUBCLASS &amp; ABILITY CONFIGURATION</span>
-          <span class="lb-bp-sub-tag">${escapeHtml(draft.subclass.toUpperCase())} ${escapeHtml(draft.className.toUpperCase())} // ${escapeHtml(draft.mode)}</span>
+          <span class="lb-bp-edit-hint">✏️ Click any Super, Aspect, Fragment, or Ability below to customize</span>
         </div>
-        <div class="lb-bp-chips-row">
-          ${draft.super ? `<div class="lb-bp-group"><span class="lb-bp-lbl">⚡ SUPER:</span> <span class="lb-bp-chip super">${escapeHtml(draft.super)}</span></div>` : ''}
-          ${(draft.aspects || []).length ? `<div class="lb-bp-group"><span class="lb-bp-lbl">❖ ASPECTS:</span> ${draft.aspects.map(a => `<span class="lb-bp-chip aspect">${escapeHtml(a)}</span>`).join('')}</div>` : ''}
-          ${(draft.fragments || []).length ? `<div class="lb-bp-group"><span class="lb-bp-lbl">✦ FRAGMENTS:</span> ${draft.fragments.map(f => `<span class="lb-bp-chip fragment">${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+        <span class="lb-bp-sub-tag">${escapeHtml(draft.subclass.toUpperCase())} ${escapeHtml(draft.className.toUpperCase())} // ${escapeHtml(draft.mode)}</span>
+      </div>
+      <div class="lb-bp-chips-row">
+        <div class="lb-bp-group">
+          <span class="lb-bp-lbl">⚡ SUPER:</span>
+          <button type="button" class="lb-bp-chip super clickable ${isSubActive('super') ? 'is-active' : ''}" data-sub-cat="super" data-sub-idx="0" title="Click to change Super">
+            <span>${escapeHtml(draft.super || 'Select Super')}</span>
+            <span class="lb-chip-caret">▾</span>
+          </button>
         </div>
-        ${draft.missingExoticArmor ? `<div class="lb-bp-missing-note">⚠ Target Exotic <strong>${escapeHtml(draft.missingExoticArmor)}</strong> is not currently in your Inventory or Vault — auto-slotted your highest-stat Exotic armor instead. Click any slot below to customize!</div>` : ''}
-      `;
-    } else {
-      bpBox.classList.add('hidden');
-    }
+
+        <div class="lb-bp-group">
+          <span class="lb-bp-lbl">❖ ASPECTS:</span>
+          ${[0, 1].map(aIdx => {
+            const aName = draft.aspects?.[aIdx] || `Select Aspect #${aIdx + 1}`;
+            return `
+              <button type="button" class="lb-bp-chip aspect clickable ${isSubActive('aspect', aIdx) ? 'is-active' : ''}" data-sub-cat="aspect" data-sub-idx="${aIdx}" title="Click to swap Aspect #${aIdx + 1}">
+                <span>${escapeHtml(aName)}</span>
+                <span class="lb-chip-caret">▾</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="lb-bp-group">
+          <span class="lb-bp-lbl">🛡️ ABILITIES:</span>
+          <button type="button" class="lb-bp-chip ability clickable ${isSubActive('grenade') ? 'is-active' : ''}" data-sub-cat="grenade" data-sub-idx="0" title="Click to swap Grenade">
+            <span>💥 ${escapeHtml(draft.grenade || 'Grenade')}</span>
+            <span class="lb-chip-caret">▾</span>
+          </button>
+          <button type="button" class="lb-bp-chip ability clickable ${isSubActive('melee') ? 'is-active' : ''}" data-sub-cat="melee" data-sub-idx="0" title="Click to swap Melee">
+            <span>👊 ${escapeHtml(draft.melee || 'Melee')}</span>
+            <span class="lb-chip-caret">▾</span>
+          </button>
+          <button type="button" class="lb-bp-chip ability clickable ${isSubActive('classAbility') ? 'is-active' : ''}" data-sub-cat="classAbility" data-sub-idx="0" title="Click to swap Class Ability">
+            <span>🌀 ${escapeHtml(draft.classAbility || 'Class Ability')}</span>
+            <span class="lb-chip-caret">▾</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="lb-bp-chips-row" style="margin-top:8px;">
+        <div class="lb-bp-group" style="flex-wrap:wrap;">
+          <span class="lb-bp-lbl">✦ FRAGMENTS:</span>
+          ${(draft.fragments || []).map((f, fIdx) => {
+            const fBonus = FRAGMENT_STAT_BONUSES[f];
+            const bonusBadge = fBonus
+              ? `<span class="lb-frag-stat-tag">${Object.entries(fBonus).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k.slice(0, 3).toUpperCase()}`).join(' ')}</span>`
+              : '';
+            return `
+              <button type="button" class="lb-bp-chip fragment clickable ${isSubActive('fragment', fIdx) ? 'is-active' : ''}" data-sub-cat="fragment" data-sub-idx="${fIdx}" title="Click to swap or remove Fragment">
+                <span>${escapeHtml(f)}</span>
+                ${bonusBadge}
+                <span class="lb-chip-caret">▾</span>
+              </button>
+            `;
+          }).join('')}
+          ${(draft.fragments || []).length < 6 ? `
+            <button type="button" class="lb-bp-chip fragment add-chip clickable ${isSubActive('fragment', (draft.fragments || []).length) ? 'is-active' : ''}" data-sub-cat="fragment" data-sub-idx="${(draft.fragments || []).length}" title="Add another Fragment">
+              <span>+ Add Fragment</span>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+      ${draft.missingExoticArmor ? `<div class="lb-bp-missing-note">⚠ Target Exotic <strong>${escapeHtml(draft.missingExoticArmor)}</strong> is not currently in your Inventory or Vault — auto-slotted your highest-stat Exotic armor instead. Click any slot below to customize!</div>` : ''}
+    `;
+
+    bpBox.querySelectorAll('.lb-bp-chip.clickable').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const subCat = chip.getAttribute('data-sub-cat');
+        const subIdx = Number(chip.getAttribute('data-sub-idx') || 0);
+        if (subCat) {
+          openLbSubclassOptionPicker(subCat, subIdx);
+        }
+      });
+    });
   }
 
-  // 2. Render Seasonal Artifact Selector + 2-Column Slots Workspace (with Interactive Weapon & Armor Mod Sockets)
+  // 2. Render Seasonal Artifact Selector + 2-Column Slots Workspace (with Interactive Weapon & Armor Mod Sockets & Target Stat Optimizer)
   const workspace = document.getElementById('lbSlotsWorkspace');
   if (!workspace) return;
 
-  const { totals, overallTotal, activeSets } = computeLoadoutArmorTelemetry(draft.slots);
+  const { totals, baseTotals, modBonuses, fragmentBonuses, overallTotal, activeSets } = computeLoadoutArmorTelemetry(
+    draft.slots,
+    draft.slotMods,
+    draft.fragments
+  );
   const artBundle = collectArtifactPresetsAndPerks(draft.className, draft);
   const selectedPerkNamesLow = new Set((draft.selectedArtifactPerks || []).map(p => (p.name || '').toLowerCase()));
 
@@ -4510,7 +5315,7 @@ function renderLoadoutBuilderWorkspace() {
         </div>
       `;
     } else {
-      const st = getArmorStatMap(it);
+      const st = getBaseArmorStatMapWithoutRemovableStatMod(it);
       const setTag = it.compendiumSet?.name
         ? `<span class="lb-mini-tag set">⛊ ${escapeHtml(it.compendiumSet.name)}</span>`
         : '';
@@ -4519,10 +5324,10 @@ function renderLoadoutBuilderWorkspace() {
         : (st.Health >= 10 ? `<span class="lb-mini-tag pvp">${st.Health} HP (PVP)</span>` : `<span class="lb-mini-tag">${st.Health} HP</span>`);
       subDetailsHtml = `
         <div class="lb-slot-sub">
-          <span>✦ ${it.power || ''} • Total: <strong>${it.totalStats || 0}</strong></span>
+          <span>✦ ${it.power || ''} • Base: <strong>${Object.values(st).reduce((a, b) => a + b, 0)}</strong></span>
           ${hpTag}
           ${setTag}
-          <span class="lb-slot-perks">GRN ${st.Grenade} · MEL ${st.Melee} · WEP ${st.Weapons} · SUP ${st.Super}</span>
+          <span class="lb-slot-perks">GRN ${st.Grenade} · MEL ${st.Melee} · WEP ${st.Weapons} · SUP ${st.Super} · CLS ${st.Class}</span>
         </div>
       `;
     }
@@ -4596,6 +5401,23 @@ function renderLoadoutBuilderWorkspace() {
       </div>`
     : '';
 
+  const currentExoArmor = ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor']
+    .map(sl => draft.slots?.[sl])
+    .find(it => it && it.isExotic);
+
+  const optReportHtml = draft.statOptReport
+    ? `
+      <div class="lb-stat-opt-report">
+        <div class="lb-stat-opt-report-top">
+          <span>✓ <strong>F.E.L.I.C.I.A. INVENTORY + VAULT STAT SOLVER COMPLETE:</strong> Hit ${draft.statOptReport.metCount}/${draft.statOptReport.activeTargetCount} Target Stat Goals!</span>
+          ${draft.statOptReport.pulledItemsCount > 0 ? `<span class="lb-opt-badge">🔄 Swapped ${draft.statOptReport.pulledItemsCount} Armor Piece(s)</span>` : '<span class="lb-opt-badge">✓ Current Armor Optimal</span>'}
+        </div>
+        ${draft.statOptReport.pulledItemNames?.length ? `<div class="lb-stat-opt-report-line">🛡️ <strong>Selected Gear:</strong> ${escapeHtml(draft.statOptReport.pulledItemNames.join(' • '))}</div>` : ''}
+        ${draft.statOptReport.appliedStatMods?.length ? `<div class="lb-stat-opt-report-line">🔧 <strong>Auto-Slotted Stat Mods:</strong> ${escapeHtml(draft.statOptReport.appliedStatMods.join(' • '))}</div>` : ''}
+      </div>
+    `
+    : '';
+
   workspace.innerHTML = `
     ${artifactCardHtml}
 
@@ -4604,7 +5426,7 @@ function renderLoadoutBuilderWorkspace() {
       <div class="loadout-col-panel">
         <div class="loadout-col-header">⚔️ SUBCLASS &amp; WEAPON ARSENAL (SWAP GEAR OR APPLY WEAPON MODS)</div>
         <div class="lb-slots-stack">
-          <div class="lb-slot-card subclass-slot-card">
+          <div class="lb-slot-card subclass-slot-card" id="lbSubclassSlotCard" title="Click to customize Super, Aspects, Fragments &amp; Abilities">
             ${subIconHtml}
             <div class="lb-slot-meta">
               <div class="lb-slot-top-row">
@@ -4613,9 +5435,13 @@ function renderLoadoutBuilderWorkspace() {
               </div>
               <div class="lb-slot-name">${escapeHtml(subItem?.name || `${draft.subclass} ${draft.className}`)}</div>
               <div class="lb-slot-sub">
-                <span>${escapeHtml(draft.super ? `Super: ${draft.super}` : 'Synced with Subclass Selector above')}</span>
+                <span>⚡ ${escapeHtml(draft.super || 'Super')} • ❖ ${(draft.aspects || []).slice(0, 2).map(escapeHtml).join(' + ')}</span>
+              </div>
+              <div class="lb-slot-sub" style="margin-top:2px;">
+                <span>💥 ${escapeHtml(draft.grenade || 'Grenade')} • 👊 ${escapeHtml(draft.melee || 'Melee')} • 🌀 ${escapeHtml(draft.classAbility || 'Class Ability')}</span>
               </div>
             </div>
+            <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnLbEditSubclassCard">✏️ Edit Abilities</button>
           </div>
           ${renderSlotCard('Kinetic', 'Weapon')}
           ${renderSlotCard('Energy', 'Weapon')}
@@ -4623,19 +5449,70 @@ function renderLoadoutBuilderWorkspace() {
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: 5 ARMOR SLOTS + ARMOR MOD SOCKETS + LIVE 6-STAT SUMMARY -->
+      <!-- RIGHT COLUMN: 5 ARMOR SLOTS + INTERACTIVE TARGET STAT TUNER & AI INVENTORY/VAULT OPTIMIZER -->
       <div class="loadout-col-panel">
         <div class="loadout-col-header">🛡️ ARMOR RIG, MOD SOCKETS &amp; STAT TELEMETRY (${overallTotal} TOTAL)</div>
-        <div class="lb-armor-stats-strip">
+
+        <div class="lb-armor-stats-strip interactive-stats-strip">
           ${Object.entries(totals).map(([sName, sVal]) => {
-            const isWarnPvEHealth = draft.mode === 'PVE' && sName === 'Health' && sVal >= 10;
-            const isGoodPvEZero = draft.mode === 'PVE' && sName === 'Health' && sVal === 0;
-            return `<div class="lb-stat-cell ${isWarnPvEHealth ? 'warn' : ''} ${isGoodPvEZero ? 'highlight' : ''}">
-              <span class="lb-stat-lbl">${escapeHtml(sName.toUpperCase())}</span>
-              <span class="lb-stat-val">${sVal}</span>
-            </div>`;
+            const targetVal = Number(draft.targetStats?.[sName] ?? 0);
+            const mBonus = Number(modBonuses[sName] || 0);
+            const fBonus = Number(fragmentBonuses[sName] || 0);
+            const extraBonus = mBonus + fBonus;
+            const isZeroHpGoal = draft.mode === 'PVE' && sName === 'Health' && targetVal === 0;
+            const isTargetMet = isZeroHpGoal ? sVal === 0 : sVal >= targetVal;
+            const deficit = isZeroHpGoal ? sVal : Math.max(0, targetVal - sVal);
+            const isWarnPvEHealth = draft.mode === 'PVE' && sName === 'Health' && sVal >= 10 && targetVal === 0;
+
+            return `
+              <div class="lb-stat-cell interactive ${isWarnPvEHealth ? 'warn' : ''} ${isTargetMet ? 'highlight' : 'deficit'}">
+                <div class="lb-stat-cell-top">
+                  <span class="lb-stat-lbl">${escapeHtml(sName.toUpperCase())}</span>
+                  <span class="lb-stat-status-dot ${isTargetMet ? 'met' : 'short'}" title="${isTargetMet ? 'Target Stat Achieved!' : (isZeroHpGoal ? `Want 0 HP in PvE (currently ${sVal})` : `Need +${deficit} more ${sName} to hit ${targetVal}`)}">
+                    ${isTargetMet ? '✓' : `-${deficit}`}
+                  </span>
+                </div>
+                <span class="lb-stat-val">${sVal}</span>
+                <span class="lb-stat-sub-bonus">
+                  Base ${baseTotals[sName]}${extraBonus !== 0 ? ` (${extraBonus > 0 ? '+' : ''}${extraBonus})` : ''}
+                </span>
+                <div class="lb-stat-target-ctrl" title="Set your desired ${escapeHtml(sName)} Target Stat (0–200)">
+                  <span class="lb-target-lbl">🎯 Target</span>
+                  <div class="lb-target-stepper">
+                    <button type="button" class="btn-stat-step" data-stat="${escapeHtml(sName)}" data-delta="-10" title="-10 ${escapeHtml(sName)}">−</button>
+                    <input type="number" class="input-stat-target" data-stat="${escapeHtml(sName)}" min="0" max="200" step="5" value="${targetVal}">
+                    <button type="button" class="btn-stat-step" data-stat="${escapeHtml(sName)}" data-delta="10" title="+10 ${escapeHtml(sName)}">+</button>
+                  </div>
+                </div>
+              </div>
+            `;
           }).join('')}
         </div>
+
+        <!-- AI TARGET STAT & INVENTORY/VAULT OPTIMIZER PANEL -->
+        <div class="lb-stat-optimizer-bar">
+          <div class="lb-stat-opt-presets">
+            <span class="lb-opt-lbl">🎯 PRESETS:</span>
+            <button type="button" class="btn-stat-preset" data-preset="pve_grn_wep" title="0 Health + 140 Grenade + 125 Weapons + 100 Super">⚔️ PvE Grenade + Wep (0 HP)</button>
+            <button type="button" class="btn-stat-preset" data-preset="pve_mel_grn" title="0 Health + 140 Melee + 130 Grenade + 100 Class">⚔️ PvE Melee + Grn (0 HP)</button>
+            <button type="button" class="btn-stat-preset" data-preset="pve_sup_wep" title="0 Health + 150 Super + 135 Weapons + 100 Grenade">⚔️ PvE Super + Wep (0 HP)</button>
+            <button type="button" class="btn-stat-preset" data-preset="pvp_duelist" title="140 Health + 120 Weapons + 95 Super + 95 Class">🎯 PvP Crucible (140 HP)</button>
+          </div>
+          <div class="lb-stat-opt-actions">
+            <label class="lb-lock-exotic-toggle" title="Keep ${escapeHtml(currentExoArmor?.name || 'current Exotic Armor')} locked while optimizing the other 4 armor slots">
+              <input type="checkbox" id="chkLbLockExotic" ${draft.lockExoticForStatOpt !== false ? 'checked' : ''}>
+              <span>🔒 Keep Exotic (${escapeHtml(currentExoArmor?.name || 'Auto')})</span>
+            </label>
+            <button type="button" class="btn-tactical btn-primary btn-sm" id="btnLbOptimizeTargetStats" title="Search all Armor across your Equipped Gear, Character Bags &amp; Vault + auto-assign +10/+5 Armor Stat Mods to hit your Target Stats!">
+              🧠 Search Inventory, Vault &amp; Setup to Hit Target Stats
+            </button>
+            <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnLbAskAiStatSetup" title="Ask F.E.L.I.C.I.A. in AI Chat to analyze your Vault &amp; setup for these Target Stats">
+              ❖ Ask AI Advisor
+            </button>
+          </div>
+          ${optReportHtml}
+        </div>
+
         ${setBonusesHtml}
         <div class="lb-slots-stack">
           ${renderSlotCard('Helmet', 'Armor')}
@@ -4647,6 +5524,110 @@ function renderLoadoutBuilderWorkspace() {
       </div>
     </div>
   `;
+
+  // Wire Subclass Card Edit Button
+  const btnEditSubCard = workspace.querySelector('#btnLbEditSubclassCard');
+  if (btnEditSubCard) {
+    btnEditSubCard.addEventListener('click', () => {
+      openLbSubclassOptionPicker('super', 0);
+    });
+  }
+
+  // Wire Target Stat Stepper Buttons (-10 / +10)
+  workspace.querySelectorAll('.btn-stat-step').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      sfx.playChirp();
+      const sName = btn.getAttribute('data-stat');
+      const delta = Number(btn.getAttribute('data-delta') || 0);
+      if (!sName || !draft.targetStats) return;
+      const cur = Number(draft.targetStats[sName] || 0);
+      draft.targetStats[sName] = Math.max(0, Math.min(200, cur + delta));
+      draft.statOptReport = null;
+      renderLoadoutBuilderWorkspace();
+    });
+  });
+
+  // Wire Target Stat Direct Numeric Inputs
+  workspace.querySelectorAll('.input-stat-target').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const sName = inp.getAttribute('data-stat');
+      if (!sName || !draft.targetStats) return;
+      const val = Math.max(0, Math.min(200, Number(inp.value) || 0));
+      draft.targetStats[sName] = val;
+      draft.statOptReport = null;
+      renderLoadoutBuilderWorkspace();
+    });
+  });
+
+  // Wire Target Stat Preset Buttons
+  workspace.querySelectorAll('.btn-stat-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.playChirp();
+      const preset = btn.getAttribute('data-preset');
+      if (preset === 'pve_grn_wep') {
+        draft.mode = 'PVE';
+        draft.targetStats = { Health: 0, Melee: 85, Grenade: 140, Super: 100, Class: 85, Weapons: 125 };
+      } else if (preset === 'pve_mel_grn') {
+        draft.mode = 'PVE';
+        draft.targetStats = { Health: 0, Melee: 140, Grenade: 130, Super: 85, Class: 100, Weapons: 85 };
+      } else if (preset === 'pve_sup_wep') {
+        draft.mode = 'PVE';
+        draft.targetStats = { Health: 0, Melee: 70, Grenade: 105, Super: 150, Class: 85, Weapons: 135 };
+      } else if (preset === 'pvp_duelist') {
+        draft.mode = 'PVP';
+        draft.targetStats = { Health: 140, Melee: 75, Grenade: 85, Super: 95, Class: 95, Weapons: 120 };
+      }
+      const modeSelect = document.getElementById('lbModeSelect');
+      if (modeSelect) modeSelect.value = draft.mode;
+      optimizeLoadoutForTargetStats(draft);
+      renderLoadoutBuilderWorkspace();
+      showToast('Applied Target Stat Preset & optimized Armor + Stat Mods from Inventory/Vault!', 'info');
+    });
+  });
+
+  // Wire Lock Exotic Checkbox
+  const chkLockExo = workspace.querySelector('#chkLbLockExotic');
+  if (chkLockExo) {
+    chkLockExo.addEventListener('change', () => {
+      draft.lockExoticForStatOpt = Boolean(chkLockExo.checked);
+    });
+  }
+
+  // Wire Search Inventory, Vault & Setup to Hit Target Stats Button
+  const btnOptStats = workspace.querySelector('#btnLbOptimizeTargetStats');
+  if (btnOptStats) {
+    btnOptStats.addEventListener('click', () => {
+      sfx.playTransmit();
+      const report = optimizeLoadoutForTargetStats(draft);
+      renderLoadoutBuilderWorkspace();
+      if (report) {
+        sfx.playReceive();
+        showToast(
+          `Optimized 5-piece Armor & Stat Mods across Inventory/Vault! (${report.metCount}/${report.activeTargetCount} Target Stats met)`,
+          'info'
+        );
+      }
+    });
+  }
+
+  // Wire Ask F.E.L.I.C.I.A. AI Advisor for Target Stats
+  const btnAskAiStat = workspace.querySelector('#btnLbAskAiStatSetup');
+  if (btnAskAiStat) {
+    btnAskAiStat.addEventListener('click', () => {
+      sfx.playChirp();
+      const modal = document.getElementById('modalLoadoutBuilder');
+      if (modal && modal.open) modal.close();
+      switchTab('tab-chat');
+      const tStr = Object.entries(draft.targetStats || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+      const prompt = `Search my ${draft.className} Inventory and Vault and help me optimize my ${draft.subclass} ${draft.className} (${draft.mode}) build to hit these Target Stats: [${tStr}] using Exotic '${draft.exoticArmor || 'Best Owned'}', optimal Armor Stat Mods, and Subclass Fragments!`;
+      const chatInput = document.getElementById('chatInput');
+      if (chatInput) {
+        chatInput.value = prompt;
+        chatInput.focus();
+      }
+    });
+  }
 
   // Wire Artifact Preset Selector
   const artPresetSelect = workspace.querySelector('#lbArtifactPresetSelect');
@@ -4733,6 +5714,46 @@ function renderLoadoutBuilderWorkspace() {
   });
 }
 
+function openLbSubclassOptionPicker(subCategory, itemIndex = 0) {
+  sfx.playChirp();
+  const draft = activeLoadoutBuilderState;
+  if (!draft) return;
+
+  activeLbPickerSlot = {
+    mode: 'subclass',
+    subCategory,
+    itemIndex: Number(itemIndex),
+  };
+
+  const drawer = document.getElementById('lbSlotPickerDrawer');
+  const labelEl = document.getElementById('lbPickerSlotLabel');
+  const titleEl = document.getElementById('lbPickerTitle');
+  const searchInput = document.getElementById('lbPickerSearchInput');
+
+  if (!drawer) return;
+  drawer.classList.remove('hidden');
+
+  const labelMap = {
+    super: '⚡ SUPER ABILITY',
+    aspect: `❖ ASPECT SLOT #${Number(itemIndex) + 1}`,
+    fragment: `✦ FRAGMENT SLOT #${Number(itemIndex) + 1}`,
+    grenade: '💥 GRENADE ABILITY',
+    melee: '👊 MELEE ABILITY',
+    classAbility: '🌀 CLASS ABILITY',
+  };
+  const prettyCat = labelMap[subCategory] || subCategory.toUpperCase();
+  if (labelEl) labelEl.textContent = `CUSTOMIZE ${prettyCat} // ${draft.subclass.toUpperCase()} ${draft.className.toUpperCase()}`;
+  if (titleEl) titleEl.textContent = `Select ${prettyCat} for ${draft.subclass} ${draft.className}`;
+  if (searchInput) {
+    searchInput.placeholder = `Search ${subCategory}s by name or stat bonus...`;
+    searchInput.value = '';
+  }
+
+  renderLbSlotPickerItems('');
+  renderLoadoutBuilderWorkspace();
+  drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function openLbSlotPicker(slotName, category) {
   sfx.playChirp();
   const draft = activeLoadoutBuilderState;
@@ -4791,6 +5812,127 @@ function renderLbSlotPickerItems(searchQuery = '') {
   if (!draft || !picker || !grid) return;
 
   const qLow = (searchQuery || '').toLowerCase().trim();
+
+  // MODE 0: SUBCLASS OPTION PICKER (Super, Aspect, Fragment, Grenade, Melee, Class Ability)
+  if (picker.mode === 'subclass') {
+    const subCat = picker.subCategory;
+    const itemIdx = Number(picker.itemIndex || 0);
+    let subPool = getSubclassOptionsCatalog(draft, subCat);
+    if (qLow) {
+      subPool = subPool.filter(o =>
+        o.name.toLowerCase().includes(qLow) || (o.description || '').toLowerCase().includes(qLow)
+      );
+    }
+
+    let currentVal = '';
+    if (subCat === 'super') currentVal = draft.super || '';
+    else if (subCat === 'aspect') currentVal = draft.aspects?.[itemIdx] || '';
+    else if (subCat === 'fragment') currentVal = draft.fragments?.[itemIdx] || '';
+    else if (subCat === 'grenade') currentVal = draft.grenade || '';
+    else if (subCat === 'melee') currentVal = draft.melee || '';
+    else if (subCat === 'classAbility') currentVal = draft.classAbility || '';
+
+    const canRemoveFragment = subCat === 'fragment' && itemIdx < (draft.fragments || []).length && (draft.fragments || []).length > 1;
+    const removeCardHtml = canRemoveFragment
+      ? `
+        <div class="lb-picker-item-btn lb-picker-sub-card remove-sub-card" data-sub-remove="1">
+          <div class="lb-slot-icon-placeholder" style="width:40px;height:40px;font-size:16px;color:#F87171;">✕</div>
+          <div class="lb-picker-item-info" style="flex:1;">
+            <div class="lb-picker-item-top">
+              <span class="lb-picker-item-name" style="color:#FCA5A5;">Remove Fragment (${escapeHtml(currentVal)})</span>
+            </div>
+            <div class="lb-picker-item-sub">Clear this Fragment slot from your Subclass configuration</div>
+          </div>
+        </div>
+      `
+      : '';
+
+    grid.innerHTML = removeCardHtml + subPool.map((opt, oIdx) => {
+      const isCurrent = opt.name.toLowerCase() === (currentVal || '').toLowerCase();
+      const iconHtml = opt.icon
+        ? `<img src="https://www.bungie.net${opt.icon}" alt="" class="lb-picker-item-icon" loading="lazy">`
+        : `<div class="lb-slot-icon-placeholder" style="width:40px;height:40px;font-size:16px;">✦</div>`;
+      const statBadge = opt.statBonus
+        ? `<span class="lb-loc-pill in-bag">${Object.entries(opt.statBonus).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' · ')}</span>`
+        : '';
+      return `
+        <div class="lb-picker-item-btn lb-picker-sub-card ${isCurrent ? 'is-selected' : ''}" data-sub-opt-idx="${oIdx}">
+          ${iconHtml}
+          <div class="lb-picker-item-info" style="flex:1;">
+            <div class="lb-picker-item-top">
+              <span class="lb-picker-item-name">${escapeHtml(opt.name)}</span>
+              ${statBadge}
+              ${isCurrent ? '<span class="lb-loc-pill equipped">✓ ACTIVE</span>' : ''}
+            </div>
+            <div class="lb-picker-item-sub">${escapeHtml(opt.description || `${draft.subclass} ${subCat}`)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const removeBtn = grid.querySelector('[data-sub-remove="1"]');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        sfx.playChirp();
+        if (Array.isArray(draft.fragments) && itemIdx < draft.fragments.length) {
+          draft.fragments.splice(itemIdx, 1);
+        }
+        syncSubclassSelectionsToSockets(draft);
+        const drawer = document.getElementById('lbSlotPickerDrawer');
+        if (drawer) drawer.classList.add('hidden');
+        activeLbPickerSlot = null;
+        renderLoadoutBuilderWorkspace();
+      });
+    }
+
+    grid.querySelectorAll('.lb-picker-sub-card[data-sub-opt-idx]').forEach(card => {
+      card.addEventListener('click', () => {
+        const idx = Number(card.getAttribute('data-sub-opt-idx'));
+        const chosen = subPool[idx];
+        if (!chosen) return;
+        sfx.playChirp();
+
+        if (subCat === 'super') {
+          draft.super = chosen.name;
+        } else if (subCat === 'aspect') {
+          if (!Array.isArray(draft.aspects)) draft.aspects = [];
+          // Prevent duplicate aspect
+          const dupIdx = draft.aspects.findIndex((a, i) => i !== itemIdx && a.toLowerCase() === chosen.name.toLowerCase());
+          if (dupIdx >= 0 && draft.aspects[itemIdx]) {
+            draft.aspects[dupIdx] = draft.aspects[itemIdx];
+          }
+          draft.aspects[itemIdx] = chosen.name;
+        } else if (subCat === 'fragment') {
+          if (!Array.isArray(draft.fragments)) draft.fragments = [];
+          const alreadyHas = draft.fragments.some((f, i) => i !== itemIdx && f.toLowerCase() === chosen.name.toLowerCase());
+          if (alreadyHas) {
+            showToast(`'${chosen.name}' is already slotted in another Fragment slot!`, 'info');
+            return;
+          }
+          if (itemIdx < draft.fragments.length) {
+            draft.fragments[itemIdx] = chosen.name;
+          } else {
+            draft.fragments.push(chosen.name);
+          }
+        } else if (subCat === 'grenade') {
+          draft.grenade = chosen.name;
+        } else if (subCat === 'melee') {
+          draft.melee = chosen.name;
+        } else if (subCat === 'classAbility') {
+          draft.classAbility = chosen.name;
+        }
+
+        syncSubclassSelectionsToSockets(draft);
+        showToast(`Selected '${chosen.name}' for ${draft.subclass} ${draft.className}!`, 'info');
+
+        const drawer = document.getElementById('lbSlotPickerDrawer');
+        if (drawer) drawer.classList.add('hidden');
+        activeLbPickerSlot = null;
+        renderLoadoutBuilderWorkspace();
+      });
+    });
+    return;
+  }
 
   // MODE 1: WEAPON MOD OR ARMOR MOD PICKER
   if (picker.mode === 'mod') {
@@ -4990,21 +6132,32 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
   }
 
   const itemsPayload = [];
-  // Include Subclass if present and not already equipped
-  if (loadoutDraft.subclassItem && loadoutDraft.subclassItem.itemInstanceId && !transferOnly && !modsOnly) {
-    itemsPayload.push({
-      itemInstanceId: String(loadoutDraft.subclassItem.itemInstanceId),
-      itemHash: Number(loadoutDraft.subclassItem.itemHash || 0),
-      name: loadoutDraft.subclassItem.name || loadoutDraft.subclass,
-      slot: 'Subclass',
-      category: 'Subclass',
-      isExotic: false,
-      sourceLocation: 'character',
-      sourceCharacterId: String(loadoutDraft.characterId),
-      isEquipped: Boolean(loadoutDraft.subclassItem.isEquipped),
-      fallbackEquipInstanceId: '',
-      socketPlugs: [],
-    });
+  // Include Subclass if present (along with any selected Super, Aspects, Fragments & Ability socketPlugs)
+  if (loadoutDraft.subclassItem && loadoutDraft.subclassItem.itemInstanceId && !transferOnly) {
+    syncSubclassSelectionsToSockets(loadoutDraft);
+    const subSocketPlugs = Object.values(loadoutDraft.subclassMods || {})
+      .filter(sm => sm && sm.socketIndex !== undefined && sm.plugHash)
+      .map(sm => ({
+        socketIndex: Number(sm.socketIndex),
+        plugHash: Number(sm.plugHash),
+        name: sm.name || '',
+      }));
+
+    if (!modsOnly || subSocketPlugs.length > 0) {
+      itemsPayload.push({
+        itemInstanceId: String(loadoutDraft.subclassItem.itemInstanceId),
+        itemHash: Number(loadoutDraft.subclassItem.itemHash || 0),
+        name: loadoutDraft.subclassItem.name || loadoutDraft.subclass,
+        slot: 'Subclass',
+        category: 'Subclass',
+        isExotic: false,
+        sourceLocation: 'character',
+        sourceCharacterId: String(loadoutDraft.characterId),
+        isEquipped: modsOnly ? true : Boolean(loadoutDraft.subclassItem.isEquipped),
+        fallbackEquipInstanceId: '',
+        socketPlugs: subSocketPlugs,
+      });
+    }
   }
 
   const slotOrder = ['Kinetic', 'Energy', 'Heavy', 'Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
@@ -7381,13 +8534,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       activeLoadoutBuilderState = rebuilt;
     } else {
+      const subChanged = newSub.toLowerCase() !== (activeLoadoutBuilderState.subclass || '').toLowerCase();
       activeLoadoutBuilderState.subclass = newSub;
       activeLoadoutBuilderState.mode = newMode;
       const { subclasses } = collectAllOwnedGearForLoadout(newClass);
       const subLow = newSub.toLowerCase();
-      activeLoadoutBuilderState.subclassItem = subclasses.find(
+      const matchedSub = subclasses.find(
         s => (s.element || '').toLowerCase() === subLow || (s.name || '').toLowerCase().includes(subLow)
       ) || activeLoadoutBuilderState.subclassItem;
+      activeLoadoutBuilderState.subclassItem = matchedSub;
+      if (subChanged) {
+        activeLoadoutBuilderState.super = matchedSub?.super?.name || getDefaultSubclassOption(newClass, newSub, 'super');
+        activeLoadoutBuilderState.aspects = (matchedSub?.aspects || []).length
+          ? matchedSub.aspects.map(a => a.name)
+          : getDefaultSubclassOption(newClass, newSub, 'aspects');
+        activeLoadoutBuilderState.fragments = (matchedSub?.fragments || []).length
+          ? matchedSub.fragments.map(f => f.name)
+          : getDefaultSubclassOption(newClass, newSub, 'fragments');
+        activeLoadoutBuilderState.grenade = matchedSub?.grenade?.name || getDefaultSubclassOption(newClass, newSub, 'grenade');
+        activeLoadoutBuilderState.melee = matchedSub?.melee?.name || getDefaultSubclassOption(newClass, newSub, 'melee');
+        activeLoadoutBuilderState.classAbility = matchedSub?.classAbility?.name || getDefaultSubclassOption(newClass, newSub, 'classAbility');
+        activeLoadoutBuilderState.subclassMods = {};
+        syncSubclassSelectionsToSockets(activeLoadoutBuilderState);
+      }
     }
 
     const drawer = document.getElementById('lbSlotPickerDrawer');

@@ -1053,7 +1053,36 @@ def match_compendium_armor_set(item_name: str, item_desc: str = "") -> Optional[
     return None
 
 
-def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int, dict], sockets_map: dict) -> dict:
+def _classify_subclass_socket_category(pcat: str, type_name: str = "", pname: str = "") -> str:
+    pc = (pcat or "").lower()
+    tn = (type_name or "").lower()
+    pn = (pname or "").lower()
+    if "supers" in pc or "super" in tn:
+        return "super"
+    if "aspects" in pc or "aspect" in tn:
+        return "aspect"
+    if "fragments" in pc or "fragment" in tn or pn.startswith(("echo of ", "ember of ", "spark of ", "whisper of ", "thread of ", "facet of ")):
+        return "fragment"
+    if "melee" in pc or "melee" in tn:
+        return "melee"
+    if "grenades" in pc or "grenade" in tn:
+        return "grenade"
+    if "class_abilities" in pc or "class ability" in tn or any(k in pn for k in ("rift", "barricade", "thruster", "dodge", "phoenix dive", "acrobat")):
+        return "classAbility"
+    if "movement" in pc or "movement" in tn or any(k in pn for k in ("glide", "lift", "jump", "blink")):
+        return "movement"
+    return ""
+
+
+def _parse_subclass_details(
+    sub_iid: str,
+    plug_hashes: List[int],
+    defs: Dict[int, dict],
+    sockets_map: dict,
+    reusable_map: Optional[dict] = None,
+    sub_def: Optional[dict] = None,
+    plug_sets_map: Optional[Dict[int, List[int]]] = None,
+) -> dict:
     super_info = None
     aspects = []
     fragments = []
@@ -1061,6 +1090,7 @@ def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int
     grenade_info = None
     class_ability_info = None
     movement_info = None
+    subclass_sockets: List[dict] = []
 
     seen_hashes = set()
     candidate_hashes: List[int] = []
@@ -1070,12 +1100,90 @@ def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int
             seen_hashes.add(int(ph))
             candidate_hashes.append(int(ph))
 
-    if sub_iid:
-        for sk in sockets_map.get(sub_iid, {}).get("sockets", []):
+    live_sockets = sockets_map.get(sub_iid, {}).get("sockets", []) if sub_iid else []
+    reusable_plugs_by_idx = (reusable_map or {}).get(sub_iid, {}).get("plugs", {}) if sub_iid and reusable_map else {}
+    def_socket_entries = (sub_def or {}).get("socketEntries", []) or []
+
+    if live_sockets:
+        for s_idx, sk in enumerate(live_sockets):
             sph = sk.get("plugHash")
             if sph and int(sph) not in seen_hashes:
                 seen_hashes.add(int(sph))
                 candidate_hashes.append(int(sph))
+
+            s_entry = def_socket_entries[s_idx] if s_idx < len(def_socket_entries) else {}
+            ps_hash = int(s_entry.get("reusablePlugSetHash") or s_entry.get("randomizedPlugSetHash") or 0)
+            cur_ph = int(sph) if sph else 0
+            cur_def = defs.get(cur_ph) or {}
+            cur_name = cur_def.get("name", "")
+            cur_cat = _classify_subclass_socket_category(
+                cur_def.get("plugCategoryIdentifier", ""),
+                cur_def.get("itemTypeDisplayName", ""),
+                cur_name,
+            )
+
+            # Collect available options for this subclass socket
+            avail_hashes: List[int] = []
+            seen_avail: Set[int] = set()
+            for r_plug in reusable_plugs_by_idx.get(str(s_idx), []) or []:
+                rph = int(r_plug.get("plugItemHash") or 0)
+                if rph and rph not in seen_avail and r_plug.get("canInsert", True):
+                    seen_avail.add(rph)
+                    avail_hashes.append(rph)
+            if ps_hash and plug_sets_map and ps_hash in plug_sets_map:
+                for psh_item in plug_sets_map[ps_hash]:
+                    if psh_item and int(psh_item) not in seen_avail:
+                        seen_avail.add(int(psh_item))
+                        avail_hashes.append(int(psh_item))
+            for ri_entry in s_entry.get("reusablePlugItems") or []:
+                ri_ph = int(ri_entry.get("plugItemHash") or 0)
+                if ri_ph and ri_ph not in seen_avail:
+                    seen_avail.add(ri_ph)
+                    avail_hashes.append(ri_ph)
+
+            avail_plugs: List[dict] = []
+            seen_avail_names: Set[str] = set()
+            for aph in avail_hashes:
+                adef = defs.get(aph)
+                if not adef or not adef.get("name"):
+                    continue
+                aname = adef["name"]
+                aname_low = aname.lower()
+                if "default ornament" in aname_low:
+                    continue
+                is_empty = "empty" in aname_low or "socket" in aname_low
+                acat = _classify_subclass_socket_category(
+                    adef.get("plugCategoryIdentifier", ""),
+                    adef.get("itemTypeDisplayName", ""),
+                    aname,
+                )
+                if not cur_cat and acat:
+                    cur_cat = acat
+                if aname in seen_avail_names and not is_empty:
+                    continue
+                seen_avail_names.add(aname)
+                avail_plugs.append({
+                    "plugHash": int(aph),
+                    "name": aname,
+                    "icon": adef.get("icon", ""),
+                    "description": adef.get("description", ""),
+                    "category": acat or cur_cat,
+                    "isEmpty": is_empty,
+                })
+
+            if cur_cat in ("super", "aspect", "fragment", "melee", "grenade", "classAbility", "movement"):
+                is_cur_empty = not cur_name or "empty" in cur_name.lower()
+                subclass_sockets.append({
+                    "socketIndex": s_idx,
+                    "category": cur_cat,
+                    "plugHash": cur_ph,
+                    "name": "Empty Socket" if is_cur_empty else cur_name,
+                    "icon": cur_def.get("icon", ""),
+                    "description": cur_def.get("description", ""),
+                    "isEmpty": is_cur_empty,
+                    "plugSetHash": ps_hash,
+                    "availablePlugs": avail_plugs,
+                })
 
     for ph in candidate_hashes:
         pdef = defs.get(ph)
@@ -1088,26 +1196,28 @@ def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int
             continue
 
         item_repr = {
+            "plugHash": int(ph),
             "name": pname,
             "icon": pdef.get("icon", ""),
             "description": pdef.get("description", ""),
         }
 
-        if "supers" in pcat and not super_info:
+        cat_key = _classify_subclass_socket_category(pcat, pdef.get("itemTypeDisplayName", ""), pname)
+        if cat_key == "super" and not super_info:
             super_info = item_repr
-        elif "aspects" in pcat:
+        elif cat_key == "aspect":
             if not any(a["name"] == pname for a in aspects):
                 aspects.append(item_repr)
-        elif "fragments" in pcat:
+        elif cat_key == "fragment":
             if not any(f["name"] == pname for f in fragments):
                 fragments.append(item_repr)
-        elif "melee" in pcat and not melee_info:
+        elif cat_key == "melee" and not melee_info:
             melee_info = item_repr
-        elif "grenades" in pcat and not grenade_info:
+        elif cat_key == "grenade" and not grenade_info:
             grenade_info = item_repr
-        elif "class_abilities" in pcat and not class_ability_info:
+        elif cat_key == "classAbility" and not class_ability_info:
             class_ability_info = item_repr
-        elif "movement" in pcat and not movement_info:
+        elif cat_key == "movement" and not movement_info:
             movement_info = item_repr
 
     return {
@@ -1118,6 +1228,7 @@ def _parse_subclass_details(sub_iid: str, plug_hashes: List[int], defs: Dict[int
         "grenade": grenade_info,
         "classAbility": class_ability_info,
         "movement": movement_info,
+        "subclassSockets": subclass_sockets,
     }
 
 
@@ -1361,11 +1472,17 @@ def fetch_guardian_inventory(access_token: str) -> dict:
         extra_defs = resolve_item_definitions(artifact_perk_hashes, creds["api_key"])
         defs.update(extra_defs)
 
-    # Resolve DestinyPlugSetDefinition for Weapon Mod & Armor Mod sockets
+    # Resolve DestinyPlugSetDefinition for Weapon Mod, Armor Mod & Subclass sockets
     mod_plug_set_hashes: Set[int] = set()
     for ih, d in list(defs.items()):
         s_entries = d.get("socketEntries") or []
         if not s_entries:
+            continue
+        if int(d.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
+            for s_ent in s_entries:
+                ps_h = int(s_ent.get("reusablePlugSetHash") or s_ent.get("randomizedPlugSetHash") or 0)
+                if ps_h:
+                    mod_plug_set_hashes.add(ps_h)
             continue
         for sc in d.get("socketCategories") or []:
             if sc.get("hash") in (SOCKET_CAT_WEAPON_MODS, SOCKET_CAT_ARMOR_MODS):
@@ -1480,7 +1597,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             edef = defs.get(ehash)
             if edef and int(edef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_eq.get("itemInstanceId", ""))
-                sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
+                sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map, reusable_map, edef, plug_sets_map)
                 sub_name = edef.get("name", "")
                 sub_elem = "Prismatic" if "prismatic" in sub_name.lower() else DAMAGE_TYPE_MAP.get(int(edef.get("defaultDamageType", 1)), "Kinetic")
                 equipped_subclass = {
@@ -1536,7 +1653,7 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             if idef and int(idef.get("bucketTypeHash", 0)) == BUCKET_SUBCLASS:
                 sub_iid = str(raw_inv.get("itemInstanceId", ""))
                 if sub_iid:
-                    sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map)
+                    sub_details = _parse_subclass_details(sub_iid, [], defs, sockets_map, reusable_map, idef, plug_sets_map)
                     sub_name = idef.get("name", "")
                     sub_elem = "Prismatic" if "prismatic" in sub_name.lower() else DAMAGE_TYPE_MAP.get(int(idef.get("defaultDamageType", 1)), "Kinetic")
                     sub_obj = {
@@ -1650,7 +1767,12 @@ def fetch_guardian_inventory(access_token: str) -> dict:
                 li_plugs = li.get("plugItemHashes", []) or []
                 if iid in subclass_by_instance:
                     sub_base = subclass_by_instance[iid]
-                    sub_custom = _parse_subclass_details(iid, li_plugs, defs, sockets_map) if li_plugs else sub_base
+                    sub_def_k = defs.get(int(sub_base.get("itemHash") or 0))
+                    sub_custom = (
+                        _parse_subclass_details(iid, li_plugs, defs, sockets_map, reusable_map, sub_def_k, plug_sets_map)
+                        if li_plugs
+                        else sub_base
+                    )
                     ld_subclass = {**sub_base, **sub_custom}
                 elif iid in gear_by_instance:
                     g = gear_by_instance[iid]
