@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v42';
+} from './tgxm-viewer.js?v=20261115_v43';
 
 // Application State
 const state = {
@@ -9061,13 +9061,17 @@ function init3DGuardianAndInspectTheatre() {
       const wIcon = (wpn.ornamentIcon || wpn.icon)
         ? `https://www.bungie.net${wpn.ornamentIcon || wpn.icon}`
         : 'icon-192.png';
+      const isExoticWpn = Boolean(wpn.isExotic || wpn.tierName === 'Exotic');
+      const wpnSub = isExoticWpn
+        ? (wpn.ornamentName ? `✨ Ornament: ${wpn.ornamentName}` : '✨ Exotic Base Finish (No Shaders)')
+        : `🎨 ${wpn.shaderName || 'Default Shader'}`;
       html += `
         <button type="button" class="g3d-slot-item ${active ? 'active' : ''}" data-slot-target="weapon">
           <img src="${wIcon}" alt="" class="g3d-slot-thumb">
           <div class="g3d-slot-meta">
             <div class="g3d-slot-type">SHOWCASE WEAPON (${escapeHtml(g3dContext.activeWeaponKey.toUpperCase())})</div>
             <div class="g3d-slot-name">${escapeHtml(wpn.ornamentName || wpn.name)}</div>
-            <div class="g3d-slot-sub">🎨 ${escapeHtml(wpn.shaderName || 'Default Shader')}</div>
+            <div class="g3d-slot-sub">${escapeHtml(wpnSub)}</div>
           </div>
         </button>
       `;
@@ -9078,12 +9082,23 @@ function init3DGuardianAndInspectTheatre() {
       btn.addEventListener('click', () => {
         sfx.playChirp();
         g3dContext.selectedSlot = btn.getAttribute('data-slot-target') || 'ALL';
+        const curWpn = g3dContext.activeWeaponKey !== 'none' ? g3dContext.weapons[g3dContext.activeWeaponKey] : null;
+        const targetingExoticWpn = g3dContext.selectedSlot === 'weapon' && curWpn && (curWpn.isExotic || curWpn.tierName === 'Exotic');
         if (shaderTargetLabel) {
-          shaderTargetLabel.textContent = g3dContext.selectedSlot === 'ALL'
-            ? 'TARGET: ALL ARMOR'
-            : `TARGET: ${g3dContext.selectedSlot.toUpperCase()}`;
+          if (targetingExoticWpn) {
+            shaderTargetLabel.textContent = 'EXOTIC WEAPON (NO SHADERS)';
+          } else {
+            shaderTargetLabel.textContent = g3dContext.selectedSlot === 'ALL'
+              ? 'TARGET: ALL ARMOR'
+              : `TARGET: ${g3dContext.selectedSlot.toUpperCase()}`;
+          }
         }
         renderG3DSlotsPanel();
+        if (targetingExoticWpn && shaderGridEl) {
+          shaderGridEl.innerHTML = `<div class="tgxm-empty-msg" style="grid-column:1/-1; padding:18px 10px;">Exotic weapons cannot equip shaders — showing authentic base/ornament finish.</div>`;
+        } else {
+          renderG3DShaderSwatches(buildCombinedShaderChoices(g3dContext.slots));
+        }
       });
     });
   };
@@ -9369,9 +9384,16 @@ function init3DGuardianAndInspectTheatre() {
     if (inspect3DLoadingTxt) inspect3DLoadingTxt.textContent = `Loading 3D ${item.name}…`;
     if (inspect3DLoading) inspect3DLoading.classList.remove('hidden');
 
-    const initialShaders = buildCombinedShaderChoices([{ slotKey: item.slot || 'Item', item }]);
-    if (inspectShaderSearch) inspectShaderSearch.value = '';
-    renderInspectShaderStrip(initialShaders, item.shaderHash || null);
+    const isExoticWpn = String(item.category || '').toLowerCase() === 'weapon' && (item.isExotic || item.tierName === 'Exotic');
+    const shaderStripEl = stage3dWrap.querySelector('.inspect-3d-shader-strip');
+    if (shaderStripEl) shaderStripEl.classList.toggle('hidden', isExoticWpn);
+    if (btnInspectResetSh) btnInspectResetSh.classList.toggle('hidden', isExoticWpn);
+
+    if (!isExoticWpn) {
+      const initialShaders = buildCombinedShaderChoices([{ slotKey: item.slot || 'Item', item }]);
+      if (inspectShaderSearch) inspectShaderSearch.value = '';
+      renderInspectShaderStrip(initialShaders, item.shaderHash || null);
+    }
 
     try {
       inspect3dStage?.dispose();

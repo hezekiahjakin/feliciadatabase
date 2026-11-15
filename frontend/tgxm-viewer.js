@@ -697,8 +697,9 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
           tint = mix(tint, worn, wear);
           // Diffuse plate is a grayscale detail map centred on mid-grey.
           float lum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float detail = pow(max(lum, 0.0), 0.4545) * 2.0;
-          diffuseColor.rgb = clamp(tint * detail, 0.0, 1.0);
+          float detail = mix(0.55, 1.35, pow(max(lum, 0.0), 0.4545));
+          float ao = uHasGearstack > 0.5 ? mix(0.55, 1.05, d2Gst.r) : 1.0;
+          diffuseColor.rgb = clamp(tint * detail * ao, 0.0, 1.0);
         }
         `
       )
@@ -706,7 +707,7 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
         if (uHasGearstack > 0.5) {
-          roughnessFactor = clamp(1.0 - d2Gst.a * 0.72, 0.18, 0.95);
+          roughnessFactor = clamp(1.0 - d2Gst.a * 0.58, 0.24, 0.94);
         }
         `
       )
@@ -714,7 +715,9 @@ function createDestinyGearMaterial(THREE, textures, itemDyeData, changeColorInde
         '#include <metalnessmap_fragment>',
         `#include <metalnessmap_fragment>
         if (uHasGearstack > 0.5) {
-          metalnessFactor = clamp(d2Gst.r * 0.8, 0.0, 0.9);
+          float tintLuma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+          float darkDamp = smoothstep(0.02, 0.18, tintLuma);
+          metalnessFactor = clamp(d2Gst.g * 0.55 * mix(0.22, 1.0, darkDamp), 0.04, 0.62);
         }
         `
       )
@@ -901,19 +904,19 @@ export class Destiny3DStage {
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.02;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.innerHTML = '';
     this.container.appendChild(renderer.domElement);
     this.renderer = renderer;
 
-    // Image-based lighting so metallic Destiny surfaces read correctly.
+    // Subtle image-based lighting so metallic highlights read without washing out blacks.
     if (RoomEnvironment) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       this._envTarget = pmrem.fromScene(new RoomEnvironment(), 0.04);
       scene.environment = this._envTarget.texture;
-      scene.environmentIntensity = 0.55;
+      scene.environmentIntensity = 0.16;
       pmrem.dispose();
     }
 
@@ -927,16 +930,16 @@ export class Destiny3DStage {
     controls.autoRotateSpeed = 1.1;
     this.controls = controls;
 
-    scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x1a1d29, 0.9));
-    const keyLight = new THREE.DirectionalLight(0xfff3e4, 2.0);
+    scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x161924, 0.45));
+    const keyLight = new THREE.DirectionalLight(0xfff3e4, 1.45);
     keyLight.position.set(2.4, 3.6, 3.2);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(1024, 1024);
     scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(0x8fb3ff, 0.8);
+    const fillLight = new THREE.DirectionalLight(0x8fb3ff, 0.45);
     fillLight.position.set(-2.6, 1.8, 1.4);
     scene.add(fillLight);
-    const rimLight = new THREE.DirectionalLight(0xa44dff, 1.4);
+    const rimLight = new THREE.DirectionalLight(0xa44dff, 1.05);
     rimLight.position.set(-0.5, 2.6, -2.8);
     scene.add(rimLight);
     this.rimLight = rimLight;
@@ -1168,9 +1171,10 @@ export class Destiny3DStage {
     holder.position.set(-0.42, 1.0, 0.22);
     holder.rotation.set(0, 0, 0.05);
     this.weaponGroup.add(holder);
-    this.slotGroups.set('weapon', { group, itemHash: usedHash, shaderHash: null });
+    const isExoticWpn = Boolean(weaponItem.isExotic || weaponItem.tierName === 'Exotic' || weaponItem.isExoticWeapon);
+    this.slotGroups.set('weapon', { group, itemHash: usedHash, shaderHash: null, isExoticWeapon: isExoticWpn });
 
-    if (weaponItem.shaderHash) {
+    if (weaponItem.shaderHash && !isExoticWpn) {
       await this.applyShaderToSlot('weapon', weaponItem.shaderHash, cdn, assets).catch(() => {});
     }
     return true;
@@ -1184,7 +1188,8 @@ export class Destiny3DStage {
     if (this.pedestal) this.pedestal.visible = false;
     this.lastError = null;
 
-    const hashes = [item.overrideStyleItemHash, item.itemHash, item.shaderHash].filter(Boolean);
+    const isExoticWpn = String(item.category || '').toLowerCase() === 'weapon' && (item.isExotic || item.tierName === 'Exotic');
+    const hashes = [item.overrideStyleItemHash, item.itemHash, isExoticWpn ? null : item.shaderHash].filter(Boolean);
     if (onProgress) onProgress('Fetching 3D asset pointers from Bungie…');
     const { cdn, assets } = await fetchGear3DBatch(hashes);
     if (this.disposed) return false;
@@ -1197,8 +1202,8 @@ export class Destiny3DStage {
     }
 
     this.rootGroup.add(group);
-    this.slotGroups.set('single', { group, itemHash: usedHash, shaderHash: null });
-    if (item.shaderHash) {
+    this.slotGroups.set('single', { group, itemHash: usedHash, shaderHash: null, isExoticWeapon: isExoticWpn });
+    if (item.shaderHash && !isExoticWpn) {
       if (onProgress) onProgress('Applying shader…');
       await this.applyShaderToSlot('single', item.shaderHash, cdn, assets).catch(() => {});
     }
@@ -1210,6 +1215,7 @@ export class Destiny3DStage {
   async applyShaderToSlot(slotKey, shaderHash, prefetchedCdn = null, prefetchedAssets = null) {
     const entry = this.slotGroups.get(slotKey);
     if (!entry || !entry.group) return;
+    if (entry.isExoticWeapon) return;
     const mats = entry.group.userData.materials || [];
 
     if (!shaderHash) {
