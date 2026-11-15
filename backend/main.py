@@ -31,6 +31,8 @@ try:
         insert_item_socket_plug,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
+        resolve_gear_3d_assets,
+        search_destiny_shaders,
     )
 except ImportError:
     from bungie_service import (
@@ -48,6 +50,8 @@ except ImportError:
         insert_item_socket_plug,
         evaluate_item_against_godrolls,
         analyze_arsenal_duplicates_and_trash,
+        resolve_gear_3d_assets,
+        search_destiny_shaders,
     )
 
 try:
@@ -2223,6 +2227,38 @@ async def appraise_bungie_item_endpoint(req: Request):
             "pvpMatches": gr_eval.get("pvp_matches", []),
         },
     }
+
+
+@app.get("/api/bungie/gear-3d/{item_hash}")
+async def get_gear_3d_asset_endpoint(item_hash: int):
+    try:
+        creds = get_bungie_credentials()
+        result = await run_in_threadpool(resolve_gear_3d_assets, [item_hash], creds.get("api_key", ""))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"3D asset lookup failed: {e}")
+
+
+@app.post("/api/bungie/gear-3d/batch")
+async def batch_gear_3d_assets_endpoint(req: Request):
+    try:
+        body = await req.json()
+        hashes = body.get("hashes") or []
+        creds = get_bungie_credentials()
+        result = await run_in_threadpool(resolve_gear_3d_assets, hashes, creds.get("api_key", ""))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch 3D asset lookup failed: {e}")
+
+
+@app.get("/api/bungie/shaders")
+async def search_shaders_endpoint(q: str = "", limit: int = 40):
+    try:
+        creds = get_bungie_credentials()
+        shaders = await run_in_threadpool(search_destiny_shaders, q, limit, creds.get("api_key", ""))
+        return {"shaders": shaders}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Shader catalog lookup failed: {e}")
 
 
 # Mount frontend directory for static assets

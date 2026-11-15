@@ -21,6 +21,11 @@ import {
   saveFirestoreLoadout,
   deleteFirestoreLoadout
 } from './firebase-service.js';
+import {
+  Destiny3DStage,
+  ICONIC_DESTINY_SHADERS,
+  searchManifestShaders
+} from './tgxm-viewer.js';
 
 // Application State
 const state = {
@@ -2794,6 +2799,22 @@ function openItemInspectModal(item) {
         `;
         statsListEl.appendChild(totalRow);
       }
+    }
+
+    // Reset 2D / 3D Inspection tabs
+    const viewTabs = document.getElementById('inspectViewTabs');
+    const tab2dBtn = document.getElementById('btnInspectTab2D');
+    const tab3dBtn = document.getElementById('btnInspectTab3D');
+    const stage3dWrap = document.getElementById('inspect3DStageWrap');
+    if (viewTabs) {
+      viewTabs.classList.toggle('hidden', item.category === 'Artifact');
+    }
+    if (tab2dBtn) tab2dBtn.classList.add('active');
+    if (tab3dBtn) tab3dBtn.classList.remove('active');
+    if (stage3dWrap) stage3dWrap.classList.add('hidden');
+    if (inspect3dStage) {
+      inspect3dStage.dispose();
+      inspect3dStage = null;
     }
 
     if (!modal.open) {
@@ -8550,10 +8571,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCloseInspectItem) {
       btnCloseInspectItem.addEventListener('click', () => modalInspectItem.close());
     }
+    modalInspectItem.addEventListener('close', () => {
+      if (inspect3dStage) {
+        inspect3dStage.dispose();
+        inspect3dStage = null;
+      }
+    });
     attachLightDismissFallback(modalInspectItem);
   }
   attachLightDismissFallback(modalGodRollScanner);
   attachLightDismissFallback(modalSavedLoadout);
+
+  init3DGuardianAndInspectTheatre();
 
   // =========================================================================
   // DIM TACTICAL LOADOUT BUILDER PAGE WIRING
@@ -8844,3 +8873,556 @@ document.addEventListener('DOMContentLoaded', () => {
   loadMobileConnectInfo();
   initFieldAdvisoryModal();
 });
+
+/* ==========================================================================
+   IN-GAME 3D GUARDIAN THEATRE & SINGLE-ITEM TGXM VIEWPORT CONTROLLER
+   ========================================================================== */
+let guardian3dStage = null;
+let inspect3dStage = null;
+let g3dContext = null;
+
+function renderShaderSwatchHtml(sh, activeHash) {
+  const isActive = Number(activeHash) === Number(sh.hash);
+  const nameEsc = escapeHtml(sh.name || `Shader ${sh.hash}`);
+  const palette = Array.isArray(sh.palette) && sh.palette.length >= 4
+    ? sh.palette
+    : ['#262b36', '#6b7280', '#9ca3af', '#111827'];
+  const iconHtml = sh.icon
+    ? `<img src="https://www.bungie.net${sh.icon}" alt="" class="shader-tile-icon" loading="lazy">`
+    : `<span class="shader-tile-quad" style="background:conic-gradient(${palette[0]} 0 90deg, ${palette[1]} 90deg 180deg, ${palette[2]} 180deg 270deg, ${palette[3]} 270deg 360deg);"></span>`;
+  return `
+    <button type="button" class="shader-tile-btn ${isActive ? 'active' : ''}" data-shader-hash="${sh.hash}" data-shader-name="${nameEsc}" title="${nameEsc}">
+      ${iconHtml}
+      <span class="shader-tile-name">${nameEsc}</span>
+    </button>
+  `;
+}
+
+function buildCombinedShaderChoices(contextSlots = []) {
+  const seen = new Set();
+  const list = [];
+
+  for (const sl of contextSlots) {
+    if (sl?.item?.shaderHash && !seen.has(Number(sl.item.shaderHash))) {
+      seen.add(Number(sl.item.shaderHash));
+      list.push({
+        hash: Number(sl.item.shaderHash),
+        name: sl.item.shaderName || `Equipped (${sl.slotKey})`,
+        icon: sl.item.shaderIcon || '',
+      });
+    }
+  }
+  for (const sh of ICONIC_DESTINY_SHADERS) {
+    if (!seen.has(Number(sh.hash))) {
+      seen.add(Number(sh.hash));
+      list.push(sh);
+    }
+  }
+  return list;
+}
+
+function build3DGuardianContext(sourceMode = 'inventory') {
+  const armorOrder = ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor'];
+  const chars = state.bungieData?.characters || [];
+
+  if (sourceMode === 'loadout' && activeLoadoutBuilderState) {
+    const draft = activeLoadoutBuilderState;
+    const matchChar = chars.find(
+      c => (c.className || '').toLowerCase() === (draft.className || '').toLowerCase()
+    ) || chars[0];
+    const slots = armorOrder.map(slotKey => {
+      const it = draft.slots?.[slotKey] || null;
+      return {
+        slotKey,
+        label: slotKey,
+        item: it,
+        itemHash: it?.itemHash || null,
+        overrideStyleItemHash: it?.overrideStyleItemHash || null,
+        shaderHash: it?.shaderHash || null,
+      };
+    });
+    const weapons = {
+      Kinetic: draft.slots?.Kinetic || null,
+      Energy: draft.slots?.Energy || null,
+      Heavy: draft.slots?.Heavy || null,
+    };
+    return {
+      sourceMode: 'loadout',
+      title: `${(draft.className || 'GUARDIAN').toUpperCase()} // LOADOUT PREVIEW`,
+      subtitle: `${draft.title || 'Custom Tactical Loadout'} • Authentic Bungie .tgxm Assembly`,
+      className: draft.className || matchChar?.className || 'Hunter',
+      genderType: Number(matchChar?.genderType ?? 0),
+      subclass: draft.subclass || matchChar?.subclass?.element || 'Solar',
+      slots,
+      weapons,
+      selectedSlot: 'ALL',
+      activeWeaponKey: weapons.Kinetic ? 'Kinetic' : weapons.Energy ? 'Energy' : weapons.Heavy ? 'Heavy' : 'none',
+      previewedShaderHash: null,
+    };
+  }
+
+  // Inventory active character
+  const activeChar = getActiveCharacter() || chars[0];
+  if (!activeChar) return null;
+
+  const equipped = activeChar.equipment || [];
+  const slots = armorOrder.map(slotKey => {
+    const it = equipped.find(i => i.slot === slotKey) || null;
+    return {
+      slotKey,
+      label: slotKey,
+      item: it,
+      itemHash: it?.itemHash || null,
+      overrideStyleItemHash: it?.overrideStyleItemHash || null,
+      shaderHash: it?.shaderHash || null,
+    };
+  });
+  const weapons = {
+    Kinetic: equipped.find(i => i.slot === 'Kinetic') || null,
+    Energy: equipped.find(i => i.slot === 'Energy') || null,
+    Heavy: equipped.find(i => i.slot === 'Heavy') || null,
+  };
+
+  return {
+    sourceMode: 'inventory',
+    title: `${(activeChar.className || 'GUARDIAN').toUpperCase()} 3D INSPECTION`,
+    subtitle: `${state.bungieData?.player?.fullBungieName || 'Guardian'} • ✦ ${activeChar.light || ''} • Live Bungie .tgxm`,
+    className: activeChar.className || 'Hunter',
+    genderType: Number(activeChar.genderType ?? 0),
+    subclass: activeChar.subclass?.element || activeChar.subclass?.name || 'Solar',
+    slots,
+    weapons,
+    selectedSlot: 'ALL',
+    activeWeaponKey: weapons.Kinetic ? 'Kinetic' : weapons.Energy ? 'Energy' : weapons.Heavy ? 'Heavy' : 'none',
+    previewedShaderHash: null,
+  };
+}
+
+function init3DGuardianAndInspectTheatre() {
+  const modalG3D = document.getElementById('modalGuardian3D');
+  const btnCloseG3D = document.getElementById('btnCloseGuardian3D');
+  const btnOpenInv3D = document.getElementById('btnOpenGuardian3DInv');
+  const btnOpenLb3D = document.getElementById('btnOpenGuardian3DLb');
+  const btnMale = document.getElementById('btnG3dBodyMale');
+  const btnFemale = document.getElementById('btnG3dBodyFemale');
+  const slotListEl = document.getElementById('g3dSlotList');
+  const weaponTogglesEl = document.getElementById('g3dWeaponToggles');
+  const canvasHost = document.getElementById('g3dCanvasHost');
+  const loadingOverlay = document.getElementById('g3dLoadingOverlay');
+  const loadingText = document.getElementById('g3dLoadingText');
+  const partialBanner = document.getElementById('g3dPartialBanner');
+  const btnAutoRotate = document.getElementById('btnG3dAutoRotate');
+  const btnAuraToggle = document.getElementById('btnG3dAuraToggle');
+  const shaderTargetLabel = document.getElementById('g3dShaderTargetLabel');
+  const btnRevertEquipped = document.getElementById('btnG3dRevertEquipped');
+  const shaderSearchInput = document.getElementById('g3dShaderSearchInput');
+  const shaderGridTitle = document.getElementById('g3dShaderGridTitle');
+  const shaderGridEl = document.getElementById('g3dShaderGrid');
+
+  if (!modalG3D) return;
+  attachLightDismissFallback(modalG3D);
+
+  const renderG3DSlotsPanel = () => {
+    if (!slotListEl || !g3dContext) return;
+    const isAll = g3dContext.selectedSlot === 'ALL';
+    let html = `
+      <button type="button" class="g3d-slot-item g3d-slot-all ${isAll ? 'active' : ''}" data-slot-target="ALL">
+        <span class="g3d-slot-all-icon">🛡️</span>
+        <div class="g3d-slot-meta">
+          <div class="g3d-slot-name">ALL 5 ARMOR PIECES</div>
+          <div class="g3d-slot-sub">Batch preview shader across full set</div>
+        </div>
+      </button>
+    `;
+
+    for (const sl of g3dContext.slots) {
+      const it = sl.item;
+      const active = g3dContext.selectedSlot === sl.slotKey;
+      const iconUrl = (it?.ornamentIcon || it?.icon)
+        ? `https://www.bungie.net${it.ornamentIcon || it.icon}`
+        : 'icon-192.png';
+      const displayName = it ? (it.ornamentName || it.name) : 'Empty Slot';
+      const shName = it?.shaderName || 'Default Shader';
+      html += `
+        <button type="button" class="g3d-slot-item ${active ? 'active' : ''}" data-slot-target="${escapeHtml(sl.slotKey)}">
+          <img src="${iconUrl}" alt="" class="g3d-slot-thumb">
+          <div class="g3d-slot-meta">
+            <div class="g3d-slot-type">${escapeHtml(sl.slotKey.toUpperCase())}</div>
+            <div class="g3d-slot-name">${escapeHtml(displayName)}</div>
+            <div class="g3d-slot-sub">🎨 ${escapeHtml(shName)}</div>
+          </div>
+        </button>
+      `;
+    }
+
+    const wpn = g3dContext.activeWeaponKey !== 'none' ? g3dContext.weapons[g3dContext.activeWeaponKey] : null;
+    if (wpn) {
+      const active = g3dContext.selectedSlot === 'weapon';
+      const wIcon = (wpn.ornamentIcon || wpn.icon)
+        ? `https://www.bungie.net${wpn.ornamentIcon || wpn.icon}`
+        : 'icon-192.png';
+      html += `
+        <button type="button" class="g3d-slot-item ${active ? 'active' : ''}" data-slot-target="weapon">
+          <img src="${wIcon}" alt="" class="g3d-slot-thumb">
+          <div class="g3d-slot-meta">
+            <div class="g3d-slot-type">SHOWCASE WEAPON (${escapeHtml(g3dContext.activeWeaponKey.toUpperCase())})</div>
+            <div class="g3d-slot-name">${escapeHtml(wpn.ornamentName || wpn.name)}</div>
+            <div class="g3d-slot-sub">🎨 ${escapeHtml(wpn.shaderName || 'Default Shader')}</div>
+          </div>
+        </button>
+      `;
+    }
+
+    slotListEl.innerHTML = html;
+    slotListEl.querySelectorAll('[data-slot-target]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sfx.playChirp();
+        g3dContext.selectedSlot = btn.getAttribute('data-slot-target') || 'ALL';
+        if (shaderTargetLabel) {
+          shaderTargetLabel.textContent = g3dContext.selectedSlot === 'ALL'
+            ? 'TARGET: ALL ARMOR'
+            : `TARGET: ${g3dContext.selectedSlot.toUpperCase()}`;
+        }
+        renderG3DSlotsPanel();
+      });
+    });
+  };
+
+  const renderG3DShaderSwatches = (shaderList) => {
+    if (!shaderGridEl || !g3dContext) return;
+    shaderGridEl.innerHTML = shaderList
+      .map(sh => renderShaderSwatchHtml(sh, g3dContext.previewedShaderHash))
+      .join('');
+
+    shaderGridEl.querySelectorAll('[data-shader-hash]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!guardian3dStage || !g3dContext) return;
+        sfx.playChirp();
+        const sHash = Number(btn.getAttribute('data-shader-hash'));
+        const sName = btn.getAttribute('data-shader-name') || 'Shader';
+        g3dContext.previewedShaderHash = sHash;
+        shaderGridEl.querySelectorAll('[data-shader-hash]').forEach(b =>
+          b.classList.toggle('active', Number(b.getAttribute('data-shader-hash')) === sHash)
+        );
+
+        const targetKeys = g3dContext.selectedSlot === 'ALL'
+          ? ['Helmet', 'Gauntlets', 'Chest Armor', 'Leg Armor', 'Class Armor']
+          : [g3dContext.selectedSlot];
+
+        try {
+          if (loadingText) loadingText.textContent = `Applying ${sName}…`;
+          if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+          await guardian3dStage.applyShaderToSlots(targetKeys, sHash);
+        } catch (err) {
+          console.warn('[3D Shader Apply]', err);
+        } finally {
+          if (loadingOverlay) loadingOverlay.classList.add('hidden');
+        }
+      });
+    });
+  };
+
+  const assembleG3DScene = async () => {
+    if (!g3dContext || !canvasHost) return;
+    if (partialBanner) {
+      partialBanner.classList.add('hidden');
+      partialBanner.textContent = '';
+    }
+    if (loadingText) loadingText.textContent = 'Connecting to Bungie 3D Asset CDN…';
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+
+    if (guardian3dStage) {
+      guardian3dStage.dispose();
+    }
+    guardian3dStage = new Destiny3DStage(canvasHost, {
+      autoRotate: btnAutoRotate ? btnAutoRotate.classList.contains('active') : true,
+    });
+    guardian3dStage.auraEnabled = btnAuraToggle ? btnAuraToggle.classList.contains('active') : true;
+
+    const validArmorSlots = g3dContext.slots.filter(s => s.itemHash || s.overrideStyleItemHash);
+    const showcaseWpn = g3dContext.activeWeaponKey !== 'none'
+      ? g3dContext.weapons[g3dContext.activeWeaponKey]
+      : null;
+
+    try {
+      const { loaded, failed } = await guardian3dStage.loadGuardianAssembly({
+        slots: validArmorSlots,
+        genderType: g3dContext.genderType,
+        subclass: g3dContext.subclass,
+        showcaseWeapon: showcaseWpn,
+        onProgress: (msg) => {
+          if (loadingText) loadingText.textContent = msg;
+        },
+      });
+      if (loaded.length === 0) {
+        if (partialBanner) {
+          partialBanner.textContent = 'No 3D geometry returned from Bungie CDN for these items.';
+          partialBanner.classList.remove('hidden');
+        }
+      } else if (failed.length > 0 && partialBanner) {
+        partialBanner.textContent = `Partial render: unavailable 3D mesh for ${failed.join(', ')}.`;
+        partialBanner.classList.remove('hidden');
+      }
+    } catch (err) {
+      console.error('[3D Guardian Assembly Error]', err);
+      if (partialBanner) {
+        partialBanner.textContent = `3D Renderer Error: ${err.message}`;
+        partialBanner.classList.remove('hidden');
+      }
+    } finally {
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    }
+  };
+
+  const openGuardian3DTheatre = async (sourceMode = 'inventory') => {
+    const ctx = build3DGuardianContext(sourceMode);
+    if (!ctx || !ctx.slots.some(s => s.itemHash)) {
+      showToast('Connect Bungie.net & sync gear first to view your Guardian in 3D!', 'info');
+      return;
+    }
+    sfx.playChirp();
+    g3dContext = ctx;
+
+    const badgeEl = document.getElementById('g3dClassBadge');
+    const titleEl = document.getElementById('g3dTitle');
+    const subEl = document.getElementById('g3dSubtitle');
+    if (badgeEl) badgeEl.textContent = ctx.className.toUpperCase();
+    if (titleEl) titleEl.textContent = ctx.title;
+    if (subEl) subEl.textContent = ctx.subtitle;
+
+    btnMale?.classList.toggle('active', ctx.genderType === 0);
+    btnFemale?.classList.toggle('active', ctx.genderType === 1);
+    if (shaderTargetLabel) shaderTargetLabel.textContent = 'TARGET: ALL ARMOR';
+    if (shaderSearchInput) shaderSearchInput.value = '';
+    if (shaderGridTitle) shaderGridTitle.textContent = 'ICONIC & EQUIPPED SHADERS';
+
+    weaponTogglesEl?.querySelectorAll('[data-wpn-slot]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-wpn-slot') === ctx.activeWeaponKey);
+    });
+    modalG3D.querySelectorAll('.g3d-cam-btn[data-cam]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-cam') === 'full');
+    });
+
+    renderG3DSlotsPanel();
+    renderG3DShaderSwatches(buildCombinedShaderChoices(ctx.slots));
+
+    if (!modalG3D.open) modalG3D.showModal();
+    await assembleG3DScene();
+  };
+
+  btnOpenInv3D?.addEventListener('click', () => openGuardian3DTheatre('inventory'));
+  btnOpenLb3D?.addEventListener('click', () => openGuardian3DTheatre('loadout'));
+  btnCloseG3D?.addEventListener('click', () => modalG3D.close());
+
+  modalG3D.addEventListener('close', () => {
+    if (guardian3dStage) {
+      guardian3dStage.dispose();
+      guardian3dStage = null;
+    }
+  });
+
+  [btnMale, btnFemale].forEach(btn => {
+    btn?.addEventListener('click', async () => {
+      if (!g3dContext) return;
+      const g = Number(btn.getAttribute('data-gender') || 0);
+      if (g3dContext.genderType === g) return;
+      sfx.playChirp();
+      g3dContext.genderType = g;
+      btnMale?.classList.toggle('active', g === 0);
+      btnFemale?.classList.toggle('active', g === 1);
+      await assembleG3DScene();
+    });
+  });
+
+  weaponTogglesEl?.querySelectorAll('[data-wpn-slot]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!g3dContext || !guardian3dStage) return;
+      sfx.playChirp();
+      const key = btn.getAttribute('data-wpn-slot') || 'none';
+      g3dContext.activeWeaponKey = key;
+      weaponTogglesEl.querySelectorAll('[data-wpn-slot]').forEach(b =>
+        b.classList.toggle('active', b === btn)
+      );
+      renderG3DSlotsPanel();
+      const wpn = key !== 'none' ? g3dContext.weapons[key] : null;
+      if (loadingText) loadingText.textContent = wpn ? `Equipping ${wpn.name}…` : 'Hiding weapon…';
+      if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+      try {
+        await guardian3dStage.setShowcaseWeapon(wpn);
+      } finally {
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      }
+    });
+  });
+
+  modalG3D.querySelectorAll('.g3d-cam-btn[data-cam]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.playChirp();
+      const camMode = btn.getAttribute('data-cam');
+      modalG3D.querySelectorAll('.g3d-cam-btn[data-cam]').forEach(b => b.classList.toggle('active', b === btn));
+      guardian3dStage?.setCameraPreset(camMode);
+    });
+  });
+
+  btnAutoRotate?.addEventListener('click', () => {
+    sfx.playChirp();
+    const next = !btnAutoRotate.classList.contains('active');
+    btnAutoRotate.classList.toggle('active', next);
+    guardian3dStage?.setAutoRotate(next);
+  });
+
+  btnAuraToggle?.addEventListener('click', () => {
+    sfx.playChirp();
+    const next = !btnAuraToggle.classList.contains('active');
+    btnAuraToggle.classList.toggle('active', next);
+    guardian3dStage?.setSubclassAura(g3dContext?.subclass || 'default', next);
+  });
+
+  btnRevertEquipped?.addEventListener('click', async () => {
+    if (!guardian3dStage || !g3dContext) return;
+    sfx.playChirp();
+    g3dContext.previewedShaderHash = null;
+    if (loadingText) loadingText.textContent = 'Restoring equipped shaders…';
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+    try {
+      for (const sl of g3dContext.slots) {
+        if (g3dContext.selectedSlot === 'ALL' || g3dContext.selectedSlot === sl.slotKey) {
+          await guardian3dStage.applyShaderToSlot(sl.slotKey, sl.shaderHash || null);
+        }
+      }
+      if (g3dContext.selectedSlot === 'weapon' && g3dContext.activeWeaponKey !== 'none') {
+        const wpn = g3dContext.weapons[g3dContext.activeWeaponKey];
+        await guardian3dStage.applyShaderToSlot('weapon', wpn?.shaderHash || null);
+      }
+      renderG3DShaderSwatches(buildCombinedShaderChoices(g3dContext.slots));
+    } finally {
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    }
+  });
+
+  let g3dShaderSearchTimer = null;
+  shaderSearchInput?.addEventListener('input', () => {
+    clearTimeout(g3dShaderSearchTimer);
+    const q = shaderSearchInput.value.trim();
+    g3dShaderSearchTimer = setTimeout(async () => {
+      if (!q) {
+        if (shaderGridTitle) shaderGridTitle.textContent = 'ICONIC & EQUIPPED SHADERS';
+        renderG3DShaderSwatches(buildCombinedShaderChoices(g3dContext?.slots || []));
+        return;
+      }
+      const found = await searchManifestShaders(q, 48);
+      if (shaderGridTitle) shaderGridTitle.textContent = `SEARCH RESULTS (${found.length})`;
+      renderG3DShaderSwatches(found);
+    }, 260);
+  });
+
+  // =========================================================================
+  // SINGLE-ITEM INSPECT MODAL 2D / 3D VIEW SWITCHER
+  // =========================================================================
+  const btnTab2D = document.getElementById('btnInspectTab2D');
+  const btnTab3D = document.getElementById('btnInspectTab3D');
+  const stage3dWrap = document.getElementById('inspect3DStageWrap');
+  const inspect3DHost = document.getElementById('inspect3DCanvasHost');
+  const inspect3DLoading = document.getElementById('inspect3DLoadingOverlay');
+  const inspect3DLoadingTxt = document.getElementById('inspect3DLoadingText');
+  const inspectShaderGrid = document.getElementById('inspect3DShaderGrid');
+  const inspectShaderSearch = document.getElementById('inspect3DShaderSearch');
+  const btnInspectRotate = document.getElementById('btnInspect3DRotate');
+  const btnInspectResetSh = document.getElementById('btnInspect3DResetShader');
+
+  const renderInspectShaderStrip = (list, activeHash) => {
+    if (!inspectShaderGrid) return;
+    inspectShaderGrid.innerHTML = list.map(sh => renderShaderSwatchHtml(sh, activeHash)).join('');
+    inspectShaderGrid.querySelectorAll('[data-shader-hash]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!inspect3dStage) return;
+        sfx.playChirp();
+        const sHash = Number(btn.getAttribute('data-shader-hash'));
+        inspectShaderGrid.querySelectorAll('[data-shader-hash]').forEach(b =>
+          b.classList.toggle('active', Number(b.getAttribute('data-shader-hash')) === sHash)
+        );
+        await inspect3dStage.applyShaderToSlots(['single'], sHash);
+      });
+    });
+  };
+
+  btnTab2D?.addEventListener('click', () => {
+    sfx.playChirp();
+    btnTab2D.classList.add('active');
+    btnTab3D?.classList.remove('active');
+    stage3dWrap?.classList.add('hidden');
+  });
+
+  btnTab3D?.addEventListener('click', async () => {
+    const item = state.inspectedItem;
+    if (!item || !stage3dWrap || !inspect3DHost) return;
+    sfx.playChirp();
+    btnTab3D.classList.add('active');
+    btnTab2D?.classList.remove('active');
+    stage3dWrap.classList.remove('hidden');
+
+    if (inspect3dStage && inspect3dStage.slotGroups.has('single')) {
+      inspect3dStage.resize();
+      return;
+    }
+
+    if (inspect3DLoadingTxt) inspect3DLoadingTxt.textContent = `Loading 3D ${item.name}…`;
+    if (inspect3DLoading) inspect3DLoading.classList.remove('hidden');
+
+    const initialShaders = buildCombinedShaderChoices([{ slotKey: item.slot || 'Item', item }]);
+    if (inspectShaderSearch) inspectShaderSearch.value = '';
+    renderInspectShaderStrip(initialShaders, item.shaderHash || null);
+
+    try {
+      inspect3dStage?.dispose();
+      inspect3dStage = new Destiny3DStage(inspect3DHost, { autoRotate: true });
+      btnInspectRotate?.classList.add('active');
+      const genderType = Number(getActiveCharacter()?.genderType ?? 0);
+      const ok = await inspect3dStage.loadSingleItem(item, genderType, (msg) => {
+        if (inspect3DLoadingTxt) inspect3DLoadingTxt.textContent = msg;
+      });
+      if (!ok) {
+        inspect3DHost.innerHTML = `<div class="tgxm-empty-msg">No 3D mesh data published by Bungie for ${escapeHtml(item.name)}.</div>`;
+      }
+    } catch (err) {
+      inspect3DHost.innerHTML = `<div class="tgxm-empty-msg">3D load failed: ${escapeHtml(err.message)}</div>`;
+    } finally {
+      if (inspect3DLoading) inspect3DLoading.classList.add('hidden');
+    }
+  });
+
+  btnInspectRotate?.addEventListener('click', () => {
+    sfx.playChirp();
+    const next = !btnInspectRotate.classList.contains('active');
+    btnInspectRotate.classList.toggle('active', next);
+    inspect3dStage?.setAutoRotate(next);
+  });
+
+  btnInspectResetSh?.addEventListener('click', async () => {
+    if (!inspect3dStage || !state.inspectedItem) return;
+    sfx.playChirp();
+    await inspect3dStage.applyShaderToSlots(['single'], state.inspectedItem.shaderHash || null);
+    renderInspectShaderStrip(
+      buildCombinedShaderChoices([{ slotKey: state.inspectedItem.slot || 'Item', item: state.inspectedItem }]),
+      state.inspectedItem.shaderHash || null
+    );
+  });
+
+  let inspectSearchTimer = null;
+  inspectShaderSearch?.addEventListener('input', () => {
+    clearTimeout(inspectSearchTimer);
+    const q = inspectShaderSearch.value.trim();
+    inspectSearchTimer = setTimeout(async () => {
+      if (!q) {
+        const it = state.inspectedItem;
+        renderInspectShaderStrip(
+          buildCombinedShaderChoices(it ? [{ slotKey: it.slot || 'Item', item: it }] : []),
+          it?.shaderHash || null
+        );
+        return;
+      }
+      const found = await searchManifestShaders(q, 32);
+      renderInspectShaderStrip(found, null);
+    }, 260);
+  });
+}

@@ -8,3 +8,4 @@ bin/cloudflared.exe
 .DS_Store
 data/bungie_secrets.json
 data/bungie_manifest*
+data/bungie_gear_assets*

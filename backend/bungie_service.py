@@ -18,6 +18,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 BUNGIE_SECRETS_PATH = os.path.join(DATA_DIR, "bungie_secrets.json")
 MANIFEST_DB_PATH = os.path.join(DATA_DIR, "bungie_manifest.sqlite")
 MANIFEST_META_PATH = os.path.join(DATA_DIR, "bungie_manifest_meta.json")
+GEAR_ASSETS_DB_PATH = os.path.join(DATA_DIR, "bungie_gear_assets.sqlite")
+GEAR_ASSETS_META_PATH = os.path.join(DATA_DIR, "bungie_gear_assets_meta.json")
 
 BUNGIE_API_BASE = "https://www.bungie.net/Platform"
 BUNGIE_OAUTH_AUTHORIZE = "https://www.bungie.net/en/OAuth/Authorize"
@@ -336,6 +338,189 @@ def ensure_manifest_db(api_key: str) -> str:
         _item_mem_cache.clear()
         _loadout_defs_cache.clear()
         return MANIFEST_DB_PATH
+
+
+_gear_assets_lock = threading.Lock()
+_gear_assets_mem_cache: Dict[int, dict] = {}
+_gear_cdn_info: Dict[str, str] = {
+    "Geometry": "/common/destiny2_content/geometry/platform/mobile/geometry",
+    "Texture": "/common/destiny2_content/geometry/platform/mobile/textures",
+    "PlateRegion": "/common/destiny2_content/geometry/platform/mobile/plated_textures",
+    "Gear": "/common/destiny2_content/geometry/gear",
+    "Shader": "/common/destiny2_content/geometry/platform/mobile/shaders",
+}
+
+
+def ensure_gear_assets_db(api_key: str = "") -> str:
+    """Ensures Bungie's official 3D MobileGearAssetDataBases SQLite DB (~7.6MB) is cached locally."""
+    global _gear_cdn_info
+    if os.path.exists(GEAR_ASSETS_DB_PATH) and os.path.getsize(GEAR_ASSETS_DB_PATH) > 1_000_000:
+        try:
+            if time.time() - os.path.getmtime(GEAR_ASSETS_DB_PATH) < 86400:
+                return GEAR_ASSETS_DB_PATH
+        except Exception:
+            return GEAR_ASSETS_DB_PATH
+
+    with _gear_assets_lock:
+        if os.path.exists(GEAR_ASSETS_DB_PATH) and os.path.getsize(GEAR_ASSETS_DB_PATH) > 1_000_000:
+            try:
+                if time.time() - os.path.getmtime(GEAR_ASSETS_DB_PATH) < 86400:
+                    return GEAR_ASSETS_DB_PATH
+            except Exception:
+                return GEAR_ASSETS_DB_PATH
+
+        if not api_key:
+            api_key = get_bungie_credentials().get("api_key", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+        r = requests.get(f"{BUNGIE_API_BASE}/Destiny2/Manifest/", headers=headers, timeout=15)
+        r.raise_for_status()
+        manifest_info = r.json().get("Response", {})
+
+        cdn = manifest_info.get("mobileGearCDN")
+        if isinstance(cdn, dict) and cdn:
+            _gear_cdn_info = cdn
+
+        asset_dbs = manifest_info.get("mobileGearAssetDataBases") or []
+        if not asset_dbs:
+            raise RuntimeError("Bungie Manifest missing mobileGearAssetDataBases.")
+
+        # Prefer highest version (version 2)
+        asset_dbs_sorted = sorted(asset_dbs, key=lambda x: int(x.get("version", 0)))
+        asset_rel_path = asset_dbs_sorted[-1].get("path", "")
+        if not asset_rel_path:
+            raise RuntimeError("Bungie Manifest mobileGearAssetDataBases missing path.")
+
+        if os.path.exists(GEAR_ASSETS_META_PATH) and os.path.exists(GEAR_ASSETS_DB_PATH):
+            try:
+                with open(GEAR_ASSETS_META_PATH, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf)
+                if meta.get("sqlite_path") == asset_rel_path and os.path.getsize(GEAR_ASSETS_DB_PATH) > 1_000_000:
+                    os.utime(GEAR_ASSETS_DB_PATH, None)
+                    return GEAR_ASSETS_DB_PATH
+            except Exception:
+                pass
+
+        zip_tmp = os.path.join(DATA_DIR, "gear_assets_download.zip")
+        db_tmp = os.path.join(DATA_DIR, "bungie_gear_assets_tmp.sqlite")
+
+        with requests.get(f"https://www.bungie.net{asset_rel_path}", stream=True, timeout=45) as dl:
+            dl.raise_for_status()
+            with open(zip_tmp, "wb") as f_out:
+                shutil.copyfileobj(dl.raw, f_out, length=1024 * 1024)
+
+        with zipfile.ZipFile(zip_tmp, "r") as zf:
+            inner_name = zf.namelist()[0]
+            with zf.open(inner_name) as z_in, open(db_tmp, "wb") as db_out:
+                shutil.copyfileobj(z_in, db_out, length=1024 * 1024)
+
+        try:
+            os.remove(zip_tmp)
+        except Exception:
+            pass
+
+        os.replace(db_tmp, GEAR_ASSETS_DB_PATH)
+        with open(GEAR_ASSETS_META_PATH, "w", encoding="utf-8") as mf:
+            json.dump({"sqlite_path": asset_rel_path, "updated_at": int(time.time()), "cdn": _gear_cdn_info}, mf)
+
+        _gear_assets_mem_cache.clear()
+        return GEAR_ASSETS_DB_PATH
+
+
+def resolve_gear_3d_assets(item_hashes: List[int], api_key: str = "") -> dict:
+    """Resolves 3D TGXM geometry, texture plates, and dye JS definitions from DestinyGearAssetsDefinition."""
+    clean_hashes: List[int] = []
+    seen: Set[int] = set()
+    for h in item_hashes or []:
+        try:
+            uh = int(h) & 0xFFFFFFFF
+            if uh and uh not in seen:
+                seen.add(uh)
+                clean_hashes.append(uh)
+        except Exception:
+            continue
+
+    assets_map: Dict[str, dict] = {}
+    missing: List[int] = []
+    for uh in clean_hashes:
+        if uh in _gear_assets_mem_cache:
+            assets_map[str(uh)] = _gear_assets_mem_cache[uh]
+        else:
+            missing.append(uh)
+
+    if missing:
+        db_path = ensure_gear_assets_db(api_key)
+        conn = sqlite3.connect(db_path)
+        try:
+            sids = [_to_sqlite_id(uh) for uh in missing]
+            placeholders = ",".join("?" for _ in sids)
+            rows = conn.execute(
+                f"SELECT id, json FROM DestinyGearAssetsDefinition WHERE id IN ({placeholders})",
+                sids,
+            ).fetchall()
+            for sid, raw_json in rows:
+                uh = _from_sqlite_id(sid)
+                text_json = raw_json.decode("utf-8") if isinstance(raw_json, bytes) else raw_json
+                parsed = json.loads(text_json)
+                _gear_assets_mem_cache[uh] = parsed
+                assets_map[str(uh)] = parsed
+        finally:
+            conn.close()
+
+    return {
+        "cdn": _gear_cdn_info,
+        "baseUrl": "https://www.bungie.net",
+        "assets": assets_map,
+    }
+
+
+_shader_catalog_cache: Optional[List[dict]] = None
+_shader_catalog_lock = threading.Lock()
+
+
+def search_destiny_shaders(query: str = "", limit: int = 36, api_key: str = "") -> List[dict]:
+    """Returns searchable Destiny 2 Shaders (hash, name, icon) from the local Bungie Manifest SQLite."""
+    global _shader_catalog_cache
+    if _shader_catalog_cache is None:
+        with _shader_catalog_lock:
+            if _shader_catalog_cache is None:
+                db_path = ensure_manifest_db(api_key)
+                conn = sqlite3.connect(db_path)
+                catalog: List[dict] = []
+                seen_names: Set[str] = set()
+                try:
+                    rows = conn.execute(
+                        "SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%\"plugCategoryIdentifier\":\"shader\"%'"
+                    ).fetchall()
+                    for (raw_json,) in rows:
+                        try:
+                            obj = json.loads(raw_json.decode("utf-8") if isinstance(raw_json, bytes) else raw_json)
+                            if (obj.get("plug") or {}).get("plugCategoryIdentifier") != "shader":
+                                continue
+                            dp = obj.get("displayProperties") or {}
+                            name = (dp.get("name") or "").strip()
+                            if not name or name.lower() in ("default shader", "empty shader socket"):
+                                continue
+                            key_low = name.lower()
+                            if key_low in seen_names:
+                                continue
+                            seen_names.add(key_low)
+                            catalog.append({
+                                "hash": int(obj.get("hash", 0)),
+                                "name": name,
+                                "icon": dp.get("icon", ""),
+                            })
+                        except Exception:
+                            continue
+                finally:
+                    conn.close()
+                catalog.sort(key=lambda x: x["name"])
+                _shader_catalog_cache = catalog
+
+    q = (query or "").strip().lower()
+    if not q:
+        return _shader_catalog_cache[: max(1, min(limit, 120))]
+    matches = [s for s in _shader_catalog_cache if q in s["name"].lower()]
+    return matches[: max(1, min(limit, 120))]
 
 
 def _slim_item_def(raw: dict) -> dict:
@@ -732,7 +917,7 @@ def _enrich_item(
         slot_name = ALL_GEAR_BUCKETS.get(equip_bucket, "Helmet")
     tier_name = d.get("tierTypeName", "Legendary")
 
-    # Parse sockets (Intrinsic frame, Perks, Masterwork, Mods)
+    # Parse sockets (Intrinsic frame, Perks, Masterwork, Mods, Ornaments, Shaders)
     frame_info = None
     perk_columns: List[List[dict]] = []
     barrel_col_index: Optional[int] = None
@@ -742,11 +927,44 @@ def _enrich_item(
     masterwork_info = None
     mods_list: List[dict] = []
     mod_sockets: List[dict] = []
+    override_style_hash = int(raw_item.get("overrideStyleItemHash") or 0)
+    ornament_name = ""
+    ornament_icon = ""
+    shader_hash = 0
+    shader_name = ""
+    shader_icon = ""
+
+    if override_style_hash and override_style_hash in defs:
+        odef = defs[override_style_hash]
+        ornament_name = odef.get("name", "")
+        ornament_icon = odef.get("icon", "")
 
     item_sockets = sockets_map.get(instance_id, {}).get("sockets", []) if instance_id else []
     item_reusable = reusable_map.get(instance_id, {}).get("plugs", {}) if instance_id else {}
     def_socket_entries = d.get("socketEntries", []) or []
     seen_stat_mod_socket = False
+
+    # Scan sockets for active Shader & Ornament plugs
+    for sk_cos in item_sockets:
+        ph_cos = sk_cos.get("plugHash")
+        if not ph_cos:
+            continue
+        pdef_cos = defs.get(int(ph_cos))
+        if not pdef_cos or not pdef_cos.get("name"):
+            continue
+        pcat_cos = (pdef_cos.get("plugCategoryIdentifier") or "").lower()
+        pname_cos = pdef_cos["name"]
+        pname_cos_low = pname_cos.lower()
+        if "shader" in pcat_cos and "default" not in pname_cos_low and "empty" not in pname_cos_low:
+            if not shader_hash:
+                shader_hash = int(ph_cos)
+                shader_name = pname_cos
+                shader_icon = pdef_cos.get("icon", "")
+        elif ("skins" in pcat_cos or "ornament" in pcat_cos) and "default" not in pname_cos_low and "empty" not in pname_cos_low:
+            if not override_style_hash:
+                override_style_hash = int(ph_cos)
+                ornament_name = pname_cos
+                ornament_icon = pdef_cos.get("icon", "")
 
     if item_sockets and d.get("socketCategories"):
         for sc in d["socketCategories"]:
@@ -1004,6 +1222,12 @@ def _enrich_item(
         "stats": ordered_stats,
         "totalStats": total_armor_stats if category == "Armor" else 0,
         "gearTier": gear_tier,
+        "overrideStyleItemHash": override_style_hash,
+        "ornamentName": ornament_name,
+        "ornamentIcon": ornament_icon,
+        "shaderHash": shader_hash,
+        "shaderName": shader_name,
+        "shaderIcon": shader_icon,
     }
 
 
@@ -1438,6 +1662,9 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             ih = it.get("itemHash")
             if ih:
                 all_hashes.add(int(ih))
+            osh = it.get("overrideStyleItemHash")
+            if osh:
+                all_hashes.add(int(osh))
             iid = str(it.get("itemInstanceId", ""))
             if iid:
                 for sk in sockets_map.get(iid, {}).get("sockets", []):
@@ -1689,6 +1916,8 @@ def fetch_guardian_inventory(access_token: str) -> dict:
             "characterId": cid,
             "classType": c_type,
             "className": c_name,
+            "genderType": int(cinfo.get("genderType", 0)),
+            "raceType": int(cinfo.get("raceType", 0)),
             "light": int(cinfo.get("light", 0)),
             "emblemPath": cinfo.get("emblemPath", ""),
             "emblemBackgroundPath": cinfo.get("emblemBackgroundPath", ""),

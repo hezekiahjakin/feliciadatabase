@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261114_v39">
+  <link rel="stylesheet" href="styles.css?v=20261114_v40">
 </head>
 <body class="theme-vanguard">
 
@@ -133,6 +133,9 @@
                 <span class="inv-platform-tag" id="invPlatformTag">Destiny 2</span>
               </div>
               <div class="inv-account-actions">
+                <button type="button" class="btn-tactical btn-3d-launch btn-sm" id="btnOpenGuardian3DInv" title="Open In-Game 3D Guardian Showcase &amp; Shader Studio">
+                  🪩 3D Guardian
+                </button>
                 <button type="button" class="btn-tactical btn-primary btn-sm" id="btnOpenDimLoadoutBuilder" title="Open DIM-Style Tactical Loadout Builder & Equipper">
                   🛠️ Loadout Builder
                 </button>
@@ -558,6 +561,9 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
             </div>
           </div>
           <div class="lb-page-header-nav">
+            <button type="button" class="btn-tactical btn-3d-launch btn-sm" id="btnOpenGuardian3DLb" title="Preview this Loadout on a 3D Guardian &amp; Swap Shaders">
+              🪩 3D Guardian
+            </button>
             <button type="button" class="btn-tactical btn-secondary btn-sm" id="btnLbNewBlankBuild" title="Start a fresh loadout for the selected Guardian">
               + New Loadout
             </button>
@@ -1412,6 +1418,34 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
 
       <div class="modal-body inspect-modal-body">
 
+        <!-- VIEW MODE TABS: 2D TELEMETRY vs 3D MODEL & SHADERS -->
+        <div class="inspect-view-tabs" id="inspectViewTabs">
+          <button type="button" class="inspect-tab-btn active" id="btnInspectTab2D">📋 2D Telemetry</button>
+          <button type="button" class="inspect-tab-btn" id="btnInspectTab3D">🪩 3D Model &amp; Shaders</button>
+        </div>
+
+        <!-- 3D ITEM VIEWPORT STAGE (LAZY-RENDERED ON CLICKING 3D TAB) -->
+        <div class="inspect-3d-stage-wrap hidden" id="inspect3DStageWrap">
+          <div class="inspect-3d-viewport">
+            <div class="tgxm-canvas-host" id="inspect3DCanvasHost"></div>
+            <div class="tgxm-loading-overlay hidden" id="inspect3DLoadingOverlay">
+              <div class="spinner-ring"></div>
+              <span id="inspect3DLoadingText">Initializing Bungie 3D Engine…</span>
+            </div>
+            <div class="inspect-3d-controls-bar">
+              <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnInspect3DRotate" title="Toggle Auto-Rotate">⟳ Auto-Rotate</button>
+              <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnInspect3DResetShader" title="Revert to Equipped Shader">↺ Equipped Shader</button>
+            </div>
+          </div>
+          <div class="inspect-3d-shader-strip">
+            <div class="inspect-3d-shader-head">
+              <span class="shader-strip-label">SHADER PREVIEW</span>
+              <input type="search" class="tactical-input shader-mini-search" id="inspect3DShaderSearch" placeholder="Search any D2 shader…">
+            </div>
+            <div class="shader-swatch-scroller" id="inspect3DShaderGrid"></div>
+          </div>
+        </div>
+
         <!-- ACTION BAR: SEND TO HUNTER / WARLOCK / TITAN / VAULT + 4TH BUTTON: ASK F.E.L.I.C.I.A. -->
         <div class="inspect-actions-section">
           <div class="inspect-section-label">TRANSFER &amp; TACTICAL ACTIONS</div>
@@ -1641,6 +1675,79 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=20261114_v39"></script>
+  <!-- GUARDIAN 3D IN-GAME INSPECTION THEATRE & SHADER STUDIO MODAL -->
+  <dialog class="hud-modal modal-guardian-3d" id="modalGuardian3D">
+    <div class="modal-card guardian-3d-card">
+      <div class="guardian-3d-header">
+        <div class="guardian-3d-title-block">
+          <span class="guardian-3d-badge" id="g3dClassBadge">HUNTER</span>
+          <div>
+            <h3 class="guardian-3d-title" id="g3dTitle">GUARDIAN 3D INSPECTION</h3>
+            <div class="guardian-3d-subtitle" id="g3dSubtitle">Live Bungie .tgxm WebGL Renderer • Orbit / Zoom / Shader Studio</div>
+          </div>
+        </div>
+        <div class="guardian-3d-header-controls">
+          <div class="g3d-segmented" title="Body Type Geometry">
+            <button type="button" class="g3d-seg-btn active" id="btnG3dBodyMale" data-gender="0">Type A</button>
+            <button type="button" class="g3d-seg-btn" id="btnG3dBodyFemale" data-gender="1">Type B</button>
+          </div>
+          <button type="button" class="btn-modal-close" id="btnCloseGuardian3D" aria-label="Close 3D Guardian viewer">&times;</button>
+        </div>
+      </div>
+
+      <div class="guardian-3d-workspace">
+        <!-- LEFT PANEL: EQUIPPED ARMOR & WEAPON SHOWCASE SLOTS -->
+        <aside class="g3d-slots-panel">
+          <div class="g3d-panel-label">EQUIPPED GEAR SLOTS</div>
+          <div class="g3d-slot-list" id="g3dSlotList"></div>
+
+          <div class="g3d-panel-label" style="margin-top:12px;">HELD SHOWCASE WEAPON</div>
+          <div class="g3d-weapon-toggle-row" id="g3dWeaponToggles">
+            <button type="button" class="g3d-wpn-btn active" data-wpn-slot="Kinetic">Kinetic</button>
+            <button type="button" class="g3d-wpn-btn" data-wpn-slot="Energy">Energy</button>
+            <button type="button" class="g3d-wpn-btn" data-wpn-slot="Heavy">Heavy</button>
+            <button type="button" class="g3d-wpn-btn" data-wpn-slot="none">Hide</button>
+          </div>
+        </aside>
+
+        <!-- CENTER PANEL: 3D WEBGL VIEWPORT -->
+        <section class="g3d-viewport-panel">
+          <div class="tgxm-canvas-host g3d-canvas-host" id="g3dCanvasHost"></div>
+          <div class="tgxm-loading-overlay hidden" id="g3dLoadingOverlay">
+            <div class="spinner-ring"></div>
+            <span id="g3dLoadingText">Assembling 3D Guardian from Bungie CDN…</span>
+          </div>
+          <div class="g3d-partial-banner hidden" id="g3dPartialBanner"></div>
+
+          <div class="g3d-camera-hud">
+            <div class="g3d-cam-group">
+              <button type="button" class="g3d-cam-btn active" data-cam="full">Full Body</button>
+              <button type="button" class="g3d-cam-btn" data-cam="upper">Upper</button>
+              <button type="button" class="g3d-cam-btn" data-cam="weapon">Weapon</button>
+            </div>
+            <div class="g3d-cam-group">
+              <button type="button" class="g3d-cam-btn active" id="btnG3dAutoRotate">⟳ Rotate</button>
+              <button type="button" class="g3d-cam-btn active" id="btnG3dAuraToggle">✦ Aura</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT PANEL: LIVE SHADER PREVIEW STUDIO -->
+        <aside class="g3d-shaders-panel">
+          <div class="g3d-shader-target-row">
+            <span class="g3d-panel-label" id="g3dShaderTargetLabel">TARGET: ALL ARMOR</span>
+            <button type="button" class="btn-tactical btn-secondary btn-xs" id="btnG3dRevertEquipped">↺ Equipped</button>
+          </div>
+
+          <input type="search" class="tactical-input g3d-shader-search" id="g3dShaderSearchInput" placeholder="Search all Destiny 2 shaders…">
+
+          <div class="g3d-shader-section-title" id="g3dShaderGridTitle">ICONIC &amp; EQUIPPED SHADERS</div>
+          <div class="g3d-shader-grid" id="g3dShaderGrid"></div>
+        </aside>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=20261114_v40"></script>
 </body>
 </html>
