@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v48';
+} from './tgxm-viewer.js?v=20261115_v49';
 
 // Application State
 const state = {
@@ -99,6 +99,29 @@ const ACTIVITY_INQUIRIES = {
     'Scout Rifle Bias'
   ]
 };
+
+/* ==========================================================================
+   TACTICAL TOAST NOTIFICATIONS
+   ========================================================================== */
+function showToast(message, type = 'info', durationMs = 3800) {
+  let container = document.getElementById('feliciaToastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'feliciaToastContainer';
+    container.className = 'felicia-toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `felicia-toast ${type === 'error' ? 'is-error' : 'is-info'}`;
+  toast.textContent = String(message || '');
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+  setTimeout(() => {
+    toast.classList.remove('is-visible');
+    setTimeout(() => toast.remove(), 260);
+  }, durationMs);
+}
 
 /* ==========================================================================
    WEB AUDIO SYNTHESIZER (TACTICAL GHOST CHIRPS & SFX)
