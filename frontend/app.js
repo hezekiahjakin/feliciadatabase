@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v47';
+} from './tgxm-viewer.js?v=20261115_v48';
 
 // Application State
 const state = {
