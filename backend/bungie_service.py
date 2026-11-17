@@ -844,7 +844,17 @@ def _bungie_post(path: str, payload: dict, api_key: str, access_token: str) -> d
     return data.get("Response", {})
 
 
+_membership_mem_cache: Dict[str, Tuple[float, dict]] = {}
+
+
 def get_active_destiny_membership(api_key: str, access_token: str) -> dict:
+    tok_key = hashlib.sha256((access_token or "").encode("utf-8")).hexdigest() if access_token else ""
+    now_ts = time.time()
+    if tok_key and tok_key in _membership_mem_cache:
+        cached_at, cached_val = _membership_mem_cache[tok_key]
+        if now_ts - cached_at < 3600:
+            return dict(cached_val)
+
     mem_data = _bungie_get("/User/GetMembershipsForCurrentUser/", api_key, access_token)
     memberships = mem_data.get("destinyMemberships", [])
     if not memberships:
@@ -864,7 +874,7 @@ def get_active_destiny_membership(api_key: str, access_token: str) -> dict:
     global_code = chosen.get("bungieGlobalDisplayNameCode")
     full_name = f"{global_name}#{global_code:04d}" if isinstance(global_code, int) else str(global_name)
 
-    return {
+    result = {
         "membershipType": int(chosen["membershipType"]),
         "destinyMembershipId": str(chosen["membershipId"]),
         "displayName": global_name,
@@ -872,6 +882,11 @@ def get_active_destiny_membership(api_key: str, access_token: str) -> dict:
         "platformName": PLATFORM_NAMES.get(int(chosen["membershipType"]), "Destiny 2"),
         "avatar": bnet_user.get("profilePicturePath", ""),
     }
+    if tok_key:
+        if len(_membership_mem_cache) > 256:
+            _membership_mem_cache.clear()
+        _membership_mem_cache[tok_key] = (now_ts, result)
+    return result
 
 
 def _enrich_item(

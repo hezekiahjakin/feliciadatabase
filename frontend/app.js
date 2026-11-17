@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261115_v49';
+} from './tgxm-viewer.js?v=20261117_v50';
 
 // Application State
 const state = {
@@ -1817,6 +1817,7 @@ function syncMyGodRollsButtonVisibility() {
 function disconnectBungieAccount() {
   sfx.playChirp();
   saveBungieSession(null);
+  try { localStorage.removeItem(BUNGIE_INV_CACHE_KEY); } catch (_) {}
   state.bungieData = null;
   state.activeInventoryView = null;
   state.loadoutsDrawerOpen = {};
@@ -1866,86 +1867,165 @@ async function fetchBungieServerConfigStatus() {
   } catch (e) {}
 }
 
+const BUNGIE_INV_CACHE_KEY = 'felicia_bungie_inventory_cache_v1';
+let _inventorySyncPromise = null;
+let _lastInventorySyncAt = 0;
+
+function applyBungieInventoryData(data, { fromCache = false } = {}) {
+  if (!data) return;
+  state.bungieData = data;
+  state.dismantleSelectionInitialized = false;
+  if (!state.dismantleTargetCharId && data.characters?.[0]?.characterId) {
+    state.dismantleTargetCharId = data.characters[0].characterId;
+  }
+  if (!state.activeInventoryView) {
+    state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+  } else if (
+    state.activeInventoryView !== 'vault' &&
+    !(data.characters || []).some(c => c.characterId === state.activeInventoryView)
+  ) {
+    state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+  }
+
+  updateBungieAuthUI();
+  renderInventoryHeaderAndSwitcher();
+  renderInventoryStage();
+
+  if (activeLoadoutBuilderState) {
+    const hadNoGear = !Object.values(activeLoadoutBuilderState.slots || {}).some(Boolean);
+    if (hadNoGear) {
+      activeLoadoutBuilderState = assembleLoadoutFromBlueprint(activeLoadoutBuilderState);
+    }
+    renderLoadoutBuilderWorkspace();
+  } else if (state.currentTab === 'tab-loadout-builder') {
+    openLoadoutBuilderModal(null, false);
+  }
+
+  if (!fromCache) {
+    try {
+      localStorage.setItem(BUNGIE_INV_CACHE_KEY, JSON.stringify({
+        cachedAt: Date.now(),
+        data,
+      }));
+    } catch (_) {}
+  }
+}
+
+function hydrateCachedBungieInventory() {
+  if (state.bungieData || !state.bungieSession?.access_token) return false;
+  try {
+    const raw = localStorage.getItem(BUNGIE_INV_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.data?.characters) return false;
+    applyBungieInventoryData(parsed.data, { fromCache: true });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function loadBungieInventory(silent = false) {
   if (!state.bungieSession || !state.bungieSession.access_token) {
     updateBungieAuthUI();
     return;
   }
 
+  if (!silent && !state.bungieData) {
+    const hydrated = hydrateCachedBungieInventory();
+    if (hydrated) silent = true;
+  }
+
+  if (_inventorySyncPromise) {
+    return _inventorySyncPromise;
+  }
+
   updateBungieAuthUI();
   const loadingEl = document.getElementById('invLoadingState');
   const stageEl = document.getElementById('invStage');
+  const syncBtn = document.getElementById('btnSyncBungieInv');
 
   if (!silent) {
     if (loadingEl) loadingEl.classList.remove('hidden');
     if (stageEl) stageEl.innerHTML = '';
+  } else if (syncBtn) {
+    syncBtn.dataset.prevText = syncBtn.dataset.prevText || syncBtn.textContent;
+    syncBtn.textContent = '↻ Syncing…';
   }
 
-  try {
-    const res = await fetch('/api/bungie/inventory', {
-      headers: {
-        'Authorization': `Bearer ${state.bungieSession.access_token}`,
-        'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+  _inventorySyncPromise = (async () => {
+    try {
+      const res = await fetch('/api/bungie/inventory', {
+        headers: {
+          'Authorization': `Bearer ${state.bungieSession.access_token}`,
+          'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
+        }
+      });
+
+      if (res.status === 401) {
+        disconnectBungieAccount();
+        return;
       }
-    });
 
-    if (res.status === 401) {
-      disconnectBungieAccount();
-      return;
-    }
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || 'Could not load Bungie inventory.');
-    }
-
-    if (data.refreshed_session) {
-      saveBungieSession(data.refreshed_session);
-    }
-
-    state.bungieData = data;
-    state.dismantleSelectionInitialized = false;
-    if (!state.dismantleTargetCharId && data.characters?.[0]?.characterId) {
-      state.dismantleTargetCharId = data.characters[0].characterId;
-    }
-    if (!state.activeInventoryView) {
-      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
-    } else if (
-      state.activeInventoryView !== 'vault' &&
-      !(data.characters || []).some(c => c.characterId === state.activeInventoryView)
-    ) {
-      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
-    }
-
-    updateBungieAuthUI();
-    renderInventoryHeaderAndSwitcher();
-    renderInventoryStage();
-
-    if (activeLoadoutBuilderState) {
-      const hadNoGear = !Object.values(activeLoadoutBuilderState.slots || {}).some(Boolean);
-      if (hadNoGear) {
-        activeLoadoutBuilderState = assembleLoadoutFromBlueprint(activeLoadoutBuilderState);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Could not load Bungie inventory.');
       }
-      renderLoadoutBuilderWorkspace();
-    } else if (state.currentTab === 'tab-loadout-builder') {
-      openLoadoutBuilderModal(null, false);
+
+      if (data.refreshed_session) {
+        saveBungieSession(data.refreshed_session);
+      }
+
+      _lastInventorySyncAt = Date.now();
+      applyBungieInventoryData(data, { fromCache: false });
+    } catch (err) {
+      console.error('[Bungie Inventory Error]', err);
+      if (!silent || !state.bungieData) {
+        if (stageEl) {
+          stageEl.innerHTML = `
+            <div class="vault-section-block" style="text-align:center; padding:34px;">
+              <h3 style="font-family:var(--font-display); color:#F87171; margin-bottom:8px;">TELEMETRY SYNC INTERRUPTED</h3>
+              <p style="color:#CBD5E1; margin-bottom:14px;">${escapeHtml(err.message)}</p>
+              <button type="button" class="btn-tactical btn-primary" id="btnRetryInvSync">Retry Sync</button>
+            </div>
+          `;
+          document.getElementById('btnRetryInvSync')?.addEventListener('click', () => loadBungieInventory(false));
+        }
+      }
+    } finally {
+      _inventorySyncPromise = null;
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (syncBtn && syncBtn.dataset.prevText) {
+        syncBtn.textContent = syncBtn.dataset.prevText;
+      }
     }
-  } catch (err) {
-    console.error('[Bungie Inventory Error]', err);
-    if (stageEl) {
-      stageEl.innerHTML = `
-        <div class="vault-section-block" style="text-align:center; padding:34px;">
-          <h3 style="font-family:var(--font-display); color:#F87171; margin-bottom:8px;">TELEMETRY SYNC INTERRUPTED</h3>
-          <p style="color:#CBD5E1; margin-bottom:14px;">${escapeHtml(err.message)}</p>
-          <button type="button" class="btn-tactical btn-primary" id="btnRetryInvSync">Retry Sync</button>
-        </div>
-      `;
-      document.getElementById('btnRetryInvSync')?.addEventListener('click', () => loadBungieInventory(false));
-    }
-  } finally {
-    if (loadingEl) loadingEl.classList.add('hidden');
-  }
+  })();
+
+  return _inventorySyncPromise;
 }
+
+// Auto-sync silently when returning to the browser tab or every 30s while active
+(function setupAutoInventorySync() {
+  const AUTO_SYNC_COOLDOWN_MS = 8000;
+  const triggerSilentSyncIfReady = () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.bungieSession?.access_token) return;
+    if (Date.now() - _lastInventorySyncAt < AUTO_SYNC_COOLDOWN_MS) return;
+    loadBungieInventory(true);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      triggerSilentSyncIfReady();
+    }
+  });
+  window.addEventListener('focus', triggerSilentSyncIfReady);
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && state.bungieSession?.access_token) {
+      loadBungieInventory(true);
+    }
+  }, 30000);
+})();
 
 function renderInventoryHeaderAndSwitcher() {
   const data = state.bungieData;
