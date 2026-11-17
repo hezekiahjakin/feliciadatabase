@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v53';
+} from './tgxm-viewer.js?v=20261117_v54';
 
 // Application State
 const state = {
@@ -124,7 +124,7 @@ function showToast(message, type = 'info', durationMs = 3800) {
 }
 
 /* ==========================================================================
-   DESTINY 2 AUDIO ENGINE (REAL .D2 HOVER / EQUIP / INSPECT SAMPLES)
+   DESTINY 2 AUDIO ENGINE (REAL .D2 HOVER / EQUIP / INSPECT / ACTION SFX)
    ========================================================================== */
 class GhostAudioEngine {
   constructor() {
@@ -133,10 +133,15 @@ class GhostAudioEngine {
     this.decodedBuffers = {};
     this.decoding = {};
     this.lastHoverAt = 0;
+    this.suppressHoverUntil = 0;
     this.urls = {
-      hover: './sfx/hover.wav?v=20261117_v53',
-      equip: './sfx/equip.wav?v=20261117_v53',
-      inspect: './sfx/inspect.wav?v=20261117_v53',
+      hover: './sfx/hover.wav?v=20261117_v54',
+      equip: './sfx/equip.wav?v=20261117_v54',
+      inspect: './sfx/inspect.wav?v=20261117_v54',
+      characterSelect: './sfx/character_select.m4a?v=20261117_v54',
+      ghostScan: './sfx/ghost_scan.m4a?v=20261117_v54',
+      revive: './sfx/revive.m4a?v=20261117_v54',
+      crucibleKill: './sfx/crucible_kill.m4a?v=20261117_v54',
     };
     this._preloadRaw();
   }
@@ -193,7 +198,7 @@ class GhostAudioEngine {
     return this.decoding[key];
   }
 
-  async _playSample(key, volume = 0.65) {
+  async _playSample(key, volume = 0.25) {
     if (!state.soundEnabled) return;
     this.init();
     if (!this.ctx) return;
@@ -213,30 +218,55 @@ class GhostAudioEngine {
     } catch (_) {}
   }
 
-  playHover(force = false, volume = 0.42) {
+  playHover(force = false, volume = 0.14) {
     if (!state.soundEnabled) return;
     const now = performance.now();
-    if (!force && now - this.lastHoverAt < 50) return;
+    if (!force && now < this.suppressHoverUntil) return;
+    if (!force && now - this.lastHoverAt < 75) return;
     this.lastHoverAt = now;
     this._playSample('hover', volume);
   }
 
   playClick() {
-    this.playHover(true, 0.5);
+    const now = performance.now();
+    if (now < this.suppressHoverUntil) return;
+    this.lastHoverAt = now;
+    this.suppressHoverUntil = now + 90;
+    this._playSample('hover', 0.18);
   }
 
   playEquip() {
-    this._playSample('equip', 0.85);
+    this.suppressHoverUntil = performance.now() + 260;
+    this._playSample('equip', 0.34);
   }
 
   playInspect() {
-    this._playSample('inspect', 0.72);
+    this.suppressHoverUntil = performance.now() + 260;
+    this._playSample('inspect', 0.28);
   }
 
-  // Legacy method aliases mapped to Destiny 2 SFX (or silenced)
-  playChirp() {
-    this.playHover(false, 0.42);
+  playCharacterSelect() {
+    this.suppressHoverUntil = performance.now() + 300;
+    this._playSample('characterSelect', 0.28);
   }
+
+  playGhostScan() {
+    this.suppressHoverUntil = performance.now() + 300;
+    this._playSample('ghostScan', 0.28);
+  }
+
+  playRevive() {
+    this.suppressHoverUntil = performance.now() + 350;
+    this._playSample('revive', 0.26);
+  }
+
+  playCrucibleKill() {
+    this.suppressHoverUntil = performance.now() + 300;
+    this._playSample('crucibleKill', 0.24);
+  }
+
+  // Legacy method aliases silenced on pointer clicks to prevent double-play slapback echo
+  playChirp() {}
 
   playTransmit() {}
 
@@ -250,7 +280,15 @@ const sfx = new GhostAudioEngine();
 if (typeof document !== 'undefined') {
   let lastHoveredEl = null;
   const HOVER_SEL = 'button, [role="button"], .gear-card, .switcher-card, .nav-tab, .cat-pill, .filter-pill, .g3d-slot-item, .shader-tile-btn, .lb-gear-chip, .friend-card, .wiki-card, .emblem-opt-card, a.btn-card-action';
-  const CLICK_SEL = 'button, [role="button"], .switcher-card, .nav-tab, .cat-pill, .filter-pill, .g3d-slot-item, .shader-tile-btn, .emblem-opt-card, a.btn-card-action';
+  const CLICK_SEL = 'button, [role="button"], .nav-tab, .cat-pill, .filter-pill, .g3d-slot-item, .shader-tile-btn, .emblem-opt-card, a.btn-card-action';
+  const SPECIAL_CLICK_IDS = new Set([
+    'btnRefreshInventory',
+    'btnScanGodRolls',
+    'btnLbAutoOptimize',
+    'btnLbSaveCustom',
+    'btnUnlockSelectedTrash',
+    'btnPullSelectedTrash',
+  ]);
 
   document.addEventListener('pointerover', (e) => {
     const target = e.target?.closest?.(HOVER_SEL);
@@ -259,15 +297,17 @@ if (typeof document !== 'undefined') {
       return;
     }
     lastHoveredEl = target;
-    sfx.playHover(false, 0.38);
+    sfx.playHover(false, 0.14);
   }, { passive: true });
 
   document.addEventListener('pointerdown', (e) => {
     sfx.init();
     const btnTarget = e.target?.closest?.(CLICK_SEL);
-    if (btnTarget && !btnTarget.disabled) {
-      sfx.playClick();
-    }
+    if (!btnTarget || btnTarget.disabled) return;
+    if (SPECIAL_CLICK_IDS.has(btnTarget.id)) return;
+    if (btnTarget.classList?.contains('switcher-card') && !btnTarget.classList?.contains('vault-card')) return;
+    if (btnTarget.dataset?.invfilter === 'pvp') return;
+    sfx.playClick();
   }, true);
 }
 
@@ -2109,7 +2149,7 @@ function renderInventoryHeaderAndSwitcher() {
       <div class="switcher-light">✦ ${ch.light || ''}</div>
     `;
     btn.addEventListener('click', () => {
-      sfx.playChirp();
+      sfx.playCharacterSelect();
       state.activeInventoryView = ch.characterId;
       renderInventoryHeaderAndSwitcher();
       renderInventoryStage();
@@ -3086,6 +3126,7 @@ async function triggerAskFeliciaOnItem(item) {
   panel.classList.remove('hidden');
   if (pillEl) pillEl.classList.add('hidden');
   if (askBtn) askBtn.disabled = true;
+  sfx.playGhostScan();
 
   bodyEl.innerHTML = `
     <div style="display:flex; align-items:center; gap:10px; color:var(--vanguard-amber); font-family:var(--font-tactical);">
@@ -6939,7 +6980,7 @@ function collectInventoryAndVaultGodRolls() {
 
 function openGodRollScannerModal() {
   if (!state.bungieData) return;
-  sfx.playTransmit();
+  sfx.playGhostScan();
   markGodRollsScanned();
   state.scannerFilter = 'all';
 
@@ -7528,7 +7569,7 @@ async function lockAllScannedGodRolls() {
       }
     });
 
-    sfx.playReceive();
+    sfx.playEquip();
     renderScannerModalContent();
     renderInventoryStage();
 
@@ -7626,7 +7667,7 @@ async function executeDismantlePrep(unlockOnly = false, explicitEntries = null) 
       renderInventoryStage();
     }
 
-    sfx.playReceive();
+    sfx.playCrucibleKill();
     renderScannerModalContent();
 
     if (feedbackEl) {
@@ -8877,7 +8918,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnRefreshInventory) {
     btnRefreshInventory.addEventListener('click', () => {
-      sfx.playChirp();
+      sfx.playGhostScan();
       loadBungieInventory(false);
     });
   }
@@ -8912,10 +8953,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(pill => {
     pill.addEventListener('click', () => {
-      sfx.playChirp();
+      const fVal = pill.dataset.invfilter || 'all';
+      if (fVal === 'pvp') {
+        sfx.playCrucibleKill();
+      } else {
+        sfx.playChirp();
+      }
       document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
-      state.invFilter.slot = pill.dataset.invfilter || 'all';
+      state.invFilter.slot = fVal;
       renderInventoryStage();
     });
   });
@@ -9198,7 +9244,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   lbClassSelect?.addEventListener('change', () => {
-    sfx.playChirp();
+    sfx.playCharacterSelect();
     handleLbParameterChange(true);
   });
 
@@ -9208,13 +9254,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   lbModeSelect?.addEventListener('change', () => {
-    sfx.playChirp();
+    if (lbModeSelect.value === 'PVP') {
+      sfx.playCrucibleKill();
+    } else {
+      sfx.playChirp();
+    }
     handleLbParameterChange(true);
   });
 
   if (btnLbAutoOptimize) {
     btnLbAutoOptimize.addEventListener('click', () => {
-      sfx.playReceive();
+      sfx.playGhostScan();
       handleLbParameterChange(true);
       showToast(`Auto-optimized gear for ${activeLoadoutBuilderState?.subclass} ${activeLoadoutBuilderState?.className} (${activeLoadoutBuilderState?.mode})!`, 'info');
     });
@@ -9247,7 +9297,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnLbSaveCustom) {
     btnLbSaveCustom.addEventListener('click', () => {
       if (!activeLoadoutBuilderState) return;
-      sfx.playReceive();
+      sfx.playRevive();
       activeLoadoutBuilderState.title = lbLoadoutNameInput?.value || activeLoadoutBuilderState.title;
       saveCustomLoadoutToStorage(activeLoadoutBuilderState);
       if (btnLbDeleteCustom) btnLbDeleteCustom.classList.remove('hidden');
@@ -9350,7 +9400,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('message', (ev) => {
     if (ev.data && ev.data.type === 'BUNGIE_AUTH_SUCCESS' && ev.data.session) {
       saveBungieSession(ev.data.session);
-      sfx.playReceive();
+      sfx.playRevive();
       switchTabDirect('tab-inventory');
       loadBungieInventory(false);
       checkAndShowFieldAdvisory(false);
