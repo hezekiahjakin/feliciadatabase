@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v54';
+} from './tgxm-viewer.js?v=20261117_v55';
 
 // Application State
 const state = {
@@ -135,13 +135,13 @@ class GhostAudioEngine {
     this.lastHoverAt = 0;
     this.suppressHoverUntil = 0;
     this.urls = {
-      hover: './sfx/hover.wav?v=20261117_v54',
-      equip: './sfx/equip.wav?v=20261117_v54',
-      inspect: './sfx/inspect.wav?v=20261117_v54',
-      characterSelect: './sfx/character_select.m4a?v=20261117_v54',
-      ghostScan: './sfx/ghost_scan.m4a?v=20261117_v54',
-      revive: './sfx/revive.m4a?v=20261117_v54',
-      crucibleKill: './sfx/crucible_kill.m4a?v=20261117_v54',
+      hover: './sfx/hover.wav?v=20261117_v55',
+      equip: './sfx/equip.wav?v=20261117_v55',
+      inspect: './sfx/inspect.wav?v=20261117_v55',
+      characterSelect: './sfx/character_select.m4a?v=20261117_v55',
+      ghostScan: './sfx/ghost_scan.m4a?v=20261117_v55',
+      revive: './sfx/revive.m4a?v=20261117_v55',
+      crucibleKill: './sfx/crucible_kill.m4a?v=20261117_v55',
     };
     this._preloadRaw();
   }
@@ -231,7 +231,7 @@ class GhostAudioEngine {
     const now = performance.now();
     if (now < this.suppressHoverUntil) return;
     this.lastHoverAt = now;
-    this.suppressHoverUntil = now + 90;
+    this.suppressHoverUntil = now + 260;
     this._playSample('hover', 0.18);
   }
 
