@@ -211,7 +211,9 @@ RESPONSE GUIDELINES FOR BUILDS & PERSONALIZED ARSENAL ADVICE:
      - For PVP: Prioritize 10+ Health (pushing 150–200) for maximum flinch resistance and rapid shield recovery!
 
 - CONVERSATIONAL FREEDOM & PERSISTENT CONTEXT:
-  - You can talk about ANY topic, activity, lore, weapon, or class freely at any time. Do not assume or force arbitrary classes when the Guardian asks open questions.
+  - ONLY recommend a build/loadout or evaluate the Guardian's equipped gear when the Guardian explicitly asks for a build, loadout, or gear advice.
+  - If the Guardian asks a pure informational question (e.g. an armor set bonus, perk effect, weapon source, dungeon/raid mechanic, or lore), answer ONLY that question concisely and accurately — do NOT append an unsolicited build, loadout, or stat lecture.
+  - If the queried activity or armor set is not found in the Compendium / Archives, state that clearly instead of guessing or substituting an unrelated set.
   - Follow the Guardian's conversational flow: when they ask follow-up questions (e.g. "What guns in my inventory would be good for this build?"), maintain the established subclass/class context from earlier in the chat and evaluate their live inventory!
 - NEVER mention legacy stat names in parentheses or prose.
 - Ground your numbers, perk effects, and set bonuses strictly in the provided Compendium & Armory snippets.
@@ -1010,18 +1012,19 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
         eff_subclass = intent["effective_subclass"]
         eff_activity = intent["effective_activity"]
 
-        # Format live Guardian inventory & vault context if provided
+        # Format live Guardian inventory & vault context ONLY for build or inventory queries
         inventory_block = ""
-        try:
-            inventory_block = format_guardian_inventory_for_chat(
-                req.inventory_context,
-                eff_class,
-                eff_subclass,
-                eff_activity,
-                req.message,
-            )
-        except Exception as e_inv:
-            logging.error(f"[Chat Endpoint] Failed to format inventory context: {e_inv}")
+        if intent["is_build_query"] or intent["is_inventory_query"]:
+            try:
+                inventory_block = format_guardian_inventory_for_chat(
+                    req.inventory_context,
+                    eff_class,
+                    eff_subclass,
+                    eff_activity,
+                    req.message,
+                )
+            except Exception as e_inv:
+                logging.error(f"[Chat Endpoint] Failed to format inventory context: {e_inv}")
 
         # Retrieve relevant wiki knowledge
         all_wikis = get_all_wiki_data()

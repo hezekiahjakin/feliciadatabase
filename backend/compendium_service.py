@@ -1227,15 +1227,48 @@ def build_compendium_context(
             + "\n\n".join(direct_blocks)
         )
 
-    # If the user asks generally about armor sets / 2pc / 4pc without a specific set name
+    # If the user asks about armor sets / set bonuses without asking for a full build
     ml = message.lower()
     if any(k in ml for k in ["armor set", "set bonus", "2 piece", "4 piece", "2-piece", "4-piece", "2pc", "4pc"]) and not intent["is_build_query"]:
-        top_sets = rank_armor_sets_for_build(db, eff_sub, eff_act, message, limit=8)
-        set_lines = [
-            f"• {s['name']} ({s['source']}) — 2pc [{s['perk_2pc_name']}]: {s['perk_2pc_desc']} || 4pc [{s['perk_4pc_name']}]: {s['perk_4pc_desc']}"
-            for s in top_sets
+        stop_words = {
+            "what", "is", "are", "the", "from", "for", "with", "that", "this", "does", "have",
+            "armor", "set", "sets", "bonus", "bonuses", "piece", "2pc", "4pc", "2-piece", "4-piece",
+            "dungeon", "raid", "activity", "tell", "me", "about", "give", "info", "on", "of", "in"
+        }
+        q_terms = [
+            re.sub(r"[^a-z0-9]", "", w)
+            for w in ml.split()
         ]
-        sections.append("=== TOP COMPENDIUM 2-PIECE & 4-PIECE ARMOR SET BONUSES ===\n" + "\n".join(set_lines))
+        q_terms = [w for w in q_terms if len(w) >= 3 and w not in stop_words]
+
+        all_sets = db.get("armor_sets", [])
+        direct_set_hits = []
+        if q_terms:
+            for s in all_sets:
+                hay = re.sub(r"[^a-z0-9\s]", " ", f"{s.get('name', '')} {s.get('source', '')}".lower())
+                if any(t in hay for t in q_terms):
+                    direct_set_hits.append(s)
+
+        if direct_set_hits:
+            set_lines = [
+                f"• {s['name']} ({s['source']}) — 2pc [{s['perk_2pc_name']}]: {s['perk_2pc_desc']} || 4pc [{s['perk_4pc_name']}]: {s['perk_4pc_desc']}"
+                for s in direct_set_hits[:8]
+            ]
+            sections.append("=== MATCHING COMPENDIUM 2-PIECE & 4-PIECE ARMOR SET BONUSES ===\n" + "\n".join(set_lines))
+        elif q_terms:
+            sections.append(
+                "=== COMPENDIUM ARMOR SET LOOKUP ===\n"
+                "No 2-Piece / 4-Piece Armor Set Bonus matching the queried activity or set name was found in the synced Compendium Armor_Perks sheet. "
+                "Do NOT guess or substitute an unrelated armor set (such as Iron Battalion). "
+                "Clearly state that this activity/armor set does not have a listed 2pc/4pc Armor Set Bonus in the Compendium."
+            )
+        else:
+            top_sets = rank_armor_sets_for_build(db, eff_sub, eff_act, message, limit=8)
+            set_lines = [
+                f"• {s['name']} ({s['source']}) — 2pc [{s['perk_2pc_name']}]: {s['perk_2pc_desc']} || 4pc [{s['perk_4pc_name']}]: {s['perk_4pc_desc']}"
+                for s in top_sets
+            ]
+            sections.append("=== TOP COMPENDIUM 2-PIECE & 4-PIECE ARMOR SET BONUSES ===\n" + "\n".join(set_lines))
 
     # Bucket 2: Full Class + Subclass Build Telemetry
     if intent["is_build_query"] or intent["explicit_subclass"] or intent["explicit_class"]:

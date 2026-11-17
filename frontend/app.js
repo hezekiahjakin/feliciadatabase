@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v50';
+} from './tgxm-viewer.js?v=20261117_v51';
 
 // Application State
 const state = {
@@ -3919,9 +3919,18 @@ function parseBlueprintFromTextFallback(text, meta = {}, forceRecommend = false)
   const promptLow = (meta.userPrompt || '').toLowerCase();
   const combinedLow = `${promptLow} ${low}`;
 
-  const signals = ['super:', 'aspects:', 'fragments:', 'exotic', 'armor set', 'build', 'loadout', 'subclass', 'grandmaster', 'crucible', 'trials'];
-  const hitCount = signals.filter(s => combinedLow.includes(s)).length;
-  if (!forceRecommend && hitCount < 2) return null;
+  if (!forceRecommend) {
+    const promptBuildIntents = [
+      'build', 'loadout', 'setup', 'recommend', 'optimize', 'craft',
+      'what should i run', 'out of what i have', 'guns in my inventory',
+      'weapons in my inventory', 'armor i have', 'best void', 'best solar',
+      'best arc', 'best stasis', 'best strand', 'best prismatic'
+    ];
+    const userAskedForBuild = promptBuildIntents.some(k => promptLow.includes(k));
+    const structuredHeaders = ['**super:**', '**aspects:**', '**fragments:**', '**exotic armor:**'];
+    const headerHits = structuredHeaders.filter(h => low.includes(h)).length;
+    if (!userAskedForBuild && headerHits < 2) return null;
+  }
 
   let className = meta.effectiveClass || '';
   if (!className) {
