@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v51';
+} from './tgxm-viewer.js?v=20261117_v52';
 
 // Application State
 const state = {
@@ -1871,34 +1871,60 @@ const BUNGIE_INV_CACHE_KEY = 'felicia_bungie_inventory_cache_v1';
 let _inventorySyncPromise = null;
 let _lastInventorySyncAt = 0;
 
-function applyBungieInventoryData(data, { fromCache = false } = {}) {
+function computeInventoryFingerprint(data) {
+  if (!data) return '';
+  try {
+    const charSig = (data.characters || []).map(ch => [
+      ch.characterId,
+      ch.light,
+      ch.emblemBackgroundPath,
+      (ch.equipment || []).map(i => `${i.itemInstanceId}:${i.shaderHash || 0}:${i.isLocked ? 1 : 0}`).join(','),
+      (ch.inventory || []).map(i => `${i.itemInstanceId}:${i.isLocked ? 1 : 0}`).join(','),
+    ].join('|')).join('||');
+    const vaultSig = (data.vault?.items || []).map(i => `${i.itemInstanceId}:${i.isLocked ? 1 : 0}`).join(',');
+    return `${charSig}###${vaultSig}`;
+  } catch (_) {
+    return String(Date.now());
+  }
+}
+
+let _lastInventoryFingerprint = '';
+
+function applyBungieInventoryData(data, { fromCache = false, silent = false } = {}) {
   if (!data) return;
+  const nextFp = computeInventoryFingerprint(data);
+  const unchanged = silent && _lastInventoryFingerprint && nextFp === _lastInventoryFingerprint && Boolean(state.bungieData);
+
   state.bungieData = data;
-  state.dismantleSelectionInitialized = false;
-  if (!state.dismantleTargetCharId && data.characters?.[0]?.characterId) {
-    state.dismantleTargetCharId = data.characters[0].characterId;
-  }
-  if (!state.activeInventoryView) {
-    state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
-  } else if (
-    state.activeInventoryView !== 'vault' &&
-    !(data.characters || []).some(c => c.characterId === state.activeInventoryView)
-  ) {
-    state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
-  }
+  _lastInventoryFingerprint = nextFp;
 
-  updateBungieAuthUI();
-  renderInventoryHeaderAndSwitcher();
-  renderInventoryStage();
-
-  if (activeLoadoutBuilderState) {
-    const hadNoGear = !Object.values(activeLoadoutBuilderState.slots || {}).some(Boolean);
-    if (hadNoGear) {
-      activeLoadoutBuilderState = assembleLoadoutFromBlueprint(activeLoadoutBuilderState);
+  if (!unchanged) {
+    state.dismantleSelectionInitialized = false;
+    if (!state.dismantleTargetCharId && data.characters?.[0]?.characterId) {
+      state.dismantleTargetCharId = data.characters[0].characterId;
     }
-    renderLoadoutBuilderWorkspace();
-  } else if (state.currentTab === 'tab-loadout-builder') {
-    openLoadoutBuilderModal(null, false);
+    if (!state.activeInventoryView) {
+      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+    } else if (
+      state.activeInventoryView !== 'vault' &&
+      !(data.characters || []).some(c => c.characterId === state.activeInventoryView)
+    ) {
+      state.activeInventoryView = data.characters?.[0]?.characterId || 'vault';
+    }
+
+    updateBungieAuthUI();
+    renderInventoryHeaderAndSwitcher();
+    renderInventoryStage();
+
+    if (activeLoadoutBuilderState) {
+      const hadNoGear = !Object.values(activeLoadoutBuilderState.slots || {}).some(Boolean);
+      if (hadNoGear) {
+        activeLoadoutBuilderState = assembleLoadoutFromBlueprint(activeLoadoutBuilderState);
+      }
+      renderLoadoutBuilderWorkspace();
+    } else if (state.currentTab === 'tab-loadout-builder') {
+      openLoadoutBuilderModal(null, false);
+    }
   }
 
   if (!fromCache) {
@@ -1918,7 +1944,7 @@ function hydrateCachedBungieInventory() {
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     if (!parsed?.data?.characters) return false;
-    applyBungieInventoryData(parsed.data, { fromCache: true });
+    applyBungieInventoryData(parsed.data, { fromCache: true, silent: false });
     return true;
   } catch (_) {
     return false;
@@ -1943,19 +1969,20 @@ async function loadBungieInventory(silent = false) {
   updateBungieAuthUI();
   const loadingEl = document.getElementById('invLoadingState');
   const stageEl = document.getElementById('invStage');
-  const syncBtn = document.getElementById('btnSyncBungieInv');
+  const syncBtn = document.getElementById('btnRefreshInventory');
 
   if (!silent) {
     if (loadingEl) loadingEl.classList.remove('hidden');
     if (stageEl) stageEl.innerHTML = '';
   } else if (syncBtn) {
-    syncBtn.dataset.prevText = syncBtn.dataset.prevText || syncBtn.textContent;
-    syncBtn.textContent = '↻ Syncing…';
+    if (!syncBtn.dataset.prevHtml) syncBtn.dataset.prevHtml = syncBtn.innerHTML;
+    syncBtn.innerHTML = '<span id="refreshSpinIcon">🔄</span> Syncing…';
   }
 
   _inventorySyncPromise = (async () => {
     try {
-      const res = await fetch('/api/bungie/inventory', {
+      const res = await fetch(`/api/bungie/inventory?_t=${Date.now()}`, {
+        cache: 'no-store',
         headers: {
           'Authorization': `Bearer ${state.bungieSession.access_token}`,
           'X-Bungie-Refresh': state.bungieSession.refresh_token || ''
@@ -1977,7 +2004,7 @@ async function loadBungieInventory(silent = false) {
       }
 
       _lastInventorySyncAt = Date.now();
-      applyBungieInventoryData(data, { fromCache: false });
+      applyBungieInventoryData(data, { fromCache: false, silent });
     } catch (err) {
       console.error('[Bungie Inventory Error]', err);
       if (!silent || !state.bungieData) {
@@ -1995,8 +2022,8 @@ async function loadBungieInventory(silent = false) {
     } finally {
       _inventorySyncPromise = null;
       if (loadingEl) loadingEl.classList.add('hidden');
-      if (syncBtn && syncBtn.dataset.prevText) {
-        syncBtn.textContent = syncBtn.dataset.prevText;
+      if (syncBtn && syncBtn.dataset.prevHtml) {
+        syncBtn.innerHTML = syncBtn.dataset.prevHtml;
       }
     }
   })();
@@ -2004,9 +2031,9 @@ async function loadBungieInventory(silent = false) {
   return _inventorySyncPromise;
 }
 
-// Auto-sync silently when returning to the browser tab or every 30s while active
+// Auto-sync silently when returning to the browser tab or every 12s while active
 (function setupAutoInventorySync() {
-  const AUTO_SYNC_COOLDOWN_MS = 8000;
+  const AUTO_SYNC_COOLDOWN_MS = 3000;
   const triggerSilentSyncIfReady = () => {
     if (document.visibilityState !== 'visible') return;
     if (!state.bungieSession?.access_token) return;
@@ -2024,7 +2051,7 @@ async function loadBungieInventory(silent = false) {
     if (document.visibilityState === 'visible' && state.bungieSession?.access_token) {
       loadBungieInventory(true);
     }
-  }, 30000);
+  }, 12000);
 })();
 
 function renderInventoryHeaderAndSwitcher() {

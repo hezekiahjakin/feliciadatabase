@@ -6,7 +6,7 @@ import io
 import time
 import base64
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -212,7 +212,7 @@ RESPONSE GUIDELINES FOR BUILDS & PERSONALIZED ARSENAL ADVICE:
 
 - CONVERSATIONAL FREEDOM & PERSISTENT CONTEXT:
   - ONLY recommend a build/loadout or evaluate the Guardian's equipped gear when the Guardian explicitly asks for a build, loadout, or gear advice.
-  - If the Guardian asks a pure informational question (e.g. an armor set bonus, perk effect, weapon source, dungeon/raid mechanic, or lore), answer ONLY that question concisely and accurately — do NOT append an unsolicited build, loadout, or stat lecture.
+  - If the Guardian asks a pure informational question (e.g. an armor set bonus, perk effect, weapon source, dungeon/raid mechanic, or lore), answer ONLY that question concisely and accurately — do NOT pitch an unsolicited build, loadout, or stat lecture, and do not end with offers to build/optimize a loadout.
   - If the queried activity or armor set is not found in the Compendium / Archives, state that clearly instead of guessing or substituting an unrelated set.
   - Follow the Guardian's conversational flow: when they ask follow-up questions (e.g. "What guns in my inventory would be good for this build?"), maintain the established subclass/class context from earlier in the chat and evaluate their live inventory!
 - NEVER mention legacy stat names in parentheses or prose.
@@ -738,17 +738,24 @@ def extract_build_recommendation_blueprint(
     eff_activity: str,
     verified_build: Optional[dict] = None,
     inv_ctx: Optional[Dict[str, Any]] = None,
+    is_build_query: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Extracts a structured DIM-style Loadout Blueprint from F.E.L.I.C.I.A.'s build recommendation."""
+    """Extracts a structured DIM-style Loadout Blueprint ONLY when the user asked for a build or reply gave a full structured blueprint."""
     reply_low = (reply_text or "").lower()
     msg_low = (user_message or "").lower()
+
+    structured_headers = ["**super:**", "**aspects:**", "**fragments:**", "**exotic armor:**"]
+    structured_hits = sum(1 for h in structured_headers if h in reply_low)
+
+    if not verified_build and not is_build_query and structured_hits < 2:
+        return None
 
     build_signals = [
         "super:", "aspects:", "fragments:", "exotic armor", "armor set",
         "loadout", "build", "subclass", "aspect", "fragment",
     ]
     signal_hits = sum(1 for s in build_signals if s in reply_low or s in msg_low)
-    if not verified_build and signal_hits < 2:
+    if not verified_build and structured_hits < 2 and signal_hits < 2:
         return None
 
     is_pvp = any(k in (eff_activity or "").lower() or k in msg_low for k in ["pvp", "crucible", "trials", "comp", "iron banner"])
@@ -1131,7 +1138,7 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
                 inventory_context=req.inventory_context,
             )
         
-        # Extract structured DIM Loadout blueprint if reply or query involves a build/loadout
+        # Extract structured DIM Loadout blueprint ONLY when user asked for a build or reply contains a structured blueprint
         rec_blueprint = extract_build_recommendation_blueprint(
             reply_text=reply,
             user_message=req.message,
@@ -1140,6 +1147,7 @@ async def chat_endpoint(req: ChatRequest, background_tasks: BackgroundTasks):
             eff_activity=eff_activity,
             verified_build=verified_build,
             inv_ctx=req.inventory_context,
+            is_build_query=bool(intent.get("is_build_query")),
         )
 
         # Save to chat history
@@ -1984,7 +1992,9 @@ def _extract_bungie_tokens(req: Request) -> tuple[str, str]:
 
 
 @app.get("/api/bungie/inventory")
-async def get_bungie_inventory_endpoint(req: Request):
+async def get_bungie_inventory_endpoint(req: Request, response: Response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     access_token, refresh_token = _extract_bungie_tokens(req)
     if not access_token:
         raise HTTPException(status_code=401, detail="Not signed in to Bungie.net.")
