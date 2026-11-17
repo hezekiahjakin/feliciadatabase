@@ -3,6 +3,7 @@ import re
 import json
 import time
 import base64
+import hashlib
 import shutil
 import zipfile
 import sqlite3
