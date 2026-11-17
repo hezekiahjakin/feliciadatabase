@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v52';
+} from './tgxm-viewer.js?v=20261117_v53';
 
 // Application State
 const state = {
@@ -124,133 +124,152 @@ function showToast(message, type = 'info', durationMs = 3800) {
 }
 
 /* ==========================================================================
-   WEB AUDIO SYNTHESIZER (TACTICAL GHOST CHIRPS & SFX)
+   DESTINY 2 AUDIO ENGINE (REAL .D2 HOVER / EQUIP / INSPECT SAMPLES)
    ========================================================================== */
 class GhostAudioEngine {
   constructor() {
     this.ctx = null;
+    this.rawBuffers = {};
+    this.decodedBuffers = {};
+    this.decoding = {};
+    this.lastHoverAt = 0;
+    this.urls = {
+      hover: './sfx/hover.wav?v=20261117_v53',
+      equip: './sfx/equip.wav?v=20261117_v53',
+      inspect: './sfx/inspect.wav?v=20261117_v53',
+    };
+    this._preloadRaw();
+  }
+
+  _preloadRaw() {
+    if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+    Object.entries(this.urls).forEach(([key, url]) => {
+      fetch(url)
+        .then(r => (r.ok ? r.arrayBuffer() : null))
+        .then(buf => {
+          if (buf) this.rawBuffers[key] = buf;
+        })
+        .catch(() => {});
+    });
   }
 
   init() {
+    if (typeof window === 'undefined') return;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) this.ctx = new AudioCtx();
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
+    }
+    if (this.ctx) {
+      Object.keys(this.urls).forEach(k => this._ensureDecoded(k));
     }
   }
 
-  // Iconic high-tech Ghost chirp
+  async _ensureDecoded(key) {
+    if (this.decodedBuffers[key]) return this.decodedBuffers[key];
+    if (this.decoding[key]) return this.decoding[key];
+    if (!this.ctx) return null;
+
+    this.decoding[key] = (async () => {
+      try {
+        let ab = this.rawBuffers[key];
+        if (!ab) {
+          const resp = await fetch(this.urls[key]);
+          if (!resp.ok) return null;
+          ab = await resp.arrayBuffer();
+        }
+        // Slice copy because decodeAudioData detaches the passed ArrayBuffer
+        const decoded = await this.ctx.decodeAudioData(ab.slice(0));
+        this.decodedBuffers[key] = decoded;
+        return decoded;
+      } catch (_) {
+        return null;
+      } finally {
+        delete this.decoding[key];
+      }
+    })();
+    return this.decoding[key];
+  }
+
+  async _playSample(key, volume = 0.65) {
+    if (!state.soundEnabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const buffer = await this._ensureDecoded(key);
+    if (!buffer || !state.soundEnabled) return;
+    try {
+      if (this.ctx.state === 'suspended') {
+        await this.ctx.resume().catch(() => {});
+      }
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+      src.connect(gain);
+      gain.connect(this.ctx.destination);
+      src.start(0);
+    } catch (_) {}
+  }
+
+  playHover(force = false, volume = 0.42) {
+    if (!state.soundEnabled) return;
+    const now = performance.now();
+    if (!force && now - this.lastHoverAt < 50) return;
+    this.lastHoverAt = now;
+    this._playSample('hover', volume);
+  }
+
+  playClick() {
+    this.playHover(true, 0.5);
+  }
+
+  playEquip() {
+    this._playSample('equip', 0.85);
+  }
+
+  playInspect() {
+    this._playSample('inspect', 0.72);
+  }
+
+  // Legacy method aliases mapped to Destiny 2 SFX (or silenced)
   playChirp() {
-    if (!state.soundEnabled) return;
-    this.init();
-    if (!this.ctx) return;
-    try {
-      const now = this.ctx.currentTime;
-      const osc1 = this.ctx.createOscillator();
-      const osc2 = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc1.type = 'sine';
-      osc2.type = 'triangle';
-
-      osc1.frequency.setValueAtTime(1200, now);
-      osc1.frequency.exponentialRampToValueAtTime(2400, now + 0.06);
-      osc1.frequency.exponentialRampToValueAtTime(1600, now + 0.12);
-
-      osc2.frequency.setValueAtTime(800, now);
-      osc2.frequency.linearRampToValueAtTime(1400, now + 0.08);
-
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc1.start(now);
-      osc2.start(now);
-      osc1.stop(now + 0.15);
-      osc2.stop(now + 0.15);
-    } catch (e) {}
+    this.playHover(false, 0.42);
   }
 
-  // Radio transmit burst
-  playTransmit() {
-    if (!state.soundEnabled) return;
-    this.init();
-    if (!this.ctx) return;
-    try {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
+  playTransmit() {}
 
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+  playReceive() {}
 
-      gain.gain.setValueAtTime(0.06, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.1);
-    } catch (e) {}
-  }
-
-  // Receive response ping
-  playReceive() {
-    if (!state.soundEnabled) return;
-    this.init();
-    if (!this.ctx) return;
-    try {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(980, now);
-      osc.frequency.exponentialRampToValueAtTime(1470, now + 0.07);
-      osc.frequency.exponentialRampToValueAtTime(1960, now + 0.16);
-
-      gain.gain.setValueAtTime(0.07, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.22);
-    } catch (e) {}
-  }
-
-  // Warning alert buzz
-  playAlert() {
-    if (!state.soundEnabled) return;
-    this.init();
-    if (!this.ctx) return;
-    try {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(220, now);
-      osc.frequency.setValueAtTime(160, now + 0.1);
-
-      gain.gain.setValueAtTime(0.09, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.22);
-    } catch (e) {}
-  }
+  playAlert() {}
 }
 
 const sfx = new GhostAudioEngine();
+
+if (typeof document !== 'undefined') {
+  let lastHoveredEl = null;
+  const HOVER_SEL = 'button, [role="button"], .gear-card, .switcher-card, .nav-tab, .cat-pill, .filter-pill, .g3d-slot-item, .shader-tile-btn, .lb-gear-chip, .friend-card, .wiki-card, .emblem-opt-card, a.btn-card-action';
+  const CLICK_SEL = 'button, [role="button"], .switcher-card, .nav-tab, .cat-pill, .filter-pill, .g3d-slot-item, .shader-tile-btn, .emblem-opt-card, a.btn-card-action';
+
+  document.addEventListener('pointerover', (e) => {
+    const target = e.target?.closest?.(HOVER_SEL);
+    if (!target || target === lastHoveredEl || target.disabled) {
+      if (!target) lastHoveredEl = null;
+      return;
+    }
+    lastHoveredEl = target;
+    sfx.playHover(false, 0.38);
+  }, { passive: true });
+
+  document.addEventListener('pointerdown', (e) => {
+    sfx.init();
+    const btnTarget = e.target?.closest?.(CLICK_SEL);
+    if (btnTarget && !btnTarget.disabled) {
+      sfx.playClick();
+    }
+  }, true);
+}
 
 /* ==========================================================================
    SCOTTISH SPEECH SYNTHESIS ENGINE
@@ -2648,7 +2667,7 @@ function getActiveCharacter() {
 
 function openItemInspectModal(item) {
   try {
-    sfx.playChirp();
+    sfx.playInspect();
     state.inspectedItem = item;
     state.lastAppraisalReply = '';
 
@@ -3031,7 +3050,11 @@ async function executeItemTransfer(item, targetType, targetCharacterId, targetLa
       saveBungieSession(data.refreshed_session);
     }
 
-    sfx.playReceive();
+    if (targetType === 'equip') {
+      sfx.playEquip();
+    } else {
+      sfx.playReceive();
+    }
     if (feedbackEl) {
       feedbackEl.textContent = `✓ ${item.name} ${targetType === 'equip' ? 'equipped on' : 'transferred to'} ${targetLabel}!`;
     }
@@ -3389,7 +3412,7 @@ async function executeEquipSavedLoadout() {
       saveBungieSession(data.refreshed_session);
     }
 
-    sfx.playReceive();
+    sfx.playEquip();
     if (feedbackEl) {
       feedbackEl.textContent = `✓ '${loadout.name}' equipped on ${character.className}!`;
     }
@@ -3516,7 +3539,7 @@ async function executeSingleItemModInsert(item, socketIndex, plugObj, feedbackEl
       targetSock.isEmpty = Boolean(plugObj.isEmpty);
     }
 
-    sfx.playReceive();
+    sfx.playEquip();
     const msg = `✓ Applied '${plugObj.name}' onto ${item.name}!`;
     if (feedbackEl) {
       feedbackEl.classList.remove('hidden', 'error');
@@ -3669,7 +3692,7 @@ function openEmblemPickerModal(ch) {
         if (emb.backgroundPath) ch.emblemBackgroundPath = emb.backgroundPath;
         if (emb.icon) ch.emblemPath = emb.icon;
 
-        sfx.playReceive();
+        sfx.playEquip();
         showToast(`✓ Equipped '${emb.name}' on ${ch.className}!`, 'info');
         renderInventoryHeaderAndSwitcher();
         modal.close();
@@ -6693,7 +6716,11 @@ async function executeEquipCustomLoadout(loadoutDraft, feedbackEl, triggerBtn, t
     const failList = data.failed || [];
     const failMods = data.failedMods || [];
 
-    sfx.playReceive();
+    if (!transferOnly && (eqCount > 0 || modCount > 0)) {
+      sfx.playEquip();
+    } else {
+      sfx.playReceive();
+    }
     let summaryMsg = '';
     const modSuffix = modCount > 0 ? `, ${modCount} Mod(s) socketed` : '';
     if (modsOnly) {
@@ -9707,7 +9734,7 @@ function init3DGuardianAndInspectTheatre() {
       showToast('Connect Bungie.net & sync gear first to view your Guardian in 3D!', 'info');
       return;
     }
-    sfx.playChirp();
+    sfx.playInspect();
     g3dContext = ctx;
 
     const badgeEl = document.getElementById('g3dClassBadge');
@@ -9855,7 +9882,7 @@ function init3DGuardianAndInspectTheatre() {
       renderG3DSlotsPanel();
       updateG3DApplyButton();
       if (applied > 0 && !firstError) {
-        sfx.playReceive();
+        sfx.playEquip();
         showToast(
           applied > 1
             ? `✓ Applied '${sName}' to ${applied} armor pieces in-game!`
@@ -10029,7 +10056,7 @@ function init3DGuardianAndInspectTheatre() {
     }
     try {
       await applyInGameShader(it, inspectPreviewShader.hash, inspectPreviewShader.name);
-      sfx.playReceive();
+      sfx.playEquip();
       const msg = `✓ Applied '${inspectPreviewShader.name}' onto ${it.name} in-game!`;
       if (fbEl) {
         fbEl.classList.remove('hidden', 'error');
