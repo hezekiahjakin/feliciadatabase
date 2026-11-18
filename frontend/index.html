@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261117_v56">
+  <link rel="stylesheet" href="styles.css?v=20261118_v57">
 </head>
 <body class="theme-vanguard">
 
@@ -164,6 +164,20 @@
               <span class="inv-search-icon">🔍</span>
               <input type="text" id="invSearchInput" class="inv-search-input" placeholder="Search weapons, armor, perks (e.g. Incandescent, Slideshot), or type...">
               <button type="button" class="inv-clear-btn hidden" id="btnClearInvSearch" aria-label="Clear inventory search">&times;</button>
+            </div>
+            <div class="inv-weapon-dropdowns">
+              <select id="invWeaponTypeFilter" class="inv-select-dropdown" aria-label="Filter guns by weapon type" title="Filter guns by weapon type">
+                <option value="all">All Weapon Types</option>
+              </select>
+              <select id="invDamageTypeFilter" class="inv-select-dropdown" aria-label="Filter guns by damage type" title="Filter guns by damage type">
+                <option value="all">All Damage Types</option>
+                <option value="Kinetic">Kinetic</option>
+                <option value="Arc">Arc</option>
+                <option value="Solar">Solar</option>
+                <option value="Void">Void</option>
+                <option value="Stasis">Stasis</option>
+                <option value="Strand">Strand</option>
+              </select>
             </div>
             <div class="inv-filter-pills" id="invFilterPills">
               <button type="button" class="inv-pill active" data-invfilter="all">All Gear</button>
@@ -1906,6 +1920,6 @@ npx -y firebase-tools@latest deploy --only firestore:rules,auth --project ping-v
       }
     }
   </script>
-  <script type="module" src="app.js?v=20261117_v56"></script>
+  <script type="module" src="app.js?v=20261118_v57"></script>
 </body>
 </html>

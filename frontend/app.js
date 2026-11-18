@@ -25,7 +25,7 @@ import {
   Destiny3DStage,
   ICONIC_DESTINY_SHADERS,
   searchManifestShaders
-} from './tgxm-viewer.js?v=20261117_v56';
+} from './tgxm-viewer.js?v=20261118_v57';
 
 // Application State
 const state = {
@@ -55,7 +55,7 @@ const state = {
   bungieSession: null,
   bungieData: null,
   activeInventoryView: null, // characterId or 'vault'
-  invFilter: { search: '', slot: 'all' },
+  invFilter: { search: '', slot: 'all', weaponType: 'all', damageType: 'all' },
   scannerFilter: 'all',
   dismantleSelectedIds: new Set(),
   dismantleSelectionInitialized: false,
@@ -135,13 +135,13 @@ class GhostAudioEngine {
     this.lastHoverAt = 0;
     this.suppressHoverUntil = 0;
     this.urls = {
-      hover: './sfx/hover.wav?v=20261117_v56',
-      equip: './sfx/equip.wav?v=20261117_v56',
-      inspect: './sfx/inspect.wav?v=20261117_v56',
-      characterSelect: './sfx/character_select.m4a?v=20261117_v56',
-      ghostScan: './sfx/ghost_scan.m4a?v=20261117_v56',
-      revive: './sfx/revive.m4a?v=20261117_v56',
-      crucibleKill: './sfx/crucible_kill.m4a?v=20261117_v56',
+      hover: './sfx/hover.wav?v=20261118_v57',
+      equip: './sfx/equip.wav?v=20261118_v57',
+      inspect: './sfx/inspect.wav?v=20261118_v57',
+      characterSelect: './sfx/character_select.m4a?v=20261118_v57',
+      ghostScan: './sfx/ghost_scan.m4a?v=20261118_v57',
+      revive: './sfx/revive.m4a?v=20261118_v57',
+      crucibleKill: './sfx/crucible_kill.m4a?v=20261118_v57',
     };
     this._preloadRaw();
   }
@@ -1972,6 +1972,7 @@ function applyBungieInventoryData(data, { fromCache = false, silent = false } = 
     }
 
     updateBungieAuthUI();
+    populateInventoryWeaponTypeDropdown(data);
     renderInventoryHeaderAndSwitcher();
     renderInventoryStage();
 
@@ -2345,8 +2346,45 @@ function renderTierStarsHtml(tierNumber) {
   return `<div class="gear-tier-stars" title="Tier ${t} (${t} ${t === 1 ? 'Star' : 'Stars'})" aria-label="Tier ${t}">${starsHtml}</div>`;
 }
 
+function populateInventoryWeaponTypeDropdown(data) {
+  const sel = document.getElementById('invWeaponTypeFilter');
+  if (!sel || !data) return;
+
+  const typesSet = new Set();
+  const collectWpnTypes = (items) => {
+    (items || []).forEach(it => {
+      if (it && it.category === 'Weapon' && it.typeName) {
+        typesSet.add(String(it.typeName).trim());
+      }
+    });
+  };
+  (data.characters || []).forEach(ch => {
+    collectWpnTypes(ch.equipment);
+    collectWpnTypes(ch.inventory);
+    collectWpnTypes(ch.postmaster);
+  });
+  collectWpnTypes(data.vault?.items);
+
+  const sortedTypes = Array.from(typesSet).sort((a, b) => a.localeCompare(b));
+  const curVal = state.invFilter.weaponType || 'all';
+  sel.innerHTML = '<option value="all">All Weapon Types</option>' +
+    sortedTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  sel.value = sortedTypes.includes(curVal) ? curVal : 'all';
+  if (sel.value !== curVal) {
+    state.invFilter.weaponType = 'all';
+  }
+}
+
 function itemMatchesFilter(item) {
   const f = state.invFilter;
+  if (f.weaponType && f.weaponType !== 'all') {
+    if (item.category !== 'Weapon') return false;
+    if (String(item.typeName || '').trim().toLowerCase() !== String(f.weaponType).trim().toLowerCase()) return false;
+  }
+  if (f.damageType && f.damageType !== 'all') {
+    if (item.category !== 'Weapon') return false;
+    if (String(item.element || '').trim().toLowerCase() !== String(f.damageType).trim().toLowerCase()) return false;
+  }
   if (f.slot === 'weapons' && item.category !== 'Weapon') return false;
   if (f.slot === 'armor' && item.category !== 'Armor') return false;
   if (f.slot === 'Artifact' && item.category !== 'Artifact' && item.slot !== 'Artifact') return false;
@@ -8951,10 +8989,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const weaponTypeSelect = document.getElementById('invWeaponTypeFilter');
+  const damageTypeSelect = document.getElementById('invDamageTypeFilter');
+
+  const resetArmorOnlySlotIfNeeded = () => {
+    const armorOrArtifactSlots = ['armor', 'armor-pve', 'armor-pvp', 'armor-trash', 'Artifact'];
+    if (armorOrArtifactSlots.includes(state.invFilter.slot)) {
+      state.invFilter.slot = 'weapons';
+      document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(p => {
+        p.classList.toggle('active', p.dataset.invfilter === 'weapons');
+      });
+    }
+  };
+
+  weaponTypeSelect?.addEventListener('change', (e) => {
+    sfx.playClick();
+    state.invFilter.weaponType = e.target.value || 'all';
+    if (state.invFilter.weaponType !== 'all') resetArmorOnlySlotIfNeeded();
+    renderInventoryStage();
+  });
+
+  damageTypeSelect?.addEventListener('change', (e) => {
+    sfx.playClick();
+    state.invFilter.damageType = e.target.value || 'all';
+    if (state.invFilter.damageType !== 'all') resetArmorOnlySlotIfNeeded();
+    renderInventoryStage();
+  });
+
   document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(pill => {
     pill.addEventListener('click', () => {
       const fVal = pill.dataset.invfilter || 'all';
-      if (fVal === 'pvp') {
+      if (fVal.includes('pvp')) {
         sfx.playCrucibleKill();
       } else {
         sfx.playChirp();
@@ -8962,6 +9027,12 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('#invFilterPills .inv-pill[data-invfilter]').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       state.invFilter.slot = fVal;
+      if (['armor', 'armor-pve', 'armor-pvp', 'armor-trash', 'Artifact'].includes(fVal)) {
+        state.invFilter.weaponType = 'all';
+        state.invFilter.damageType = 'all';
+        if (weaponTypeSelect) weaponTypeSelect.value = 'all';
+        if (damageTypeSelect) damageTypeSelect.value = 'all';
+      }
       renderInventoryStage();
     });
   });
